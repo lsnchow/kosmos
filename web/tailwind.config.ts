@@ -57,10 +57,18 @@ export default {
         "7xl": ["clamp(3rem, 6vw, 4.75rem)", { lineHeight: "1.02" }],
       },
       fontFamily: {
-        /* There is no proportional register any more: `font-sans` resolves to
-           the same mono stack as `font-mono`, so a stray `font-sans` on the
-           landing cannot reintroduce one. */
-        sans: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        /*
+         * `sans` resolves through the token rather than to a literal stack, so
+         * the answer to "is there a proportional register?" is given once, in
+         * CSS, by whichever element you are inside.
+         *
+         * At `:root` the answer is still no — styles.css sets `--font-sans` to
+         * `var(--font-mono)`, so the console is mono throughout and a stray
+         * `font-sans` there cannot reintroduce one. The landing redeclares the
+         * token on `.kosmos-landing` and gets Geist Sans for its headings,
+         * without either sheet reaching into the other.
+         */
+        sans: ["var(--font-sans)"],
         mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
         display: ["Bitcount Grid Double", "Geist Mono", "ui-monospace", "monospace"],
       },

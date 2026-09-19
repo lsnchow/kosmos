@@ -3,47 +3,63 @@
  *
  * The console sheet is a token system with a contrast test reading it off disk;
  * this file is marketing chrome built on Tailwind utilities. Keeping them apart
- * means a glass gradient here can never widen the console's palette, and the
- * console never downloads the display serif it does not use.
+ * means a surface here can never widen the console's palette.
  *
  * Two rules carried over from the console, because they are project rules and
  * not preferences:
- *   - Fonts are self-hosted. No CDN. The page has to render identically with no
- *     network at all.
- *   - No <img> and no <video>. Nothing on this page can fail to load and leave a
- *     broken element behind, so every moving thing is CSS.
+ *   - Fonts are self-hosted. No CDN.
+ *   - Nothing may fail to load and leave a broken element behind. There is no
+ *     remote media on this page at all any more — no video, no image — so the
+ *     whole landing renders identically with no network.
  */
 
+/* --- The landing palette ------------------------------------------------- */
+
 /*
- * The display face. This was Instrument Serif, whose two @font-face blocks and
- * both .woff2 files are now gone: a proportional italic serif is the one thing
- * on this page that could not be made to read as a terminal, and keeping it for
- * eleven headings meant shipping 31 KB of font to contradict the console it
- * introduces.
+ * The landing paints from the console's palette, not its own.
  *
- * What replaces it is the mono stack, not the console's dot-matrix display
- * face. Bitcount Grid Double is right at a panel title's 13 px, where the grid
- * reads as character; at the hero's 5 rem each dot becomes a blob and the
- * headline stops being legible from the back of a room — which is the one
- * thing this page has to do. A terminal's large text is just large monospace,
- * so that is what this is: tighter tracking, a heavier weight, no second face.
+ * It used to redeclare the whole ink and surface scale here to run a neutral
+ * near-black. That was two products' worth of colour for one product: a visitor
+ * crossing from `/` to `/console` changed worlds. Every colour token is now
+ * inherited from `:root` in styles.css — the blue-purple charcoal, its
+ * hairlines, its inks and its mint accent — so the two routes are the same
+ * surface and the contrast test that reads styles.css off disk covers both.
+ *
+ * Only two things are still declared for this subtree, and neither is a colour.
  */
-.font-display-serif {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: 0;
+.kosmos-landing {
+  /*
+   * The proportional register, reinstated for this subtree only.
+   *
+   * styles.css sets `--font-sans: var(--font-mono)` at :root, and the console
+   * depends on that — it is mono throughout by design. The landing needs a
+   * second voice: mono carries the labels, ids and figures, and a proportional
+   * face carries the headings and prose. Geist Sans is already vendored in
+   * public/fonts and declared in styles.css; until this line nothing pointed at
+   * it, so no browser ever downloaded it.
+   */
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* The page's one measurement: everything aligns to this column. */
+  --page-max: 1400px;
+  --page-gutter: 1.5rem;
+
+  background: var(--surface-0);
+  color: var(--text);
+}
+
+@media (min-width: 768px) {
+  .kosmos-landing {
+    --page-gutter: 2rem;
+  }
 }
 
 /* --- Frames -------------------------------------------------------------- */
 
 /*
- * This was `liquid-glass`: a 12 px backdrop blur under a masked gradient edge,
- * and the only backdrop-filter and only non-inset box-shadow in the project.
- * A terminal has neither. Depth there comes from one thing — a hairline, drawn
- * or not drawn — so the lens becomes a frame: 1 px, square, over a flat fill.
- *
- * The class name and all thirty-one call sites are unchanged; only what it
- * paints is different.
+ * One hairline, square, over a flat fill. Depth on this page comes from exactly
+ * one thing — a rule drawn or not drawn — so there is no blur, no shadow and no
+ * gradient edge anywhere in the frame system.
  */
 .liquid-glass {
   position: relative;
@@ -53,140 +69,779 @@
   background: transparent;
 }
 
-/* The reference frames carry no highlight edge: one rule, one weight. */
-
-/* The accent variant marks the one primary action per screen. */
 .liquid-glass-accent {
   border-color: var(--accent);
   background: transparent;
   color: var(--accent);
 }
 
-/* --- The dream wall ------------------------------------------------------ */
+/* --- Wordmark ------------------------------------------------------------ */
+
+.kosmos-landing .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: var(--text-strong);
+}
+
+.kosmos-landing .wordmark-mark {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  line-height: 1;
+  color: var(--accent-ink);
+  background: var(--text-strong);
+}
+
+.kosmos-landing .wordmark-text {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+/* --- Nav ----------------------------------------------------------------- */
+
+.landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  /* The field colour at 85%, so the lattice reads through the bar as it scrolls
+     under. `color-mix` keeps this tied to --surface-0 rather than to a literal
+     that would drift the first time the palette moves. */
+  background: color-mix(in srgb, var(--surface-0) 85%, transparent);
+  border-bottom: 1px solid var(--line-1);
+  backdrop-filter: blur(8px);
+}
+
+.landing-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 0.75rem var(--page-gutter);
+}
+
+.nav-tabs {
+  display: none;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line-2);
+}
+
+@media (min-width: 1024px) {
+  .nav-tabs { display: flex; }
+}
+
+.nav-tabs li + li { border-left: 1px solid var(--line-2); }
+
+.nav-tabs a {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  color: var(--text-muted);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.nav-tabs a:hover { background: var(--surface-2); color: var(--text-strong); }
+.nav-tab-number { color: var(--text-dim); }
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.kosmos-landing .nav-link {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  color: var(--text-muted);
+}
+
+@media (min-width: 768px) {
+  .kosmos-landing .nav-link { display: inline; }
+}
+
+.kosmos-landing .nav-link:hover { color: var(--text-strong); }
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.kosmos-landing .pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.kosmos-landing .pill-primary {
+  background: var(--text-strong);
+  color: var(--accent-ink);
+  border-color: var(--text-strong);
+}
+
+/* Hover dims the fill toward the field rather than toward an off-palette grey. */
+.kosmos-landing .pill-primary:hover {
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--surface-0));
+  border-color: color-mix(in srgb, var(--text-strong) 88%, var(--surface-0));
+}
+
+.kosmos-landing .pill-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--line-3);
+}
+
+.kosmos-landing .pill-secondary:hover { background: var(--surface-3); color: var(--text-strong); }
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  isolation: isolate;
+}
+
+.hero-backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: var(--surface-0); }
 
 /*
- * The hero background. Twelve tiles, because past about twelve a viewer stops
- * perceiving individual ones — the same count the console's wall uses.
+ * The lattice.
  *
- * It is a schematic, not model output, and it says so on the page. What it
- * shows is the one thing a still image cannot: a rollout that extends in
- * chunks, each chunk sixteen frames, a new one every couple of seconds.
+ * Two repeating hairlines on the field colour — the console's own idiom, where
+ * surfaces separate with a 1 px line and never a shadow. It is drawn once and
+ * never animated: motion behind a headline is something the eye keeps checking
+ * on instead of reading past, which is exactly how the previous wall of
+ * drifting gradients read.
+ *
+ * The radial on top lifts the centre-right a few percent so the field is not
+ * perfectly flat. That is the whole effect; widening it turns it into fog.
  */
-.dream-tile {
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 30% 20%, rgb(255 255 255 / 20%) 0%, rgb(255 255 255 / 0%) 62%),
-    radial-gradient(90% 120% at 75% 85%, rgb(163 211 213 / 9%) 0%, rgb(255 255 255 / 0%) 58%),
-    linear-gradient(160deg, #24242f 0%, #141420 55%, #1f1f2a 100%);
-  opacity: 0;
-  animation: dream-ignite 900ms steps(3, end) forwards;
-}
-
-/* The latent field: two counter-drifting gradients, so no two seconds repeat. */
-.dream-tile::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  background:
-    radial-gradient(35% 45% at 50% 50%, rgb(255 255 255 / 24%) 0%, rgb(255 255 255 / 0%) 72%),
-    conic-gradient(from 0deg at 50% 50%, rgb(255 255 255 / 10%), rgb(163 211 213 / 8%), rgb(255 255 255 / 0%), rgb(255 255 255 / 10%));
-  animation: dream-drift 19s linear infinite;
-}
-
-/* The scan sweep: one chunk of generation crossing the tile. */
-.dream-tile::after {
-  content: "";
+.hero-lattice {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    rgb(255 255 255 / 0%) 35%,
-    rgb(255 255 255 / 22%) 50%,
-    rgb(255 255 255 / 0%) 65%
-  );
-  transform: translateX(-100%);
-  animation: dream-scan 2.1s linear infinite;
+  background-image:
+    radial-gradient(70% 55% at 62% 48%, rgb(233 232 250 / 5%) 0%, rgb(27 27 39 / 0%) 70%),
+    repeating-linear-gradient(to right, var(--line-1) 0 1px, transparent 1px 12.5%),
+    repeating-linear-gradient(to bottom, var(--line-1) 0 1px, transparent 1px 25%);
+  opacity: 0.55;
 }
 
-/* The chunk bar. Five steps, held flat between each, because the frames arrive
-   in a burst when a chunk lands rather than trickling in. */
-.dream-chunk {
+.hero-scrim {
   position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
-  height: 3px;
-  transform-origin: left center;
-  background: rgb(163 211 213 / 90%);
-  animation: dream-chunks 10.5s steps(1, end) infinite;
+  height: 14rem;
+  background: linear-gradient(to bottom, rgb(27 27 39 / 0%), var(--surface-0));
 }
 
-@keyframes dream-ignite {
-  to { opacity: 1; }
+.hero-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 4rem var(--page-gutter) 3rem;
 }
 
-@keyframes dream-drift {
-  to { transform: rotate(360deg); }
+.hero-title {
+  max-width: 18ch;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: clamp(2.75rem, 7vw, 5.25rem);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
 }
 
-@keyframes dream-scan {
-  0% { transform: translateX(-100%); }
-  70%, 100% { transform: translateX(100%); }
+.hero-promise {
+  max-width: 48ch;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: clamp(1rem, 1.4vw, 1.1875rem);
+  line-height: 1.55;
+  color: var(--text-muted);
 }
 
-@keyframes dream-chunks {
-  0%, 19% { transform: scaleX(0.2); }
-  20%, 39% { transform: scaleX(0.4); }
-  40%, 59% { transform: scaleX(0.6); }
-  60%, 79% { transform: scaleX(0.8); }
-  80%, 100% { transform: scaleX(1); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+.hero-built-on { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
+
+.hero-built-on ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
+
+.hero-scroll {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  display: none;
+  padding: 0.5rem;
+  color: var(--text-dim);
+  transform: translateX(-50%) rotate(90deg);
+}
+
+@media (min-width: 768px) { .hero-scroll { display: block; } }
+.hero-scroll:hover { color: var(--text-strong); }
+
+/* --- Section cards ------------------------------------------------------- */
 
 /*
- * A tile carrying a video is a fallback surface, not an illustration: the scan
- * sweep and the chunk bar belong to the hero wall, and showing them through a
- * playing video would claim the video is a rollout, which it is not.
+ * Sections butt against each other sharing one hairline rather than floating on
+ * a margin. That is what makes a long page read as one instrument panel instead
+ * of a stack of slides.
  */
-.dream-tile:has(video)::after { content: none; }
-.dream-tile:has(video) .dream-chunk { display: none; }
-
-/* --- Chain diagram ------------------------------------------------------- */
-
-/* A packet travelling the four Chain steps. It is the only moving part of the
-   diagram, so the eye follows the direction of data rather than decoration. */
-.chain-flow {
-  background: linear-gradient(
-    90deg,
-    rgb(163 211 213 / 0%) 0%,
-    rgb(163 211 213 / 100%) 50%,
-    rgb(163 211 213 / 0%) 100%
-  );
-  animation: chain-travel 3.4s linear infinite;
+.section-card {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 3.5rem var(--page-gutter);
+  border-top: 1px solid var(--line-1);
 }
 
-@keyframes chain-travel {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(400%); }
+.section-card:first-of-type { border-top: 0; }
+
+@media (min-width: 768px) { .section-card { padding: 5rem var(--page-gutter); } }
+
+/* --- Pillars ------------------------------------------------------------- */
+
+.pillar-head { display: grid; gap: 2.5rem; margin-bottom: 2.5rem; }
+
+@media (min-width: 900px) {
+  .pillar-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4rem; }
 }
+
+.pillar-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+
+.pillar-number {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+}
+
+.pillar-heading,
+.two-tone-heading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: clamp(1.625rem, 3vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.pillar-body {
+  max-width: 52ch;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.pillar-items ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line-1); }
+
+.pillar-items li {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.pillar-item-key { font-size: 0.75rem; color: var(--text-dim); }
+
+.pillar-item-text { display: flex; flex-direction: column; gap: 0.25rem; }
+.pillar-item-text span:first-child { font-family: var(--font-sans); font-size: 0.9375rem; }
+.pillar-item-text span:last-child { font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.5; }
+
+/* --- Figure panels ------------------------------------------------------- */
+
+.fig-panel { margin: 0; border: 1px solid var(--line-1); background: var(--surface-1); }
+
+.fig-panel-label {
+  display: flex;
+  gap: 1rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.fig-panel-body { padding: 1.5rem 1rem; overflow-x: auto; }
+
+@media (min-width: 768px) { .fig-panel-body { padding: 2rem 1.5rem; } }
+
+/* --- FIG.1 the matrix ---------------------------------------------------- */
+
+/*
+ * Thirty cells of fifty dots. The cap is the whole layout decision: stretched
+ * to the panel width each dot rendered at 23 px, which reads as a chequerboard
+ * rather than as fifteen hundred episodes. Held at 30rem they land near 6 px —
+ * small enough that the eye takes the block as a quantity, which is the only
+ * thing this figure is asked to convey.
+ */
+.matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  width: 100%;
+  max-width: 30rem;
+  background: var(--line-1);
+  border: 1px solid var(--line-1);
+}
+
+.matrix-cell { padding: 0.25rem; background: var(--surface-0); }
+
+.matrix-dots { display: grid; grid-template-columns: repeat(10, 1fr); gap: 1px; }
+
+.matrix-dot {
+  aspect-ratio: 1;
+  background: var(--line-1);
+  transition: background 220ms var(--ease-out);
+}
+
+.matrix-dot[data-on="true"] { background: var(--text-muted); }
+
+.matrix-readout,
+.console-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  max-width: 30rem;
+  margin: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-1);
+}
+
+.console-figure .console-readout { max-width: none; }
+
+.matrix-readout dt,
+.console-readout dt {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.matrix-readout dd,
+.console-readout dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+/* --- FIG.2 reliability --------------------------------------------------- */
+
+/*
+ * Plot left, unmeasured numbers right.
+ *
+ * The plot is pinned to its natural 560px, so on a wide panel it would sit
+ * against two thirds of empty field. Putting the four pending numbers beside it
+ * rather than beneath fills that column and states the figure's two halves at
+ * the same altitude: here is what is measured, here is what is not.
+ */
+.reliability-figure {
+  display: grid;
+  gap: 1.25rem 2.5rem;
+  align-items: start;
+  grid-template-areas: "plot" "source" "pending";
+  justify-content: start;
+}
+
+@media (min-width: 900px) {
+  .reliability-figure {
+    grid-template-columns: 560px minmax(14rem, 22rem);
+    grid-template-areas:
+      "plot pending"
+      "source pending";
+  }
+}
+
+.reliability-figure .reliability-plot { grid-area: plot; }
+.reliability-figure .rl-source { grid-area: source; }
+.reliability-figure .reliability-pending { grid-area: pending; align-self: start; }
+
+/*
+ * Rendered at its natural size. The viewBox is 560 wide and so is this cap, so
+ * one SVG unit is one CSS pixel and 10px type is 10px — letting it stretch to
+ * the panel scaled every glyph and hairline by 3.2x.
+ */
+.reliability-plot { width: 100%; max-width: 560px; height: auto; }
+
+.rl-grid { stroke: var(--line-1); stroke-width: 1; }
+.rl-rule { stroke: var(--line-1); stroke-width: 1; }
+
+.rl-bar,
+.rl-cap { stroke: var(--text-muted); stroke-width: 1.5; stroke-linecap: square; }
+.rl-dot { fill: var(--text-strong); }
+
+/* The real arm is the reference every other row is judged against, so it is
+   the one row that carries the accent. */
+.reliability-plot g[data-tone="accent"] .rl-bar,
+.reliability-plot g[data-tone="accent"] .rl-cap { stroke: var(--accent); }
+.reliability-plot g[data-tone="accent"] .rl-dot { fill: var(--accent-bright); }
+
+.reliability-plot g[data-tone="dim"] .rl-bar,
+.reliability-plot g[data-tone="dim"] .rl-cap { stroke: var(--line-2); }
+.reliability-plot g[data-tone="dim"] .rl-dot { fill: var(--text-dim); }
+
+.rl-label { font-family: var(--font-sans); font-size: 11px; fill: var(--text); }
+.rl-sub { font-family: var(--font-mono); font-size: 8.5px; fill: var(--text-dim); }
+.rl-tick { font-family: var(--font-mono); font-size: 9px; fill: var(--text-dim); }
+
+.rl-value { font-family: var(--font-mono); font-size: 11px; fill: var(--text-muted); }
+.rl-value-big { font-size: 14px; fill: var(--text-strong); }
+
+.rl-gap line { stroke: var(--line-3); stroke-width: 1; }
+.rl-gap-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  fill: var(--text-muted);
+}
+
+.rl-source { margin: 0; font-size: 0.6875rem; line-height: 1.5; color: var(--text-dim); }
+
+.rl-pending-head {
+  margin: 0 0 0.5rem;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.reliability-pending ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-1);
+}
+
+.reliability-pending li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--line-1);
+}
+
+/* --- FIG.3 the ledger ---------------------------------------------------- */
+
+.evidence-ledger { display: flex; flex-direction: column; min-width: 30rem; }
+
+/*
+ * Four columns. The first names the provenance kind, which is the taxonomy the
+ * whole ledger exists to enforce — cited, measured, or neither — and naming it
+ * in words means the colour is reinforcement rather than the only channel.
+ *
+ * The value column is sized for the longest thing that can land in it: a
+ * fully-qualified model id, not a percentage.
+ */
+.evidence-head,
+.evidence-row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) minmax(0, 9rem) 5rem;
+  gap: 1.25rem;
+  align-items: baseline;
+}
+
+.evidence-head {
+  padding-bottom: 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.evidence-rows { margin: 0; padding: 0; list-style: none; }
+
+.evidence-row {
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--line-1);
+  transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
+}
+
+.evidence-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.evidence-pip { width: 0.375rem; height: 0.375rem; background: var(--line-3); }
+
+/* Cited carries a table, measured carries a run, pending carries neither. */
+.evidence-row[data-kind="cited"] .evidence-pip { background: var(--accent); }
+.evidence-row[data-kind="cited"] .evidence-kind { color: var(--text-muted); }
+.evidence-row[data-kind="measured"] .evidence-pip { background: var(--info); }
+.evidence-row[data-kind="measured"] .evidence-kind { color: var(--text-muted); }
+.evidence-row[data-kind="pending"] .evidence-pip { background: transparent; box-shadow: inset 0 0 0 1px var(--line-3); }
+
+.evidence-claim { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem; }
+
+.evidence-source { font-family: var(--font-mono); font-size: 0.6875rem; line-height: 1.45; color: var(--text-dim); }
+
+.evidence-value,
+.evidence-digest { font-size: 0.8125rem; }
+
+.evidence-value { overflow-wrap: anywhere; line-height: 1.4; }
+.evidence-digest { white-space: nowrap; }
+
+/* --- FIG.4 the console --------------------------------------------------- */
+
+/*
+ * Wall left, pipeline and telemetry right — the same reason FIG.2 splits. The
+ * wall is pinned to 30rem, so stacking everything under it left most of the
+ * panel empty and made the figure taller than it needed to be.
+ */
+.console-figure {
+  display: grid;
+  gap: 1.25rem 2.5rem;
+  align-items: start;
+  justify-content: start;
+  grid-template-areas: "wall" "chain" "readout";
+}
+
+@media (min-width: 900px) {
+  .console-figure {
+    grid-template-columns: 30rem minmax(14rem, 24rem);
+    grid-template-areas:
+      "wall chain"
+      "wall readout";
+    align-content: start;
+  }
+}
+
+.console-figure .console-wall { grid-area: wall; }
+.console-figure .console-chain { grid-area: chain; }
+.console-figure .console-readout { grid-area: readout; }
+
+/*
+ * Twelve tiles, capped. Stretched to the panel each tile stood 240 px tall and
+ * the wall alone ran most of a viewport; the figure is a schematic of the
+ * console's layout, and a schematic only has to be read, not inhabited.
+ */
+.console-wall {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  width: 100%;
+  max-width: 30rem;
+  background: var(--line-1);
+  border: 1px solid var(--line-1);
+}
+
+.console-tile {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--surface-0);
+  transition: background 240ms var(--ease-out);
+}
+
+.console-tile[data-active="true"] { background: var(--surface-2); }
+
+.console-tile-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 200ms var(--ease-out);
+}
+
+.console-tile-index {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.25rem;
+  font-size: 0.5rem;
+  color: var(--text-dim);
+}
+
+.console-chain {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--line-1);
+  border: 1px solid var(--line-1);
+}
+
+@media (min-width: 640px) and (max-width: 899px) {
+  .console-chain { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.console-chain li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.5rem;
+  background: var(--surface-0);
+  transition: background 240ms var(--ease-out);
+}
+
+.console-chain li[data-on="true"] { background: var(--surface-2); }
+.console-chain-name { font-family: var(--font-sans); font-size: 0.75rem; color: var(--text); }
+.console-chain-hw { font-size: 0.5625rem; line-height: 1.4; color: var(--text-dim); }
+
+/* --- Limits and CTA ------------------------------------------------------ */
+
+.limits-head { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+
+.limits-grid {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--line-1);
+  border: 1px solid var(--line-1);
+}
+
+@media (min-width: 640px) { .limits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .limits-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.limit-card { display: flex; flex-direction: column; gap: 0.5rem; padding: 1.25rem; background: var(--surface-0); }
+.limit-card h3 { margin: 0; font-family: var(--font-sans); font-size: 0.9375rem; font-weight: 500; }
+.limit-card p { margin: 0; font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.55; }
+
+.cta-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+
+/* --- Footer -------------------------------------------------------------- */
+
+.landing-footer {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 3.5rem var(--page-gutter) 2.5rem;
+  border-top: 1px solid var(--line-1);
+}
+
+.footer-top { display: grid; gap: 2.5rem; }
+
+@media (min-width: 768px) { .footer-top { grid-template-columns: minmax(0, 1fr) auto; } }
+
+.footer-brand { display: inline-flex; align-items: center; gap: 0.5rem; }
+
+.footer-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5rem; }
+
+.footer-heading {
+  margin: 0 0 0.75rem;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.footer-columns ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.5rem; }
+
+.footer-columns a {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  text-decoration: none;
+  color: var(--text-muted);
+}
+
+.footer-columns a:hover { color: var(--text-strong); }
+
+/*
+ * The tagline, set large in the dot-matrix face. It is decorative — the same
+ * words are in the CTA above as real text — so it is aria-hidden and clipped
+ * rather than wrapped.
+ */
+.footer-display {
+  margin: 3rem 0 2.5rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 7vw, 4.5rem);
+  line-height: 1;
+  color: var(--line-3);
+  user-select: none;
+}
+
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  justify-content: space-between;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line-1);
+}
+
+.footer-note { max-width: 56ch; margin: 0; font-family: var(--font-sans); font-size: 0.8125rem; color: var(--text-dim); }
+.footer-copy { margin: 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); }
 
 /* --- Motion preference --------------------------------------------------- */
 
 /*
- * Everything above is ambience. Under a reduced-motion preference the page
- * keeps its composition and drops every loop — the tiles stay lit rather than
- * disappearing, because the wall is the illustration.
+ * The backdrop no longer moves at all, so there is no ambience left to switch
+ * off — what remains under this preference is the figures' entrance transitions.
+ *
+ * The four data figures are handled in JS rather than here: `useProgress`
+ * returns 1 when motion is refused, so each one renders its *completed* state.
+ * An empty chart would hide the evidence the panel exists to show.
  */
 @media (prefers-reduced-motion: reduce) {
-  .dream-tile,
-  .dream-tile::before,
-  .dream-tile::after,
-  .dream-chunk,
-  .chain-flow {
-    animation: none;
+  .matrix-dot,
+  .console-tile,
+  .console-tile-fill,
+  .console-chain li,
+  .evidence-row {
+    transition: none;
   }
-
-  .dream-tile { opacity: 1; }
-  .dream-tile::after { opacity: 0; }
-  .dream-chunk { transform: scaleX(0.6); }
 }
