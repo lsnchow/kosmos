@@ -1,6 +1,6 @@
 import { Play, Square } from "lucide-react";
 import type { Run, Telemetry } from "../lib/api";
-import { formatCount, formatUsd, isTerminalStatus, pickNumber } from "../lib/format";
+import { formatCount, formatUsd, isTerminalStatus, pickNumber, formatCountPair} from "../lib/format";
 import { DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 import { ReplicaChart, type ReplicaSample } from "./ReplicaChart";
 
@@ -100,7 +100,7 @@ export function BurstPanel({
           value={
             completed === undefined
               ? "—"
-              : `${formatCount(completed)}${total === undefined ? "" : ` / ${formatCount(total)}`}`
+              : formatCountPair(completed, total)
           }
           source="Application ledger · logical episodes"
           size="large"

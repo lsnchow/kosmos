@@ -1,5 +1,6 @@
 import { Expand, Gamepad2, Layers, Target } from "lucide-react";
-import { formatCount } from "../lib/format";
+import { MetaList } from "./MetaList";
+import { formatCount, formatFrameCaption} from "../lib/format";
 import { cn } from "../lib/utils";
 import {
   PROVENANCE_DESCRIPTIONS,
@@ -50,7 +51,7 @@ function frameCountLabel(slot: TileSlot): string {
     return `${formatCount(slot.certifiedFrameCount)} certified frames${suffix}`;
   }
   if (slot.frames.length > 0) {
-    return `${formatCount(slot.frames.length)} frames · certified count not reported`;
+    return formatFrameCaption(slot.frames.length, undefined);
   }
   return "no frames yet";
 }
@@ -137,16 +138,13 @@ function RolloutTile({
         <div>{slot.policy}</div>
         <span>{slot.task}</span>
       </div>
-      <dl className="tile-meta">
-        <div>
-          <dt>Frames</dt>
-          <dd className="tabular-nums">{frameCountLabel(slot)}</dd>
-        </div>
-        <div>
-          <dt>Segments</dt>
-          <dd className="tabular-nums">{formatCount(slot.segmentCount)}</dd>
-        </div>
-      </dl>
+      <MetaList
+        className="tile-meta"
+        items={[
+          { label: "Frames", value: frameCountLabel(slot), valueClassName: "tabular-nums" },
+          { label: "Segments", value: formatCount(slot.segmentCount), valueClassName: "tabular-nums" },
+        ]}
+      />
       <p className="tile-id truncate" title={`run ${slot.runId ?? "unreported"} · episode ${slot.episodeId ?? "unreported"}`}>
         {slot.runId ? `${slot.runId} · ` : ""}
         {slot.episodeId ?? "episode id unreported"}
@@ -161,7 +159,6 @@ export function RolloutWall({
   runId,
   onExpand,
   onDrive,
-  streamNote,
   scopedTask,
   scopedInstruction,
 }: {
@@ -169,7 +166,6 @@ export function RolloutWall({
   runId?: string;
   onExpand?: (slot: TileSlot) => void;
   onDrive?: (slot: TileSlot) => void;
-  streamNote?: React.ReactNode;
   /** A task id from the frozen registry, chosen on the landing page. */
   scopedTask?: string;
   /** The verbatim instruction for `scopedTask`, for the disclosure line. */
@@ -187,7 +183,6 @@ export function RolloutWall({
       className="rollouts-panel"
       action={<SourceChip>{runId ? `run ${runId}` : "no run selected"}</SourceChip>}
     >
-      {streamNote}
       <div className="wall-summary" role="status">
         <span>
           <b className="tabular-nums">{formatCount(withFrames.length)}</b> of {wall.slots.length} slots have

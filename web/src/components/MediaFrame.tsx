@@ -12,6 +12,22 @@ export function isVideoSource(src: string | undefined): boolean {
   return typeof src === "string" && /\.(mp4|webm|mov)(\?|$)/i.test(src);
 }
 
+/**
+ * The "nothing to show here" state, written once.
+ *
+ * It appeared twice in this file, identically, for the single-frame and the
+ * flipbook paths. The reason string differs because the two absences differ:
+ * no media at all, versus no segment event yet.
+ */
+function MediaEmpty({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("media-empty", className)}>
+      <Activity aria-hidden="true" className="size-5" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 export function MediaFrame({
   src,
   alt,
@@ -24,12 +40,7 @@ export function MediaFrame({
   emptyReason?: ReactNode;
 }) {
   if (!src) {
-    return (
-      <div className={cn("media-empty", className)}>
-        <Activity aria-hidden="true" className="size-5" />
-        <span>{emptyReason ?? "No persisted media for this slot yet"}</span>
-      </div>
-    );
+    return <MediaEmpty className={className}>{emptyReason ?? "No persisted media for this slot yet"}</MediaEmpty>;
   }
   const isVideo = isVideoSource(src);
   return isVideo ? (
@@ -67,12 +78,7 @@ export function FramePlayer({
 }) {
   const index = useFlipbook(frames.length, { offset, paused });
   if (frames.length === 0) {
-    return (
-      <div className={cn("media-empty", className)}>
-        <Activity aria-hidden="true" className="size-5" />
-        <span>{emptyReason ?? "No persisted segment event yet"}</span>
-      </div>
-    );
+    return <MediaEmpty className={className}>{emptyReason ?? "No persisted segment event yet"}</MediaEmpty>;
   }
   const src = frames[Math.min(index, frames.length - 1)];
   return (

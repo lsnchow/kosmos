@@ -23,9 +23,6 @@ export function pickNumber(...values: unknown[]): number | undefined {
   );
 }
 
-export function pickBoolean(...values: unknown[]): boolean | undefined {
-  return values.find((value): value is boolean => typeof value === "boolean");
-}
 
 /** Integer counts. Never returns "0" for a missing value. */
 export function formatCount(value: unknown, fallback = ABSENT): string {
@@ -46,11 +43,34 @@ export function formatRateAsPercent(value: unknown, fallback = ABSENT): string {
   return `${percent.toFixed(decimals)}%`;
 }
 
-/** A value already expressed in percentage points. */
-export function formatPercentagePoints(value: unknown, fallback = ABSENT): string {
-  const numeric = pickNumber(value);
-  if (numeric === undefined) return fallback;
-  return `${numeric.toFixed(numeric % 1 === 0 ? 0 : 1)}%`;
+
+/**
+ * A completed/total pair, written one way.
+ *
+ * Five call sites built this inline and three disagreed about the separator, so
+ * "12/50" and "12 / 50" appeared on the same screen.
+ *
+ * The pair is always rendered, including when neither side is known ("— / —").
+ * Collapsing to a bare numerator would hide that a denominator was expected and
+ * not reported, which is the same class of mistake as printing a zero for it.
+ */
+export function formatCountPair(completed: unknown, total: unknown, fallback = ABSENT): string {
+  return `${formatCount(completed, fallback)} / ${formatCount(total, fallback)}`;
+}
+
+/**
+ * The frame caption a wall tile, a hero panel, the viewer and the stage ladder
+ * all need. `certified` absent is not zero: the server did not report a count,
+ * and the caption says exactly that rather than implying none were certified.
+ */
+export function formatFrameCaption(
+  frameCount: number,
+  certified: number | undefined,
+  noun: string | undefined = "frames",
+): string {
+  if (certified !== undefined) return `${formatCount(certified)} certified`;
+  const counted = noun ? `${formatCount(frameCount)} ${noun}` : formatCount(frameCount);
+  return `${counted} · certified count not reported`;
 }
 
 export function formatUsd(value: unknown, fallback = UNAVAILABLE): string {
@@ -150,9 +170,6 @@ export function ageSeconds(value: unknown, now: number): number | undefined {
   return Math.max(0, (now - date.valueOf()) / 1000);
 }
 
-export function titleCase(value: string): string {
-  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 export function joinStrings(value: unknown): string | undefined {
   if (typeof value === "string") return value.length > 0 ? value : undefined;

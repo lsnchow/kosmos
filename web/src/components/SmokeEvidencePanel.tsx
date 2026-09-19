@@ -7,6 +7,7 @@ import {
   joinStrings,
   pickNumber,
   pickString,
+  formatCountPair,
 } from "../lib/format";
 import { EmptyState, Note, Panel, StatusPill } from "./Primitives";
 
@@ -151,7 +152,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                     <dd>
                       {ticksCompleted === undefined && ticksRequested === undefined
                         ? "—"
-                        : `${formatCount(ticksCompleted)} / ${formatCount(ticksRequested)}`}
+                        : formatCountPair(ticksCompleted, ticksRequested)}
                     </dd>
                   </div>
                   {actionDimensions !== undefined && (

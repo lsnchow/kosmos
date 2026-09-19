@@ -19,7 +19,7 @@ import { FreeplayDialog } from "./components/FreeplayDialog";
 import { GalleryModal } from "./components/GalleryModal";
 import { ProvenanceBadge } from "./components/RolloutWall";
 import { Sidebar } from "./components/Sidebar";
-import { formatCount, pickString } from "./lib/format";
+import { formatCount, formatFrameCaption, pickString } from "./lib/format";
 import { cn } from "./lib/utils";
 
 export function AppShell() {
@@ -142,10 +142,11 @@ export function AppShell() {
                 { label: "Segments", value: formatCount(viewerSlot.segmentCount) },
                 {
                   label: "Frames",
-                  value:
-                    viewerSlot.certifiedFrameCount === undefined
-                      ? `${formatCount(viewerSlot.frames.length)} · certified count not reported`
-                      : `${formatCount(viewerSlot.certifiedFrameCount)} certified`,
+                  value: formatFrameCaption(
+                    viewerSlot.frames.length,
+                    viewerSlot.certifiedFrameCount,
+                    undefined,
+                  ),
                 },
                 { label: "Resolution", value: viewerSlot.resolution ?? "not reported" },
               ]

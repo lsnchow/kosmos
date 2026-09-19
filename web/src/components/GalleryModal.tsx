@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { MetaList } from "./MetaList";
 import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FramePlayer } from "./MediaFrame";
@@ -161,14 +162,7 @@ export function GalleryModal({
         </div>
 
         {meta && meta.length > 0 && (
-          <dl className="viewer-meta">
-            {meta.map((entry) => (
-              <div key={entry.label}>
-                <dt>{entry.label}</dt>
-                <dd>{entry.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <MetaList className="viewer-meta" items={meta} />
         )}
 
         <div className="viewer-foot">

@@ -5,7 +5,6 @@ export type TabItem<T extends string = string> = {
   id: T;
   label: string;
   /** Optional short line under the label, for a nav that has to explain itself. */
-  hint?: string;
 };
 
 /**

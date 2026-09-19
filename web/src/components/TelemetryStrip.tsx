@@ -8,6 +8,7 @@ import {
   formatUsd,
   pickNumber,
   pickString,
+  formatCountPair,
 } from "../lib/format";
 import type { StreamStatus } from "../hooks/useRunStream";
 import { DataValue, StatusPill } from "./Primitives";
@@ -101,7 +102,7 @@ export function TelemetryStrip({
 
       <DataValue
         label="Completed"
-        value={`${formatCount(run?.completed)} / ${formatCount(run?.total)}`}
+        value={formatCountPair(run?.completed, run?.total)}
         source={ledgerSource}
       />
       <DataValue
@@ -119,7 +120,7 @@ export function TelemetryStrip({
         value={
           activeReplicas === undefined && desiredReplicas === undefined
             ? "unavailable"
-            : `${formatCount(activeReplicas, "n/r")} / ${formatCount(desiredReplicas, "n/r")}`
+            : formatCountPair(activeReplicas, desiredReplicas, "n/r")
         }
         source="Chain deployment API / metrics export"
         tone={tone}

@@ -1,4 +1,5 @@
 import { Gauge, Scale } from "lucide-react";
+import { MetaList } from "./MetaList";
 import {
   isOperationalSummary,
   type AnalysisCell,
@@ -13,6 +14,7 @@ import {
   pickNumber,
   pickString,
   readInterval,
+  formatCountPair,
 } from "../lib/format";
 import { cn } from "../lib/utils";
 import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
@@ -144,24 +146,15 @@ function ProvisionalBand({ summary }: { summary: JsonRecord }) {
           "The ledger still has nonterminal records, so only operational counts are available."}{" "}
         These are not study statistics and no rate is computed from them.
       </p>
-      <dl className="provisional-counts tabular-nums">
-        <div>
-          <dt>Reported records</dt>
-          <dd>{formatCount(summary.reported_records)}</dd>
-        </div>
-        <div>
-          <dt>Planned records</dt>
-          <dd>{formatCount(summary.planned_records)}</dd>
-        </div>
-        <div>
-          <dt>Terminal</dt>
-          <dd>{formatCount(summary.terminal_records)}</dd>
-        </div>
-        <div>
-          <dt>Nonterminal</dt>
-          <dd>{formatCount(summary.nonterminal_records)}</dd>
-        </div>
-      </dl>
+      <MetaList
+        className="provisional-counts tabular-nums"
+        items={[
+          { label: "Reported records", value: formatCount(summary.reported_records) },
+          { label: "Planned records", value: formatCount(summary.planned_records) },
+          { label: "Terminal", value: formatCount(summary.terminal_records) },
+          { label: "Nonterminal", value: formatCount(summary.nonterminal_records) },
+        ]}
+      />
     </div>
   );
 }
@@ -339,7 +332,7 @@ export function Scoreboard({
                       <td className="tabular-nums">
                         {formatRateAsPercent(cell.coverage)}
                         <span>
-                          {formatCount(valid)} / {formatCount(n)}
+                          {formatCountPair(valid, n)}
                         </span>
                       </td>
                       <td className="tabular-nums">
