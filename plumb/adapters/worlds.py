@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import os
+import hashlib
+import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .contracts import (
     BackendProfile,
     CapabilityResult,
     CapabilityStatus,
     COSMOS3_DIFFUSERS_SOURCE,
-    FeedbackMode,
     IRASIM_COMMIT,
     ServerTiming,
     WorldRequest,
@@ -50,6 +50,380 @@ class BackendUnavailableError(RuntimeError):
     """A local model/dependency/loader required for a real call is missing."""
 
 
+class CertificationError(ValueError):
+    """A certification artifact is absent, malformed, or lacks real evidence."""
+
+
+#: The only action length the reviewed source establishes for this Bridge FD
+#: profile.  Spec section 12 records that the asserted universal
+#: multiple-of-four restriction is *not* established by the reviewed source, so
+#: longer or shorter lengths are neither assumed supported nor assumed
+#: forbidden: they must be probed and certified.
+UNCERTIFIED_COSMOS_ACTION_LENGTHS: Tuple[int, ...] = (16,)
+UNCERTIFIED_DEFAULT_CLASS = "uncertified_default"
+GATE_A_CERTIFIED_CLASS = "gate_a_certified"
+ACTION_LENGTH_CERTIFICATION_KIND = "plumb_world_action_length_certification"
+
+#: Terminal padding is the spec's sanctioned fallback *only* with measured
+#: prefix-invariance evidence (section 2).  A padded run carries this protocol
+#: identity and can never be reported as an exact horizon match.
+PROTOCOL_EXACT_TERMINAL_HORIZON = "exact_terminal_horizon"
+PROTOCOL_CERTIFIED_TERMINAL_PADDING = "certified_terminal_padding"
+
+PADDING_POLICY_ZERO_DELTA_HOLD_GRIPPER = "zero_delta_hold_gripper"
+PADDING_POLICY_REPEAT_LAST_ACTION = "repeat_last_action"
+PADDING_POLICIES: Tuple[str, ...] = (
+    PADDING_POLICY_ZERO_DELTA_HOLD_GRIPPER,
+    PADDING_POLICY_REPEAT_LAST_ACTION,
+)
+
+
+def _normalised_sha256(value: Any, label: str) -> str:
+    text = str(value or "")
+    if text.startswith("sha256:"):
+        text = text[len("sha256:") :]
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text.lower()):
+        raise CertificationError("%s must be a SHA-256 digest, got %r" % (label, value))
+    return "sha256:" + text.lower()
+
+
+@dataclass(frozen=True)
+class ProbedActionLength:
+    """One probed action length plus the evidence that it was actually run.
+
+    ``status="supported"`` additionally requires the observed frame count to
+    satisfy the backend's own ``N actions -> N+1 frames`` contract.  A probe
+    that returned only the conditioning frame is therefore recorded as
+    ``unsupported`` with its real observation rather than rounded up.
+    """
+
+    action_length: int
+    status: str
+    evidence_uri: str
+    evidence_sha256: str
+    returned_frame_count: Optional[int] = None
+    job_id: Optional[str] = None
+    observed_at: Optional[str] = None
+    note: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.action_length, bool) or not isinstance(self.action_length, int) or self.action_length < 1:
+            raise CertificationError("probed action_length must be a positive integer")
+        if self.status not in ("supported", "unsupported"):
+            raise CertificationError("probed action length status must be supported or unsupported")
+        if not self.evidence_uri:
+            raise CertificationError(
+                "action length %d needs an evidence URI; a certification without per-length evidence is a guess"
+                % self.action_length
+            )
+        object.__setattr__(self, "evidence_sha256", _normalised_sha256(self.evidence_sha256, "evidence_sha256"))
+        if self.status == "supported":
+            if self.returned_frame_count is None:
+                raise CertificationError(
+                    "supported action length %d must record the observed returned frame count" % self.action_length
+                )
+            if int(self.returned_frame_count) != self.action_length + 1:
+                raise CertificationError(
+                    "action length %d returned %s frames, which does not satisfy the N -> N+1 frame contract; "
+                    "record it as unsupported instead of certifying it"
+                    % (self.action_length, self.returned_frame_count)
+                )
+
+    @property
+    def expected_frame_count(self) -> int:
+        return self.action_length + 1
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "action_length": int(self.action_length),
+            "status": self.status,
+            "expected_frame_count": self.expected_frame_count,
+            "returned_frame_count": None if self.returned_frame_count is None else int(self.returned_frame_count),
+            "evidence_uri": self.evidence_uri,
+            "evidence_sha256": self.evidence_sha256,
+            "job_id": self.job_id,
+            "observed_at": self.observed_at,
+            "note": self.note,
+        }
+
+
+@dataclass(frozen=True)
+class ActionLengthCertification:
+    """Gate-A evidence for which action lengths a deployment actually runs.
+
+    ``supported_lengths`` replaces a hardcoded guess.  The certification binds
+    itself to one ``profile_id`` so evidence from a different resolution tier,
+    scheduler, or container cannot be reused silently.
+    """
+
+    certification_id: str
+    profile_id: str
+    backend: str
+    domain: str
+    lengths: Tuple[ProbedActionLength, ...]
+    source_uri: str
+    source_sha256: str
+    control_hz: float = 5.0
+    certification_class: str = GATE_A_CERTIFIED_CLASS
+    recorded_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.certification_id or not self.profile_id or not self.backend or not self.domain:
+            raise CertificationError("certification needs certification_id, profile_id, backend, and domain")
+        if not self.lengths:
+            raise CertificationError("certification needs at least one probed action length")
+        seen = [item.action_length for item in self.lengths]
+        if len(seen) != len(set(seen)):
+            raise CertificationError("certification lists a duplicate action length")
+        if not self.supported_lengths:
+            raise CertificationError(
+                "certification records no supported action length; it cannot populate a world action profile"
+            )
+        if self.certification_class != GATE_A_CERTIFIED_CLASS:
+            raise CertificationError("certification_class must be %r" % GATE_A_CERTIFIED_CLASS)
+        object.__setattr__(self, "source_sha256", _normalised_sha256(self.source_sha256, "source_sha256"))
+        if float(self.control_hz) <= 0:
+            raise CertificationError("control_hz must be positive")
+
+    @property
+    def supported_lengths(self) -> Tuple[int, ...]:
+        return tuple(sorted(item.action_length for item in self.lengths if item.status == "supported"))
+
+    @property
+    def unsupported_lengths(self) -> Tuple[int, ...]:
+        return tuple(sorted(item.action_length for item in self.lengths if item.status == "unsupported"))
+
+    @property
+    def source_hash(self) -> str:
+        return self.source_sha256
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "certification_id": self.certification_id,
+            "kind": ACTION_LENGTH_CERTIFICATION_KIND,
+            "profile_id": self.profile_id,
+            "backend": self.backend,
+            "domain": self.domain,
+            "control_hz": float(self.control_hz),
+            "certification_class": self.certification_class,
+            "source_uri": self.source_uri,
+            "source_sha256": self.source_sha256,
+            "recorded_at": self.recorded_at,
+            "supported_action_lengths": list(self.supported_lengths),
+            "unsupported_action_lengths": list(self.unsupported_lengths),
+            "lengths": [item.as_dict() for item in self.lengths],
+        }
+
+
+def certified_action_lengths(path: Any, *, profile_id: Optional[str] = None) -> ActionLengthCertification:
+    """Load a Gate-A action-length certification artifact from disk.
+
+    The artifact's own bytes are hashed here, so ``source_sha256`` identifies
+    exactly the file that was read.  Any missing per-length evidence raises:
+    there is no partial-credit path that yields an uncertified-but-trusted
+    length set.
+    """
+
+    candidate = Path(str(path))
+    try:
+        raw = candidate.read_bytes()
+    except OSError as error:
+        raise CertificationError("cannot read action-length certification at %s: %s" % (candidate, error)) from error
+    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CertificationError("action-length certification at %s is not valid JSON: %s" % (candidate, error)) from error
+    if not isinstance(payload, Mapping):
+        raise CertificationError("action-length certification must be a JSON object")
+    if payload.get("kind") != ACTION_LENGTH_CERTIFICATION_KIND:
+        raise CertificationError(
+            "expected kind=%r in %s, got %r" % (ACTION_LENGTH_CERTIFICATION_KIND, candidate, payload.get("kind"))
+        )
+    entries = payload.get("lengths")
+    if not isinstance(entries, Sequence) or isinstance(entries, (str, bytes)) or not entries:
+        raise CertificationError("action-length certification needs a nonempty 'lengths' array")
+    lengths: List[ProbedActionLength] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            raise CertificationError("every 'lengths' entry must be a JSON object")
+        lengths.append(
+            ProbedActionLength(
+                action_length=int(entry["action_length"]),
+                status=str(entry["status"]),
+                evidence_uri=str(entry.get("evidence_uri") or ""),
+                evidence_sha256=entry.get("evidence_sha256"),
+                returned_frame_count=(
+                    None if entry.get("returned_frame_count") is None else int(entry["returned_frame_count"])
+                ),
+                job_id=None if entry.get("job_id") is None else str(entry["job_id"]),
+                observed_at=None if entry.get("observed_at") is None else str(entry["observed_at"]),
+                note=None if entry.get("note") is None else str(entry["note"]),
+            )
+        )
+    certification = ActionLengthCertification(
+        certification_id=str(payload.get("certification_id") or ""),
+        profile_id=str(payload.get("profile_id") or ""),
+        backend=str(payload.get("backend") or ""),
+        domain=str(payload.get("domain") or ""),
+        lengths=tuple(lengths),
+        source_uri=str(payload.get("source_uri") or candidate.as_posix()),
+        source_sha256=digest,
+        control_hz=float(payload.get("control_hz", 5.0)),
+        recorded_at=None if payload.get("recorded_at") is None else str(payload["recorded_at"]),
+    )
+    if profile_id is not None and certification.profile_id != profile_id:
+        raise CertificationError(
+            "certification %r was recorded for profile %r, not %r; requalify instead of reusing it"
+            % (certification.certification_id, certification.profile_id, profile_id)
+        )
+    return certification
+
+
+@dataclass(frozen=True)
+class TerminalPaddingCertificate:
+    """Measured prefix-invariance evidence authorising terminal padding.
+
+    Spec section 2: "For terminal padding, demonstrate prefix invariance to
+    post-horizon actions; otherwise require an exact supported terminal
+    length."  This type carries that measurement.  ``errors()`` is nonempty
+    whenever the evidence does not actually support padding, and a controller
+    must refuse to pad in that case.
+
+    ``tolerance_frame_mae`` is supplied by the caller, normally from
+    ``plumb.protocol.Tolerances.max_suffix_invariance_mae``; ``tolerance_source``
+    records where the number came from so a relaxed threshold is visible.
+    """
+
+    certificate_id: str
+    profile_id: str
+    padded_action_length: int
+    certified_prefix_lengths: Tuple[int, ...]
+    prefix_invariance_trials: int
+    max_observed_prefix_frame_mae: float
+    tolerance_frame_mae: float
+    evidence_uri: str
+    evidence_sha256: str
+    seed_matched: bool = True
+    padding_action_policy: str = PADDING_POLICY_ZERO_DELTA_HOLD_GRIPPER
+    tolerance_source: str = "caller_supplied"
+    note: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.padding_action_policy not in PADDING_POLICIES:
+            raise CertificationError("padding_action_policy must be one of %s" % (PADDING_POLICIES,))
+        if self.evidence_sha256:
+            object.__setattr__(self, "evidence_sha256", _normalised_sha256(self.evidence_sha256, "evidence_sha256"))
+
+    @property
+    def protocol_identity(self) -> str:
+        return PROTOCOL_CERTIFIED_TERMINAL_PADDING
+
+    @property
+    def certificate_hash(self) -> str:
+        payload = {
+            "certificate_id": self.certificate_id,
+            "profile_id": self.profile_id,
+            "padded_action_length": int(self.padded_action_length),
+            "certified_prefix_lengths": list(self.certified_prefix_lengths),
+            "prefix_invariance_trials": int(self.prefix_invariance_trials),
+            "max_observed_prefix_frame_mae": float(self.max_observed_prefix_frame_mae),
+            "tolerance_frame_mae": float(self.tolerance_frame_mae),
+            "tolerance_source": self.tolerance_source,
+            "seed_matched": bool(self.seed_matched),
+            "padding_action_policy": self.padding_action_policy,
+            "evidence_uri": self.evidence_uri,
+            "evidence_sha256": self.evidence_sha256,
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    def errors(self) -> Tuple[str, ...]:
+        """Why this certificate may not authorise padding. Empty means it may."""
+
+        problems: List[str] = []
+        if not self.certificate_id:
+            problems.append("certificate_id is required")
+        if not self.profile_id:
+            problems.append("profile_id is required; padding evidence is backend-profile specific")
+        if isinstance(self.padded_action_length, bool) or not isinstance(self.padded_action_length, int) or self.padded_action_length < 2:
+            problems.append("padded_action_length must be an integer of at least 2")
+        if not self.certified_prefix_lengths:
+            problems.append("no consumed prefix length has demonstrated prefix invariance")
+        for prefix in self.certified_prefix_lengths:
+            if isinstance(prefix, bool) or not isinstance(prefix, int) or prefix < 1:
+                problems.append("certified prefix %r must be a positive integer" % (prefix,))
+            elif isinstance(self.padded_action_length, int) and prefix >= self.padded_action_length:
+                problems.append(
+                    "certified prefix %d is not shorter than the padded length %d, so nothing was padded"
+                    % (prefix, self.padded_action_length)
+                )
+        if int(self.prefix_invariance_trials or 0) < 1:
+            problems.append("prefix invariance was never measured (zero trials)")
+        if self.max_observed_prefix_frame_mae is None:
+            problems.append("max_observed_prefix_frame_mae is null; an unmeasured residual is not invariance")
+        if float(self.tolerance_frame_mae or 0.0) <= 0.0:
+            problems.append("tolerance_frame_mae must be an explicit positive preregistered tolerance")
+        elif float(self.max_observed_prefix_frame_mae) > float(self.tolerance_frame_mae):
+            problems.append(
+                "measured prefix residual %.6f exceeds the preregistered tolerance %.6f"
+                % (float(self.max_observed_prefix_frame_mae), float(self.tolerance_frame_mae))
+            )
+        if not self.seed_matched:
+            problems.append("prefix invariance must be measured at a matched seed and condition frame")
+        if not self.evidence_uri or not self.evidence_sha256:
+            problems.append("padding evidence needs a URI and SHA-256 digest")
+        return tuple(problems)
+
+    def certifies(self, *, padded_length: int, consumed_prefix: int, profile_id: Optional[str] = None) -> bool:
+        if self.errors():
+            return False
+        if profile_id is not None and profile_id != self.profile_id:
+            return False
+        return int(padded_length) == int(self.padded_action_length) and int(consumed_prefix) in tuple(
+            int(value) for value in self.certified_prefix_lengths
+        )
+
+    def padding_actions(self, consumed: Sequence[Sequence[float]], count: int) -> Tuple[Tuple[float, ...], ...]:
+        """Build the declared post-horizon filler rows for a padded request.
+
+        These rows are discarded output, not executed control.  The policy is
+        whichever one the prefix-invariance evidence was measured under.
+        """
+
+        if count < 0:
+            raise CertificationError("padding count cannot be negative")
+        if not consumed:
+            raise CertificationError("padding needs at least one consumed action to derive its declared filler")
+        last = tuple(float(value) for value in consumed[-1])
+        if self.padding_action_policy == PADDING_POLICY_REPEAT_LAST_ACTION:
+            return tuple(last for _ in range(count))
+        held = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, last[6] if len(last) >= 7 else 0.0)
+        return tuple(held for _ in range(count))
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "certificate_id": self.certificate_id,
+            "certificate_hash": self.certificate_hash,
+            "profile_id": self.profile_id,
+            "protocol_identity": self.protocol_identity,
+            "padded_action_length": int(self.padded_action_length),
+            "certified_prefix_lengths": [int(value) for value in self.certified_prefix_lengths],
+            "prefix_invariance_trials": int(self.prefix_invariance_trials),
+            "max_observed_prefix_frame_mae": (
+                None if self.max_observed_prefix_frame_mae is None else float(self.max_observed_prefix_frame_mae)
+            ),
+            "tolerance_frame_mae": float(self.tolerance_frame_mae),
+            "tolerance_source": self.tolerance_source,
+            "seed_matched": bool(self.seed_matched),
+            "padding_action_policy": self.padding_action_policy,
+            "evidence_uri": self.evidence_uri,
+            "evidence_sha256": self.evidence_sha256,
+            "errors": list(self.errors()),
+            "note": self.note,
+        }
+
+
 @dataclass(frozen=True)
 class Cosmos3NanoDiffusersProfile:
     """Profile for one exact official Diffusers forward-dynamics serializer.
@@ -58,6 +432,13 @@ class Cosmos3NanoDiffusersProfile:
     identifier is metadata, not a signal to fetch 35 GB when a runtime starts.
     ``probe_action_lengths`` exists solely for Gate-B causal probes; it cannot
     turn a one-tick call into a qualified feedback implementation.
+
+    ``allowed_action_lengths`` is *evidence*, not configuration.  Leaving
+    ``action_length_certification`` unset keeps the single uncertified default
+    length and reports ``action_length_certification_class="uncertified_default"``.
+    Supplying a certification requires ``allowed_action_lengths`` to equal its
+    certified supported lengths exactly, so a profile can never claim a length
+    the deployment never demonstrated.
     """
 
     profile_id: str
@@ -73,11 +454,13 @@ class Cosmos3NanoDiffusersProfile:
     scheduler_flow_shift: Optional[float] = 10.0
     device_map: str = "cuda"
     view_point: str = "ego_view"
-    allowed_action_lengths: Tuple[int, ...] = (16,)
+    allowed_action_lengths: Tuple[int, ...] = UNCERTIFIED_COSMOS_ACTION_LENGTHS
     probe_action_lengths: Tuple[int, ...] = (1,)
     local_files_only: bool = True
     use_system_prompt: bool = False
     enable_safety_checker: bool = False
+    action_length_certification: Optional[ActionLengthCertification] = None
+    terminal_padding_certificate: Optional[TerminalPaddingCertificate] = None
 
     def __post_init__(self) -> None:
         if not self.profile_id:
@@ -90,6 +473,54 @@ class Cosmos3NanoDiffusersProfile:
             raise ValueError("Cosmos fps and num_inference_steps must be positive.")
         if not set(self.allowed_action_lengths).isdisjoint(set(self.probe_action_lengths)):
             raise ValueError("Normal and probe Cosmos action lengths must not overlap.")
+        certification = self.action_length_certification
+        if certification is not None:
+            if certification.profile_id != self.profile_id:
+                raise CertificationError(
+                    "action-length certification %r belongs to profile %r, not %r"
+                    % (certification.certification_id, certification.profile_id, self.profile_id)
+                )
+            if tuple(sorted(self.allowed_action_lengths)) != certification.supported_lengths:
+                raise CertificationError(
+                    "allowed_action_lengths %s does not match certified supported lengths %s; "
+                    "use Cosmos3NanoDiffusersProfile.from_certification instead of asserting a length"
+                    % (tuple(sorted(self.allowed_action_lengths)), certification.supported_lengths)
+                )
+        padding = self.terminal_padding_certificate
+        if padding is not None and padding.profile_id != self.profile_id:
+            raise CertificationError(
+                "terminal padding certificate %r belongs to profile %r, not %r"
+                % (padding.certificate_id, padding.profile_id, self.profile_id)
+            )
+
+    @classmethod
+    def from_certification(
+        cls, certification: ActionLengthCertification, **kwargs: Any
+    ) -> "Cosmos3NanoDiffusersProfile":
+        """Build a profile whose normal action lengths come from Gate-A evidence."""
+
+        supported = certification.supported_lengths
+        probe = tuple(
+            length for length in kwargs.pop("probe_action_lengths", ()) if length not in supported
+        )
+        return cls(
+            profile_id=kwargs.pop("profile_id", certification.profile_id),
+            allowed_action_lengths=supported,
+            probe_action_lengths=probe,
+            action_length_certification=certification,
+            fps=float(kwargs.pop("fps", certification.control_hz)),
+            **kwargs,
+        )
+
+    @property
+    def action_length_certification_class(self) -> str:
+        return UNCERTIFIED_DEFAULT_CLASS if self.action_length_certification is None else GATE_A_CERTIFIED_CLASS
+
+    @property
+    def action_length_certification_source_hash(self) -> Optional[str]:
+        """``None`` means uncertified, never an empty-but-trusted hash."""
+
+        return None if self.action_length_certification is None else self.action_length_certification.source_hash
 
     def as_backend_profile(self) -> BackendProfile:
         return BackendProfile(
@@ -116,6 +547,14 @@ class Cosmos3NanoDiffusersProfile:
                 },
                 "vendor_fixture_video_uri": COSMOS3_BRIDGE_FIXTURE_VIDEO_URL,
                 "frame_contract": "N actions -> N+1 returned frames, condition at index 0",
+                "action_length_certification_class": self.action_length_certification_class,
+                "action_length_certification_source_hash": self.action_length_certification_source_hash,
+                "action_length_certification": (
+                    None if self.action_length_certification is None else self.action_length_certification.as_dict()
+                ),
+                "terminal_padding_certificate": (
+                    None if self.terminal_padding_certificate is None else self.terminal_padding_certificate.as_dict()
+                ),
             },
         )
 
@@ -177,7 +616,15 @@ class Cosmos3NanoDiffusersAdapter:
                 reason="Cosmos3-Nano local model directory is not present; no Hub download was attempted.",
                 source_verified=True,
                 evidence_uris=(COSMOS3_DIFFUSERS_SOURCE, COSMOS3_VENDOR_FIXTURE),
-                details={"local_model_path": self.profile.local_model_path, "local_files_only": True},
+                details={
+                    "local_model_path": self.profile.local_model_path,
+                    "local_files_only": True,
+                    # Action-length certification status is independent of model
+                    # availability, so it is reported in both branches.
+                    "allowed_action_lengths": self.profile.allowed_action_lengths,
+                    "action_length_certification_class": self.profile.action_length_certification_class,
+                    "action_length_certification_source_hash": self.profile.action_length_certification_source_hash,
+                },
             )
         return CapabilityResult(
             status=CapabilityStatus.READY_UNQUALIFIED,
@@ -194,6 +641,13 @@ class Cosmos3NanoDiffusersAdapter:
                 "probe_action_lengths": self.profile.probe_action_lengths,
                 "expected_frame_rule": "N actions -> N+1 returned frames",
                 "safety_checker": self.profile.enable_safety_checker,
+                "action_length_certification_class": self.profile.action_length_certification_class,
+                "action_length_certification_source_hash": self.profile.action_length_certification_source_hash,
+                "terminal_padding_certificate_hash": (
+                    None
+                    if self.profile.terminal_padding_certificate is None
+                    else self.profile.terminal_padding_certificate.certificate_hash
+                ),
             },
         )
 

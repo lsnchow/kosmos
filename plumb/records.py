@@ -1,17 +1,21 @@
-"""Shared record contracts for the local PLUMB control plane.
+"""Shared record contracts for the PLUMB control plane.
 
-This module intentionally describes *run bookkeeping*, not a qualified robot
-evaluation.  The only backend implemented by the local engine is an explicitly
-labelled synthetic engineering fixture.
+This module describes *run bookkeeping*, not a qualified robot evaluation.  Two
+kinds of backend are registered: an explicitly labelled synthetic engineering
+fixture, and real-model execution on a deployed Baseten Chain.  Selecting the
+latter is necessary but not sufficient -- ``plumb.engine`` additionally requires
+passing gate evidence, and ``plumb.gates.QualificationValidator`` remains the
+only thing that can call a resulting cell qualified.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 
 DEFAULT_POLICIES = (
@@ -42,6 +46,55 @@ SYNTHETIC_HORIZONS = {
 }
 
 SYNTHETIC_LABEL = "synthetic engineering test artifact; unqualified; not real robot physics"
+
+#: Execution modes a caller may request.  ``qualified`` is deliberately absent:
+#: qualification is decided by ``plumb.gates.QualificationValidator``, never
+#: asserted by a run configuration.
+#:
+#: ``synthetic``    engineering fixture; no learned model touches it.
+#: ``diagnostic``   real models, explicitly not a primary-study cell.
+#: ``qualification``real models against a frozen protocol; the gate ledger still
+#:                  decides whether the resulting cells are qualified.
+RUN_MODES: Dict[str, str] = {
+    "synthetic": "synthetic/unqualified",
+    "diagnostic": "diagnostic/unqualified",
+    "qualification": "qualification/pending-gate-review",
+}
+
+#: Registered execution backends.  ``requires_gates`` backends execute real
+#: models and must not start until the caller has shown passing gate evidence;
+#: the engine enforces that separately because only it can see the gate ledger.
+BACKENDS: Dict[str, Dict[str, Any]] = {
+    "synthetic": {
+        "requires_gates": False,
+        "label": SYNTHETIC_LABEL,
+        "description": "Local deterministic fixture. No learned model, no robot physics.",
+    },
+    "baseten": {
+        "requires_gates": True,
+        "label": "real-model execution on a deployed Baseten Chain",
+        "description": "Submits logical episodes to the Chain entrypoint /async_run_remote.",
+        "required_gates": ("A", "B", "C"),
+    },
+}
+
+#: Gates that must carry passing evidence before a gated backend may execute.
+#: Gate D blocks *primary scoring*, not execution, so a diagnostic cohort can
+#: run before calibration exists; ``plumb.measurement`` refuses to publish
+#: primary statistics from it.
+GATED_BACKEND_REQUIRED_GATES: Tuple[str, ...] = ("A", "B", "C")
+
+#: Cohorts whose source-state lineages must stay disjoint (spec section 6).
+#: ``plumb.measurement.validate_source_lineage_leakage`` enforces the disjointness;
+#: this is the closed set of names it may see.
+COHORTS: Tuple[str, ...] = (
+    "primary",
+    "development",
+    "calibration",
+    "cost_confirmation",
+    "reverse_validation",
+    "load_rehearsal",
+)
 
 
 class ConfigurationError(ValueError):
@@ -94,12 +147,14 @@ def _string_list(value: Any, field: str, default: Sequence[str]) -> list[str]:
 
 
 def normalise_config(config: Mapping[str, Any]) -> Dict[str, Any]:
-    """Validate and fill a local-run configuration.
+    """Validate and fill a run configuration.
 
-    The public control plane must not present synthetic fixtures as qualified
-    model results.  Consequently, qualified modes are rejected until the
-    external gates have actual evidence; arbitrary backend names are rejected
-    rather than silently falling back to fixture output.
+    The control plane must not present synthetic fixtures as qualified model
+    results, so ``qualified`` is not a settable mode and arbitrary backend names
+    are rejected rather than silently falling back to fixture output.  A gated
+    backend is accepted here as *well-formed*; ``plumb.engine`` separately
+    refuses to execute it without passing gate evidence, because only the engine
+    can see the gate ledger.
     """
 
     if not isinstance(config, Mapping):
@@ -112,15 +167,29 @@ def normalise_config(config: Mapping[str, Any]) -> Dict[str, Any]:
 
     mode = supplied.get("mode", "synthetic")
     if mode == "qualified":
+        # ``qualified`` is never a caller-supplied value.  Qualification is a
+        # separate, inspectable decision made by ``plumb.gates`` from frozen
+        # manifests and passed gates; a run configuration cannot assert it.
         raise ConfigurationError(
-            "qualified mode is unavailable: PLUMB qualification gates A-F have not passed"
+            "qualified mode is not settable by a caller: qualification is decided by "
+            "plumb.gates.QualificationValidator from frozen manifests and passed gates"
         )
-    if mode != "synthetic":
-        raise ConfigurationError("only mode='synthetic' is available in this local control engine")
+    if mode not in RUN_MODES:
+        raise ConfigurationError(
+            "mode must be one of %s" % ", ".join("'%s'" % item for item in sorted(RUN_MODES))
+        )
 
     backend = supplied.get("backend", "synthetic")
-    if backend != "synthetic":
-        raise ConfigurationError("only backend='synthetic' is configured locally")
+    if backend not in BACKENDS:
+        raise ConfigurationError(
+            "backend must be one of %s" % ", ".join("'%s'" % item for item in sorted(BACKENDS))
+        )
+    if BACKENDS[backend]["requires_gates"] and mode == "synthetic":
+        raise ConfigurationError(
+            "backend '%s' executes real models and cannot run in synthetic mode" % backend
+        )
+    if not BACKENDS[backend]["requires_gates"] and mode != "synthetic":
+        raise ConfigurationError("backend 'synthetic' can only run in synthetic mode")
 
     starts = supplied.get("starts_per_task", 50)
     if isinstance(starts, bool) or not isinstance(starts, int) or starts < 1 or starts > 10_000:
@@ -133,6 +202,22 @@ def normalise_config(config: Mapping[str, Any]) -> Dict[str, Any]:
     workers = supplied.get("max_workers", 12)
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1 or workers > 32:
         raise ConfigurationError("max_workers must be an integer from 1 through 32")
+
+    cohort = supplied.get("cohort", "primary")
+    if cohort not in COHORTS:
+        raise ConfigurationError(
+            "cohort must be one of %s" % ", ".join("'%s'" % item for item in sorted(COHORTS))
+        )
+
+    protocol_hash = supplied.get("protocol_hash")
+    if protocol_hash is not None and (
+        not isinstance(protocol_hash, str) or not protocol_hash.startswith("sha256:")
+    ):
+        raise ConfigurationError("protocol_hash must be a 'sha256:...' string when supplied")
+    if BACKENDS[backend]["requires_gates"] and cohort == "primary" and not protocol_hash:
+        raise ConfigurationError(
+            "a primary-cohort real-model run requires a frozen protocol_hash"
+        )
 
     idempotency_key = supplied.get("idempotency_key")
     if idempotency_key is not None and (
@@ -151,7 +236,14 @@ def normalise_config(config: Mapping[str, Any]) -> Dict[str, Any]:
             "seed": seed,
             "max_workers": workers,
             "qualification": "unqualified",
-            "fixture_label": SYNTHETIC_LABEL,
+            # Only a synthetic run carries the fixture label.  Attaching it to a
+            # real-model run would mislabel real output as a fixture, and
+            # omitting it from a fixture run would hide what it is.
+            "fixture_label": SYNTHETIC_LABEL if backend == "synthetic" else None,
+            "backend_label": BACKENDS[backend]["label"],
+            "episode_mode": RUN_MODES[mode],
+            "cohort": cohort,
+            "protocol_hash": protocol_hash,
         }
     )
     if idempotency_key is None:
@@ -267,12 +359,14 @@ def normalise_backend_result(
     artifact_refs = raw.get("artifact_refs", {})
     if not isinstance(artifact_refs, Mapping):
         raise ValueError("backend artifact_refs must be an object")
-    artifact_refs = _validate_synthetic_artifact_refs(dict(artifact_refs), episode, artifact_root)
+    mode = str(episode.get("mode") or "")
+    profile = "synthetic" if "synthetic" in mode else "real_model"
+    artifact_refs = _validate_attempt_artifact_refs(dict(artifact_refs), episode, artifact_root, profile=profile)
     timing = raw.get("timing", {})
     if not isinstance(timing, Mapping):
         raise ValueError("backend timing must be an object")
 
-    return {
+    normalised: Dict[str, Any] = {
         "validity": validity,
         "binary_success": binary_success,
         "progress_score": progress_score,
@@ -284,19 +378,93 @@ def normalise_backend_result(
         if isinstance(raw.get("backend_metadata", {}), Mapping)
         else {},
     }
+    # Spec section 8 measurement, cost and identity fields are carried through
+    # only when the backend actually supplied them, so an absent measurement
+    # stays absent rather than being written as a zero.  Numeric fields are
+    # validated here because the ledger stores them directly.
+    for name in ("executed_actions", "n_segments"):
+        if name in raw and raw[name] is not None:
+            value = raw[name]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("backend %s must be a non-negative integer or null" % name)
+            normalised[name] = value
+    for name in ("compute_gpu_seconds", "allocated_gpu_seconds", "estimated_usd"):
+        if name in raw and raw[name] is not None:
+            value = raw[name]
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("backend %s must be a number or null" % name)
+            if not math.isfinite(float(value)) or float(value) < 0:
+                raise ValueError("backend %s must be a finite non-negative number" % name)
+            normalised[name] = float(value)
+    for name in (
+        "raw_judge_samples_ref",
+        "segments_manifest_ref",
+        "video_ref",
+        "timing_ref",
+        "cost_basis_ref",
+        "exclusion_reason",
+        "feedback_mode",
+        "parity_status",
+    ):
+        if name in raw and raw[name] is not None:
+            normalised[name] = str(raw[name])
+    for name in ("platform_request_ids", "attempt_ids"):
+        if name in raw and raw[name] is not None:
+            values = raw[name]
+            if not isinstance(values, (list, tuple)):
+                raise ValueError("backend %s must be a list" % name)
+            normalised[name] = [str(item) for item in values]
+    for name in ("policy_identity", "world_identity", "judge_identity", "seeds"):
+        if name in raw and raw[name] is not None:
+            if not isinstance(raw[name], Mapping):
+                raise ValueError("backend %s must be an object" % name)
+            normalised[name] = dict(raw[name])
+    return normalised
+
+
+#: Media types a real-model attempt may persist, with their required suffix.
+#: Everything must still resolve inside the attempt's own directory and match a
+#: recorded SHA-256; widening the type list does not widen the containment rule.
+REAL_MODEL_MEDIA = {
+    "application/json": ".json",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "video/mp4": ".mp4",
+}
+
+SYNTHETIC_MEDIA = {"image/svg+xml": ".svg", "application/json": ".json"}
 
 
 def _validate_synthetic_artifact_refs(
     refs: Dict[str, Any], episode: Mapping[str, Any], artifact_root: Optional[Path]
 ) -> Dict[str, Dict[str, str]]:
-    """Accept only hash-verified, own-attempt synthetic artifacts.
+    """Back-compatible entry point for the synthetic fixture profile."""
 
-    The local control plane may exercise an injected backend for tests, but it
-    is still a *synthetic* run.  A result cannot smuggle an arbitrary URL (or a
-    real-looking clip outside its own attempt directory) into the dashboard.
-    Empty refs remain valid for narrow fake-backend failure/recovery tests.
+    return _validate_attempt_artifact_refs(refs, episode, artifact_root, profile="synthetic")
+
+
+def _validate_attempt_artifact_refs(
+    refs: Dict[str, Any],
+    episode: Mapping[str, Any],
+    artifact_root: Optional[Path],
+    profile: str = "synthetic",
+) -> Dict[str, Dict[str, str]]:
+    """Accept only hash-verified, own-attempt artifacts.
+
+    Two profiles share one containment rule.  ``synthetic`` additionally
+    requires the fixture manifest and its four false claims, so a fixture can
+    never be dressed up as a model result.  ``real_model`` allows PNG/JPEG/MP4
+    media and requires a provenance manifest whose ``qualified_measurement`` is
+    false -- a backend records what it produced, and only ``plumb.gates`` may
+    later call a cell qualified.
+
+    Neither profile permits an arbitrary URL: a result cannot smuggle an
+    external clip into the dashboard.  Empty refs stay valid for narrow
+    fake-backend failure/recovery tests.
     """
 
+    if profile not in ("synthetic", "real_model"):
+        raise ValueError("unknown artifact profile %r" % profile)
     if not refs:
         return {}
     if artifact_root is None:
@@ -305,7 +473,7 @@ def _validate_synthetic_artifact_refs(
     if not root.is_dir():
         raise ValueError("own-attempt artifact directory does not exist")
     data_root = root.parents[3]
-    allowed_media = {"image/svg+xml": ".svg", "application/json": ".json"}
+    allowed_media = SYNTHETIC_MEDIA if profile == "synthetic" else REAL_MODEL_MEDIA
     validated: Dict[str, Dict[str, str]] = {}
     for name, ref in refs.items():
         if not isinstance(name, str) or not isinstance(ref, Mapping):
@@ -316,21 +484,29 @@ def _validate_synthetic_artifact_refs(
         if not isinstance(relative, str) or not isinstance(media_type, str) or not isinstance(digest, str):
             raise ValueError("artifact refs require relative_path, media_type, and sha256")
         if media_type not in allowed_media or not digest.startswith("sha256:"):
-            raise ValueError("synthetic artifact refs require an allowed typed media value and SHA-256")
+            raise ValueError("artifact refs require an allowed typed media value and SHA-256")
         candidate = (data_root / relative).resolve()
         if root not in candidate.parents or candidate.suffix.lower() != allowed_media[media_type] or not candidate.is_file():
-            raise ValueError("synthetic artifact must resolve under this episode attempt directory")
+            raise ValueError("artifact must resolve under this episode attempt directory")
         if file_digest(candidate) != digest:
-            raise ValueError("synthetic artifact SHA-256 does not match persisted bytes")
+            raise ValueError("artifact SHA-256 does not match persisted bytes")
         expected_uri = "artifact://%s" % relative
         expected_url = "/api/artifacts/%s" % relative
         if ref.get("uri", expected_uri) != expected_uri or ref.get("url", expected_url) != expected_url:
-            raise ValueError("synthetic artifact references may not use arbitrary URLs")
+            raise ValueError("artifact references may not use arbitrary URLs")
         if ref.get("artifact_path", relative) != relative:
-            raise ValueError("synthetic artifact_path must equal data-root-relative path")
+            raise ValueError("artifact_path must equal data-root-relative path")
         label = str(ref.get("label", "")).lower()
-        if "synthetic" not in label or "unqualified" not in label:
-            raise ValueError("synthetic artifacts must retain synthetic/unqualified labels")
+        if profile == "synthetic":
+            if "synthetic" not in label or "unqualified" not in label:
+                raise ValueError("synthetic artifacts must retain synthetic/unqualified labels")
+        else:
+            if not label.strip():
+                raise ValueError("real-model artifacts require a descriptive label")
+            if "synthetic" in label:
+                raise ValueError("a real-model artifact must not be labelled synthetic")
+            if "qualified" in label and "unqualified" not in label:
+                raise ValueError("a backend artifact may not label itself qualified")
         validated[name] = {
             "uri": expected_uri,
             "relative_path": relative,
@@ -341,24 +517,36 @@ def _validate_synthetic_artifact_refs(
             "label": str(ref["label"]),
         }
     manifest = validated.get("manifest")
-    frame = validated.get("fixture_frame")
-    if manifest is None or frame is None:
-        raise ValueError("nonempty synthetic output requires fixture_frame and manifest artifacts")
+    if profile == "synthetic":
+        frame = validated.get("fixture_frame")
+        if manifest is None or frame is None:
+            raise ValueError("nonempty synthetic output requires fixture_frame and manifest artifacts")
+        required_false = ("real_robot", "physical_control", "world_model", "qualified_measurement")
+        expected_kind = "synthetic_engineering_fixture"
+    else:
+        if manifest is None:
+            raise ValueError("nonempty real-model output requires a provenance manifest artifact")
+        # A world model *did* run, so ``world_model`` is legitimately true here.
+        # What a backend may never assert is a physical robot or a qualified
+        # measurement; those two remain false in every persisted manifest.
+        required_false = ("real_robot", "physical_control", "qualified_measurement")
+        expected_kind = "plumb_real_model_attempt"
     try:
         with (data_root / manifest["relative_path"]).open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
     except (OSError, ValueError) as exc:
-        raise ValueError("synthetic artifact manifest is unreadable") from exc
+        raise ValueError("artifact manifest is unreadable") from exc
     if not isinstance(payload, Mapping):
-        raise ValueError("synthetic artifact manifest must be an object")
+        raise ValueError("artifact manifest must be an object")
     claims = payload.get("claims")
     if (
-        payload.get("kind") != "synthetic_engineering_fixture"
-        or "synthetic" not in str(payload.get("label", "")).lower()
+        payload.get("kind") != expected_kind
         or payload.get("run_id") != episode.get("run_id")
         or payload.get("episode_id") != episode.get("episode_id")
         or not isinstance(claims, Mapping)
-        or any(claims.get(name) is not False for name in ("real_robot", "physical_control", "world_model", "qualified_measurement"))
+        or any(claims.get(name) is not False for name in required_false)
     ):
-        raise ValueError("artifact manifest is not an own unqualified synthetic fixture")
+        raise ValueError("artifact manifest is not an own %s manifest with the required false claims" % expected_kind)
+    if profile == "synthetic" and "synthetic" not in str(payload.get("label", "")).lower():
+        raise ValueError("synthetic artifact manifest must retain its synthetic label")
     return validated

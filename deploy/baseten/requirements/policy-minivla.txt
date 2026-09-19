@@ -1,0 +1,74 @@
+# PLUMB Baseten image requirements — MiniVLA (openvla-mini, VQ action head)
+#
+# Consumed by: deploy/baseten/chain.py -> MiniVLAWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY310   (AGENT-BUILD-SPEC.md §1: "python 3.10")
+# Adapter:     plumb.policies.native.MiniVLAPolicy
+# Re-resolved against public PyPI and public git revisions on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# No MiniVLA diagnostic was ever run on the ComputeCanada clusters, so no
+# latency, GPU-peak-memory, or executed-prefix evidence exists for this stack at
+# all.  The `torch 2.6.0+computecanada` / `tokenizers 0.19.1+computecanada`
+# builds recorded in HANDOFF.md do not exist on PyPI; this image pins the public
+# torch 2.2.0 stack that AGENT-BUILD-SPEC.md §1 specifies for MiniVLA, which is
+# a different binary build again.  Memory, batch size, and throughput must be
+# measured on Baseten before any capacity or cost claim (spec §12; §7 forbids an
+# assumed universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+
+# torch 2.2.0's default PyPI wheel is cu121.  The explicit channel keeps the
+# CUDA build auditable; do NOT "upgrade" torch here — MiniVLA's pinned stack is
+# torch 2.2.0 / torchvision 0.17.0 and flash-attn 2.5.5 is compiled against it.
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+torch==2.2.0
+torchvision==0.17.0
+transformers==4.40.1
+tokenizers==0.19.1
+timm==0.9.10
+huggingface-hub==0.25.2
+safetensors==0.4.5
+accelerate==0.34.2
+sentencepiece==0.2.0
+einops==0.8.1
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# Prismatic/openvla-mini is not on PyPI.  Immutable revision resolved from
+# https://api.github.com/repos/Stanford-ILIAD/openvla-mini/commits at
+# 2026-09-19T08:45:06Z.  `use_extra=True` and action chunk 7 are wrapper
+# configuration, not installable facts.
+prismatic @ git+https://github.com/Stanford-ILIAD/openvla-mini@0822b36227b5a771be4eb2680e34c559734c8fdc
+
+# flash-attn==2.5.5 is NOT listed here on purpose.
+# It has no usable sdist build without torch already importable and needs
+# `--no-build-isolation`, which pip does not accept inside a requirements file.
+# It is installed instead by MiniVLAWorker.remote_config.build_commands, which
+# truss renders AFTER this requirements file is installed (see
+# truss/templates/base.Dockerfile.jinja `install_requirements` block vs. the
+# `build_commands` RUN lines in server.Dockerfile.jinja).  The exact command is
+#     pip install flash-attn==2.5.5 --no-build-isolation
+# A source build needs nvcc in the image; if it fails, MiniVLAWorker still
+# returns status="blocked" rather than running an unpinned attention kernel.
+
+# UNRESOLVED, deliberately absent:
+#   * No checkpoint download.  `Stanford-ILIAD/minivla-vq-bridge-prismatic`
+#     `checkpoints/step-362500-epoch-21-loss=0.2259.pt` (the `=` must be
+#     URL-encoded as %3D) and the separate `Stanford-ILIAD/pretrain_vq` VQ
+#     checkpoint arrive through chains.Assets(cached=[...]).
+#   * `Stanford-ILIAD/pretrain_vq` declares NO license (cardData: null).  That is
+#     an unresolved redistribution/access dependency, flagged in
+#     model-contracts.json, and installing packages does not resolve it.
+#   * These are legacy `.pt` pickles.  AGENT-BUILD-SPEC.md §1 requires isolated,
+#     credential-free, network-free conversion to a weights-only/safetensors
+#     artifact with retained hashes before normal inference consumes them.
+#     `strict=True` is not a safety boundary.
+#   * No loader is wired: MiniVLAPolicy is an ExternalPolicyHook with no bundled
+#     wrapper, so MiniVLAWorker returns status="blocked" until a reviewed
+#     `loader_hook` plus golden-action fixture exists and its executed prefix is
+#     certified (the 7-action chunk is declared, the prefix is not).

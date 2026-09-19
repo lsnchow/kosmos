@@ -1,0 +1,74 @@
+# PLUMB Baseten image requirements — Open pi-zero (allenzren/open-pi-zero)
+#
+# Consumed by: deploy/baseten/chain.py -> OpenPiZeroWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY310
+# Adapter:     plumb.policies.native.OpenPiZeroPolicy
+# Re-resolved against public PyPI and the spec's pinned git revision on
+# 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# No Open pi-zero diagnostic was ever run on the ComputeCanada clusters: there is
+# no latency, no GPU peak memory, and no executed-prefix evidence for this stack.
+# The `+computecanada` torch builds recorded in HANDOFF.md do not exist on PyPI
+# and are not installed here.  Memory, batch size, and throughput must be
+# measured on Baseten before any capacity or cost claim (AGENT-BUILD-SPEC.md §12;
+# §7 forbids an assumed universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+#
+# UPSTREAM USES `uv sync`, NOT A REQUIREMENTS FILE.
+# AGENT-BUILD-SPEC.md §1 records the upstream install path as `uv sync` against
+# the repository's own pyproject/uv.lock.  This pip file is a translation of that
+# environment onto the Baseten image builder, so it is explicitly a *re-resolved
+# approximation of upstream's locked set*, not upstream's lock.  If the operator
+# prefers exactness, DEPLOY.md's appendix shows how to switch this Chainlet to
+# `requirements_file=` pointing at the repository's own `uv.lock` (truss 0.18+
+# copies `uv.lock`/`pyproject.toml` verbatim and runs `uv export --frozen`).
+# That path is strictly better for reproducibility and is the recommended
+# follow-up once the repository revision is vendored into deploy/.
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch==2.6.0
+torchvision==0.21.0
+
+# PaliGemma-3B backbone loading. open-pi-zero constructs the PaliGemma modules
+# itself, so the Transformers pin only has to supply a compatible
+# tokenizer/processor and config loader.
+transformers==4.46.3
+tokenizers==0.20.3
+huggingface-hub==0.26.5
+safetensors==0.4.5
+accelerate==1.1.1
+sentencepiece==0.2.0
+einops==0.8.1
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# Immutable revision from AGENT-BUILD-SPEC.md §12's source record, confirmed as
+# the repository head at 2026-09-19T08:45:06Z.
+open-pi-zero @ git+https://github.com/allenzren/open-pi-zero@c3df7fb062175c16f69d7ca4ce042958ea238fb7
+
+# UNRESOLVED, deliberately absent:
+#   * No checkpoint download.  `allenzren/open-pi-zero`
+#     `bridge_beta_step19296_2024-12-26_22-30_42.pt` (~11.773 GB) and the
+#     PaliGemma support files arrive through chains.Assets(cached=[...]).
+#   * PaliGemma provenance: prefer `google/paligemma-3b-pt-224` under accepted
+#     terms.  `leo009/paligemma-3b-pt-224` is a candidate mirror only after
+#     provenance, hashes, and terms are resolved; byte identity must not be
+#     claimed without a saved comparison.
+#   * The checkpoint is a legacy `.pt` pickle and needs the isolated, offline,
+#     credential-free conversion described in AGENT-BUILD-SPEC.md §1 before
+#     normal inference consumes it.  Verifying full state-dict coverage with
+#     `strict=True` checks keys, not provenance or deserialization safety.
+#   * `action_normalization_type="bounds"` is this wrapper's setting, NOT a
+#     universal native-policy API; it has to be verified against pinned source
+#     and a golden action fixture.
+#   * No loader is wired: OpenPiZeroPolicy is an ExternalPolicyHook with no
+#     bundled wrapper, so OpenPiZeroWorker returns status="blocked" until a
+#     reviewed `loader_hook` exists.  The 4-action proposal is declared; the
+#     executed prefix and refreshed-proprioception cadence are not certified.

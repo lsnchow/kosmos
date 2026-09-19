@@ -1,0 +1,45 @@
+# PLUMB Baseten image requirements — Stage-A deterministic validity gate (CPU)
+#
+# Consumed by: deploy/baseten/chain.py -> ValidityWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY311
+# Gate:        plumb.validity.StageAValidityGate
+# Re-resolved against public PyPI on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# No validity-gate diagnostic exists in cluster-runtime-evidence.json, and the
+# `+computecanada` wheel builds recorded in HANDOFF.md (torch 2.6.0, opencv 4.11
+# module builds) do not exist on PyPI.  This image installs public CPU wheels.
+# CPU time per clip must be measured on Baseten before it enters the 60-second
+# burst budget or any cost view (AGENT-BUILD-SPEC.md §12; §7 forbids an assumed
+# universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+#
+# CPU-ONLY BY DESIGN.  AGENT-BUILD-SPEC.md §5 Stage A is deterministic Python:
+# frame count/order, decode integrity, finite action/state values, impossible
+# discontinuities, and calibrated command-motion consistency using classical
+# tracking/flow with FIXED parameters.  Nothing here may learn, and nothing here
+# may score task success.  Whole-image optical-flow magnitude cannot by itself
+# identify arm motion, contact failure, or a collision; a stationary gripper
+# pressing a drawer can be valid; ambiguous observations are `unknown`, never
+# automatically `invalid`.
+
+opencv-python-headless==4.11.0.86
+numpy==1.26.4
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+pillow==11.1.0
+pydantic==2.11.7
+
+# DELIBERATELY ABSENT:
+#   * No torch, no JAX, no GPU driver dependency.  A GPU here would only invite
+#     a learned check into a gate that must stay deterministic.
+#   * No V-JEPA / facebook/vjepa2-vitl-fpc64-256.  Its feature diagnostics are a
+#     separate analysis and "cannot silently alter this deterministic gate"
+#     (AGENT-BUILD-SPEC.md §5).
+#   * No calibration references.  The camera/scene references and the frozen
+#     numeric thresholds that Stage A compares against are protocol data, not
+#     packages; until they are frozen, ValidityWorker returns status="blocked".

@@ -12,6 +12,67 @@ from .records import ConfigurationError, canonical_json, lease_deadline, utc_now
 
 TERMINAL_EPISODE_STATUSES = ("completed", "failed", "cancelled")
 
+#: Spec section 8 per-episode record fields, added to ``episodes`` as a
+#: backwards-compatible in-place migration.  ``plumb/measurement.py`` requires
+#: ``cohort``, ``protocol_hash`` and ``policy_variant`` on every row before it
+#: will accept a run as a primary analysis rather than a diagnostic, so these
+#: are load-bearing rather than cosmetic.
+EPISODE_RECORD_COLUMNS = (
+    ("schema_version", "INTEGER NOT NULL DEFAULT 1"),
+    ("cohort", "TEXT NOT NULL DEFAULT 'primary'"),
+    ("protocol_hash", "TEXT"),
+    ("scenario_manifest_hash", "TEXT"),
+    ("policy_variant", "TEXT"),
+    ("policy_identity_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("world_identity_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("judge_identity_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("seeds_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("feedback_mode", "TEXT NOT NULL DEFAULT 'unqualified'"),
+    ("parity_status", "TEXT NOT NULL DEFAULT 'unqualified'"),
+    ("executed_actions", "INTEGER NOT NULL DEFAULT 0"),
+    ("n_segments", "INTEGER NOT NULL DEFAULT 0"),
+    ("raw_judge_samples_ref", "TEXT"),
+    ("segments_manifest_ref", "TEXT"),
+    ("video_ref", "TEXT"),
+    ("timing_ref", "TEXT"),
+    ("platform_request_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("attempt_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("compute_gpu_seconds", "REAL"),
+    ("allocated_gpu_seconds", "REAL"),
+    ("estimated_usd", "REAL"),
+    ("cost_basis_ref", "TEXT"),
+    ("exclusion_reason", "TEXT"),
+)
+
+#: Identity fields supplied when a run is planned.  ``feedback_mode`` and
+#: ``parity_status`` default to ``unqualified`` precisely so that an unlabelled
+#: run can never be mistaken for a qualified one.
+_PLANNED_IDENTITY_FIELDS = (
+    ("schema_version", 1),
+    ("cohort", "primary"),
+    ("protocol_hash", None),
+    ("scenario_manifest_hash", None),
+    ("policy_variant", None),
+    ("feedback_mode", "unqualified"),
+    ("parity_status", "unqualified"),
+)
+
+#: Fields a terminal result may set.  Measurement/cost values stay ``None``
+#: unless the backend actually measured them.
+_RESULT_MEASUREMENT_FIELDS = (
+    "executed_actions",
+    "n_segments",
+    "raw_judge_samples_ref",
+    "segments_manifest_ref",
+    "video_ref",
+    "timing_ref",
+    "compute_gpu_seconds",
+    "allocated_gpu_seconds",
+    "estimated_usd",
+    "cost_basis_ref",
+    "exclusion_reason",
+)
+
 
 class LeaseActiveError(RuntimeError):
     """A safe recovery was requested while another owner still has a lease."""
@@ -80,6 +141,33 @@ class Ledger:
                   started_at TEXT,
                   completed_at TEXT,
                   updated_at TEXT NOT NULL,
+                  -- Spec section 8 record contract.  These are nullable because
+                  -- ``null`` means unknown, never zero, and a planned episode
+                  -- legitimately knows none of its measurements yet.
+                  schema_version INTEGER NOT NULL DEFAULT 1,
+                  cohort TEXT NOT NULL DEFAULT 'primary',
+                  protocol_hash TEXT,
+                  scenario_manifest_hash TEXT,
+                  policy_variant TEXT,
+                  policy_identity_json TEXT NOT NULL DEFAULT '{}',
+                  world_identity_json TEXT NOT NULL DEFAULT '{}',
+                  judge_identity_json TEXT NOT NULL DEFAULT '{}',
+                  seeds_json TEXT NOT NULL DEFAULT '{}',
+                  feedback_mode TEXT NOT NULL DEFAULT 'unqualified',
+                  parity_status TEXT NOT NULL DEFAULT 'unqualified',
+                  executed_actions INTEGER NOT NULL DEFAULT 0,
+                  n_segments INTEGER NOT NULL DEFAULT 0,
+                  raw_judge_samples_ref TEXT,
+                  segments_manifest_ref TEXT,
+                  video_ref TEXT,
+                  timing_ref TEXT,
+                  platform_request_ids_json TEXT NOT NULL DEFAULT '[]',
+                  attempt_ids_json TEXT NOT NULL DEFAULT '[]',
+                  compute_gpu_seconds REAL,
+                  allocated_gpu_seconds REAL,
+                  estimated_usd REAL,
+                  cost_basis_ref TEXT,
+                  exclusion_reason TEXT,
                   UNIQUE(run_id, logical_key)
                 );
                 CREATE INDEX IF NOT EXISTS idx_episodes_run_status
@@ -121,6 +209,12 @@ class Ledger:
             self._ensure_column(connection, "episodes", "attempt_token", "TEXT")
             self._ensure_column(connection, "episodes", "lease_expires_at", "TEXT")
             self._ensure_column(connection, "attempts", "attempt_token", "TEXT")
+            for column, definition in EPISODE_RECORD_COLUMNS:
+                self._ensure_column(connection, "episodes", column, definition)
+            # Created after the migration so an upgraded database has the column.
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_episodes_cohort ON episodes(run_id, cohort, task, policy)"
+            )
 
     @staticmethod
     def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -174,6 +268,7 @@ class Ledger:
             )
             episode_rows = []
             for episode in episodes:
+                identity = [episode.get(name, default) for name, default in _PLANNED_IDENTITY_FIELDS]
                 episode_rows.append(
                     (
                         episode["episode_id"],
@@ -189,13 +284,23 @@ class Ledger:
                         episode["horizon_actions"],
                         now,
                         now,
+                        *identity,
+                        canonical_json(dict(episode.get("policy_identity", {}))),
+                        canonical_json(dict(episode.get("world_identity", {}))),
+                        canonical_json(dict(episode.get("judge_identity", {}))),
+                        canonical_json(dict(episode.get("seeds", {}))),
                     )
                 )
+            identity_columns = ", ".join(name for name, _ in _PLANNED_IDENTITY_FIELDS)
+            identity_placeholders = ", ".join("?" for _ in _PLANNED_IDENTITY_FIELDS)
             connection.executemany(
                 """INSERT INTO episodes(
                     episode_id, run_id, logical_key, policy, task, start_id, start_lineage_id, world_seed,
-                    status, mode, horizon_actions, created_at, updated_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    status, mode, horizon_actions, created_at, updated_at,
+                    %s,
+                    policy_identity_json, world_identity_json, judge_identity_json, seeds_json
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, %s, ?, ?, ?, ?)"""
+                % (identity_columns, identity_placeholders),
                 episode_rows,
             )
             self._append_event(
@@ -258,6 +363,32 @@ class Ledger:
             rows = connection.execute("SELECT * FROM runs ORDER BY created_at DESC, id DESC").fetchall()
             return [self._run_from_row(row, self._stats(connection, row["id"])) for row in rows]
 
+    @staticmethod
+    def _json_column(row: sqlite3.Row, column: str, fallback: Any) -> Any:
+        """Decode a JSON column, degrading to *fallback* rather than raising.
+
+        An upgraded database can hold a row written before the column existed.
+        """
+
+        try:
+            raw = row[column]
+        except (IndexError, KeyError):
+            return fallback
+        if raw in (None, ""):
+            return fallback
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError):
+            return fallback
+
+    @staticmethod
+    def _column(row: sqlite3.Row, column: str, fallback: Any = None) -> Any:
+        try:
+            value = row[column]
+        except (IndexError, KeyError):
+            return fallback
+        return fallback if value is None else value
+
     def _episode_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
         binary = row["binary_success"]
         artifact_refs = json.loads(row["artifact_refs_json"])
@@ -265,7 +396,7 @@ class Ledger:
         frame_url = artifact_refs.get("frame_url") if isinstance(artifact_refs, dict) else None
         if frame_url is None and isinstance(frame_ref, dict):
             frame_url = frame_ref.get("url")
-        return {
+        record = {
             "run_id": row["run_id"],
             "episode_id": row["episode_id"],
             "logical_key": row["logical_key"],
@@ -299,6 +430,42 @@ class Ledger:
             "updated_at": row["updated_at"],
             "error": json.loads(row["error_json"]) if row["error_json"] else None,
         }
+        # Spec section 8 identity and measurement fields.  Nulls are preserved as
+        # nulls: an unmeasured GPU-second is unknown, not zero.
+        record.update(
+            {
+                "schema_version": int(self._column(row, "schema_version", 1)),
+                "cohort": self._column(row, "cohort", "primary"),
+                "protocol_hash": self._column(row, "protocol_hash"),
+                "scenario_manifest_hash": self._column(row, "scenario_manifest_hash"),
+                "policy_variant": self._column(row, "policy_variant"),
+                "policy_identity": self._json_column(row, "policy_identity_json", {}),
+                "world_identity": self._json_column(row, "world_identity_json", {}),
+                "judge_identity": self._json_column(row, "judge_identity_json", {}),
+                "seeds": self._json_column(row, "seeds_json", {}),
+                "feedback_mode": self._column(row, "feedback_mode", "unqualified"),
+                "parity_status": self._column(row, "parity_status", "unqualified"),
+                "executed_actions": int(self._column(row, "executed_actions", 0)),
+                "n_segments": int(self._column(row, "n_segments", 0)),
+                "raw_judge_samples_ref": self._column(row, "raw_judge_samples_ref"),
+                "segments_manifest_ref": self._column(row, "segments_manifest_ref"),
+                "video_ref": self._column(row, "video_ref"),
+                "timing_ref": self._column(row, "timing_ref"),
+                "platform_request_ids": self._json_column(row, "platform_request_ids_json", []),
+                "attempt_ids": self._json_column(row, "attempt_ids_json", []),
+                "compute_gpu_seconds": self._column(row, "compute_gpu_seconds"),
+                "allocated_gpu_seconds": self._column(row, "allocated_gpu_seconds"),
+                "estimated_usd": self._column(row, "estimated_usd"),
+                "cost_basis_ref": self._column(row, "cost_basis_ref"),
+                "exclusion_reason": self._column(row, "exclusion_reason"),
+            }
+        )
+        # ``video_ref`` is the durable spec-section-8 reference; ``video_url`` is
+        # the presentation convenience the console reads.  Prefer an explicit
+        # artifact URL and fall back to the durable reference.
+        if record.get("video_url") is None and record["video_ref"]:
+            record["video_url"] = record["video_ref"]
+        return record
 
     def list_episodes(self, run_id: str, limit: int = 1500) -> List[Dict[str, Any]]:
         with self._connect() as connection:
@@ -569,6 +736,46 @@ class Ledger:
             return None
         return row
 
+    @staticmethod
+    def _measurement_update(result: Mapping[str, Any]) -> tuple:
+        """Build the optional spec-section-8 tail of a terminal UPDATE.
+
+        Only keys the backend actually supplied are written, so an absent
+        measurement stays ``NULL`` (unknown) instead of being overwritten with a
+        zero.  ``platform_request_ids`` and ``attempt_ids`` are appended rather
+        than replaced by the caller, which is why they are JSON columns.
+        """
+
+        fragments: List[str] = []
+        values: List[Any] = []
+        for name in _RESULT_MEASUREMENT_FIELDS:
+            if name in result:
+                fragments.append(name + " = ?")
+                values.append(result[name])
+        for name, column in (
+            ("platform_request_ids", "platform_request_ids_json"),
+            ("attempt_ids", "attempt_ids_json"),
+        ):
+            if name in result:
+                fragments.append(column + " = ?")
+                values.append(canonical_json(list(result[name])))
+        for name, column in (
+            ("policy_identity", "policy_identity_json"),
+            ("world_identity", "world_identity_json"),
+            ("judge_identity", "judge_identity_json"),
+            ("seeds", "seeds_json"),
+        ):
+            if name in result:
+                fragments.append(column + " = ?")
+                values.append(canonical_json(dict(result[name])))
+        for name in ("feedback_mode", "parity_status"):
+            if name in result:
+                fragments.append(name + " = ?")
+                values.append(result[name])
+        if not fragments:
+            return "", ()
+        return ", " + ", ".join(fragments), tuple(values)
+
     def complete_episode(
         self,
         run_id: str,
@@ -585,11 +792,13 @@ class Ledger:
                 connection.commit()
                 return False
             now = utc_now()
+            extra_columns, extra_values = self._measurement_update(result)
             connection.execute(
                 """UPDATE episodes SET status = 'completed', validity = ?, binary_success = ?, progress_score = ?,
                    missing_reason = ?, horizon_actions = ?, artifact_refs_json = ?, timing_json = ?,
-                   completed_at = ?, lease_expires_at = NULL, updated_at = ?
-                   WHERE episode_id = ? AND status = 'running' AND attempt_token = ?""",
+                   completed_at = ?, lease_expires_at = NULL, updated_at = ?%s
+                   WHERE episode_id = ? AND status = 'running' AND attempt_token = ?"""
+                % extra_columns,
                 (
                     result["validity"],
                     None if result["binary_success"] is None else int(bool(result["binary_success"])),
@@ -600,11 +809,13 @@ class Ledger:
                     canonical_json(result["timing"]),
                     now,
                     now,
+                    *extra_values,
                     episode_id,
                     attempt_token,
                 ),
             )
             self._set_attempt_terminal(connection, run_id, episode_id, "completed", result=result)
+            mode = str(row["mode"] or "")
             self._append_event(
                 connection,
                 run_id,
@@ -612,8 +823,12 @@ class Ledger:
                 {
                     "episode_id": episode_id,
                     "evaluable": result["binary_success"] is not None,
-                    "synthetic": True,
-                    "unqualified": True,
+                    # Derived from the episode's own recorded mode rather than
+                    # asserted, so a real backend is never labelled synthetic
+                    # and a fixture is never labelled qualified.
+                    "mode": mode,
+                    "synthetic": "synthetic" in mode,
+                    "unqualified": "qualified" not in mode or "unqualified" in mode,
                 },
             )
             connection.commit()

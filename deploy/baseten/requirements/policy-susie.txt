@@ -1,0 +1,87 @@
+# PLUMB Baseten image requirements — SuSIE and SuSIE_LL (one shared JAX/Flax image)
+#
+# Consumed by: deploy/baseten/chain.py -> SusieWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY310
+# Adapters:    plumb.policies.native.SuSIEPolicy (subgoal + low-level) and
+#              plumb.policies.native.SuSIELowLevelPolicy (low-level only).
+#              One image serves both arms; the arm is selected per request by
+#              StageRequest.payload["policy"], never inferred.
+# Re-resolved against public PyPI and public git revisions on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# No SuSIE diagnostic was ever run on the ComputeCanada clusters: there is no
+# latency, no GPU peak memory, and no subgoal-cadence evidence for this stack.
+# The `+computecanada` wheel builds in HANDOFF.md do not exist on PyPI and are
+# irrelevant to a JAX/Flax image.  Memory, batch size, and throughput must be
+# measured on Baseten before any capacity or cost claim (AGENT-BUILD-SPEC.md §12;
+# §7 forbids an assumed universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+#
+# SAME NAMED CUDA DEVIATION AS THE OCTO IMAGE:
+# the SuSIE release era pairs with CUDA 11 jaxlib builds.  This image installs the
+# CUDA 12 jaxlib build of the same JAX version because there is no supported
+# CUDA 11 driver path on the modern Baseten instance types used by the rest of
+# the chain.  The JAX Python version is unchanged; the compiled binary is not the
+# one upstream validated.  Gate B must re-certify SuSIE under this deviation.
+
+-f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+jax[cuda12_pip]==0.4.20
+jaxlib==0.4.20+cuda12.cudnn89
+
+# Pinned JAX/Flax Stable Diffusion stack for the subgoal diffusion model.
+flax==0.7.5
+optax==0.1.7
+orbax-checkpoint==0.4.4
+chex==0.1.85
+distrax==0.1.5
+ml-collections==0.1.1
+einops==0.8.1
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# Flax Stable Diffusion pipeline + CLIP text encoder for the subgoal model.
+# `diffusers[flax]` and `transformers[flax]` are the documented Flax entry
+# points; the versions below are the last releases whose Flax SD pipeline
+# matches the SuSIE-era checkpoints.
+diffusers==0.25.1
+transformers==4.38.2
+tokenizers==0.15.2
+huggingface-hub==0.25.2
+safetensors==0.4.5
+
+# SuSIE (subgoal diffusion) is not on PyPI.  Immutable revision resolved from
+# https://api.github.com/repos/kvablack/susie/commits at 2026-09-19T08:45:06Z.
+susie @ git+https://github.com/kvablack/susie@8177f63332a3905202c122310a92c51b8ff14280
+
+# The low-level goal-conditioned policy for the *replication* arm comes from the
+# released AutoEval configuration, whose wrapper source is pinned in
+# AGENT-BUILD-SPEC.md §12.  It is installed from that immutable revision so the
+# replication arm cannot silently drift to upstream SuSIE's own low-level policy.
+# AGENT-BUILD-SPEC.md §1 requires that the AutoEval/upstream mismatch is
+# disclosed and that a corrected upstream configuration is a separately NAMED
+# sensitivity arm — not a quiet substitution inside this image.
+auto-eval @ git+https://github.com/zhouzypaul/auto_eval@3ea3ff44c6950433cfbcb4294a3deaa616533745
+
+# TensorFlow is CPU-only on purpose: the JAX process owns the GPU.
+tensorflow-cpu==2.15.0
+tensorflow-probability==0.23.0
+dlimp @ git+https://github.com/kvablack/dlimp@5edaa4691567873d495633f2708982b42edf1972
+
+# UNRESOLVED, deliberately absent:
+#   * No checkpoint download.  `kvablack/susie` (~3.438 GB subgoal model) and
+#     `patreya/gcbc-bridge` `checkpoint_75000` (historical size 258,718,956 B,
+#     advertised MIT) arrive through chains.Assets(cached=[...]).
+#   * SuSIE needs BOTH a subgoal component and a low-level component.  Installing
+#     one does not make the other available, and SuSIE_LL executes the low-level
+#     goal-conditioned policy directly rather than reusing SuSIE's cadence.
+#   * No loader is wired: SuSIEPolicy/SuSIELowLevelPolicy are ExternalPolicyHooks
+#     with no bundled wrapper, so SusieWorker returns status="blocked" for both
+#     arms until reviewed `loader_hook`s exist.  Goal-image inputs, subgoal
+#     cadence, and the low-level execution rule are "unresolved until
+#     fixture-tested" per AGENT-BUILD-SPEC.md §2 and remain so.

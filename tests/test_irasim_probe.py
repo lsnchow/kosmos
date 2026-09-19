@@ -39,3 +39,29 @@ def test_provenance_hash_accepts_bare_or_explicit_sha256():
     import pytest
     with pytest.raises(ValueError):
         normalized_sha("not-a-digest")
+
+
+def test_irasim_probe_covers_only_two_canonical_gate_b_arms():
+    """Pin which Gate-B control arms this separate IRASim diagnostic supplies.
+
+    The IRASim path is backend-specific and cannot clear Cosmos's Gate B. This
+    test records the arms it does *not* cover so a passing IRASim suite can
+    never be mistaken for full Gate-B control coverage; the Cosmos arms live in
+    ``plumb.adapters.probe_suite``.
+    """
+
+    from plumb.gates import REQUIRED_GATE_B_ARMS
+
+    cases = probe.build_cases((0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7), 0.005)
+    names = {case.name for case in cases}
+    covered = {arm for arm in REQUIRED_GATE_B_ARMS if arm in names}
+    assert covered == {"original"}
+    assert sorted(set(REQUIRED_GATE_B_ARMS) - covered) == [
+        "cross_episode",
+        "sign_reversed",
+        "temporally_permuted",
+        "zero",
+    ]
+    # It does supply the legitimate-stationary control required by spec 0.
+    assert "stationary" in names
+    assert "unqualified" in probe.LABEL

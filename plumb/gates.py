@@ -29,6 +29,30 @@ class GateStatus(str, Enum):
 
 GATE_IDS: Tuple[str, ...] = ("A", "B", "C", "D", "E", "F")
 
+GATE_DESCRIPTIONS: Dict[str, str] = {
+    "A": "Pinned model/backend conformance and measured GPU inference",
+    "B": "Action grounding, native feedback, and state conversion",
+    "C": "Matched real starting states for all five tasks",
+    "D": "Blinded judge calibration against independent labels",
+    "E": "Primary measurement and independent cost confirmation",
+    "F": "Three fresh full-scale latency/cost rehearsals",
+}
+
+#: Spec section 0 replaces the old single shuffled-action rule with five paired
+#: control arms plus legitimate-stationary and already-successful controls.
+REQUIRED_GATE_B_ARMS: Tuple[str, ...] = (
+    "original",
+    "zero",
+    "temporally_permuted",
+    "sign_reversed",
+    "cross_episode",
+)
+
+#: Spec section 7 fixes these as the operational definition of the public claim.
+BURST_EPISODE_TARGET = 1500
+BURST_SECONDS_TARGET = 60.0
+BURST_USD_TARGET = 11.25
+
 
 def _as_tuple(value: Any) -> Tuple[str, ...]:
     if value is None:
@@ -131,8 +155,113 @@ class GateRecord:
                 errors.append("Gate A needs measured wall_seconds (null is not a pass)")
             if self.measurements.get("gpu_peak_memory_bytes") is None:
                 errors.append("Gate A needs actual GPU peak memory")
-        if self.gate_id == "B" and not self.measurements.get("interventions"):
-            errors.append("Gate B needs paired original/zero/permuted/sign/cross intervention evidence")
+        if self.gate_id == "B":
+            interventions = self.measurements.get("interventions")
+            if not interventions:
+                errors.append("Gate B needs paired original/zero/permuted/sign/cross intervention evidence")
+            else:
+                present = {str(name) for name in interventions}
+                missing = [arm for arm in REQUIRED_GATE_B_ARMS if arm not in present]
+                if missing:
+                    errors.append(
+                        "Gate B is missing required control arms: %s" % ", ".join(sorted(missing))
+                    )
+            if self.measurements.get("suffix_causality") is None:
+                errors.append(
+                    "Gate B needs a suffix-causality result; it decides the feedback mode and cannot be skipped"
+                )
+            if not self.measurements.get("feedback_mode"):
+                errors.append("Gate B must record the feedback_mode it certifies")
+        if self.gate_id == "C":
+            per_task = self.measurements.get("starts_per_task")
+            if not isinstance(per_task, Mapping) or not per_task:
+                errors.append("Gate C needs a per-task start count")
+            else:
+                thin = sorted(task for task, count in per_task.items() if int(count or 0) < 50)
+                if thin:
+                    errors.append("Gate C needs 50 starts per task; short: %s" % ", ".join(thin))
+            comparability = self.measurements.get("comparability")
+            if not isinstance(comparability, Mapping) or not comparability:
+                errors.append("Gate C must record per-task comparability with its limitations")
+        if self.gate_id == "D":
+            for name in ("binary_kappa", "weighted_progress_kappa", "leniency_offset", "consensus_coverage"):
+                if self.measurements.get(name) is None:
+                    errors.append("Gate D needs a measured %s" % name)
+            if not self.measurements.get("calibration_class"):
+                errors.append("Gate D must record its calibration_class (human / external_label / model)")
+            if not self.measurements.get("held_out_frozen_before_evaluation"):
+                errors.append(
+                    "Gate D requires the judge to be frozen before the held-out split was evaluated"
+                )
+        if self.gate_id == "E":
+            # Spec section 0: Gate E is frozen analysis protocol + full matrix +
+            # exclusion sensitivity + held-out cost confirmation + a separately
+            # validated distilled judge.
+            if not self.measurements.get("analysis_protocol_frozen"):
+                errors.append("Gate E needs a frozen analysis protocol")
+            planned = self.measurements.get("planned_episodes")
+            terminal = self.measurements.get("terminal_episodes")
+            if planned is None or terminal is None:
+                errors.append("Gate E needs planned and terminal episode counts")
+            elif int(planned) <= 0 or int(terminal) != int(planned):
+                errors.append(
+                    "Gate E needs every planned episode accounted for (%s of %s terminal)"
+                    % (terminal, planned)
+                )
+            if self.measurements.get("exclusion_sensitivity") is None:
+                errors.append("Gate E needs exclusion sensitivity results")
+            confirmation = self.measurements.get("cost_setting_confirmation")
+            if not isinstance(confirmation, Mapping) or not confirmation.get("confirmed_on_disjoint_panel"):
+                errors.append(
+                    "Gate E needs the selected cost setting confirmed on a disjoint panel"
+                )
+            distilled = self.measurements.get("distilled_judge")
+            if isinstance(distilled, Mapping) and distilled.get("used_for_scoring"):
+                if not distilled.get("separately_validated"):
+                    errors.append(
+                        "Gate E requires a separately validated distilled judge before it scores anything"
+                    )
+        if self.gate_id == "F":
+            rehearsals = self.measurements.get("rehearsals")
+            if not isinstance(rehearsals, (list, tuple)) or len(rehearsals) < 3:
+                errors.append("Gate F needs three complete full-scale rehearsals, not best-of-three")
+            else:
+                for index, rehearsal in enumerate(rehearsals):
+                    if not isinstance(rehearsal, Mapping):
+                        errors.append("Gate F rehearsal %d is malformed" % index)
+                        continue
+                    label = str(rehearsal.get("run_id") or index)
+                    planned = int(rehearsal.get("planned_episodes") or 0)
+                    finished = int(rehearsal.get("generated_episodes") or 0)
+                    if planned != BURST_EPISODE_TARGET or finished != planned:
+                        errors.append(
+                            "Gate F rehearsal %s must complete all %d planned episodes (%d of %d)"
+                            % (label, BURST_EPISODE_TARGET, finished, planned)
+                        )
+                    if int(rehearsal.get("terminal_service_failures") or 0) > 0:
+                        errors.append(
+                            "Gate F rehearsal %s had terminal service failures" % label
+                        )
+                    seconds = rehearsal.get("elapsed_seconds")
+                    if seconds is None or float(seconds) > BURST_SECONDS_TARGET:
+                        errors.append(
+                            "Gate F rehearsal %s elapsed %s s against the %.0f s target"
+                            % (label, seconds, BURST_SECONDS_TARGET)
+                        )
+                    usd = rehearsal.get("total_demonstration_usd")
+                    if usd is None or float(usd) > BURST_USD_TARGET:
+                        errors.append(
+                            "Gate F rehearsal %s total demonstration cost %s against the $%.2f definition"
+                            % (label, usd, BURST_USD_TARGET)
+                        )
+                    if rehearsal.get("reused_cached_outputs"):
+                        errors.append(
+                            "Gate F rehearsal %s reused cached segments/videos/judge outputs" % label
+                        )
+            if not self.measurements.get("displayed_capacity"):
+                errors.append("Gate F must record the capacity and configuration it displayed")
+            if self.measurements.get("cost_basis") is None:
+                errors.append("Gate F needs the pricing basis used for its cost figures")
         return tuple(errors)
 
 

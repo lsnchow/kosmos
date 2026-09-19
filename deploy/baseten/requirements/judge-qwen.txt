@@ -1,0 +1,63 @@
+# PLUMB Baseten image requirements — Qwen2.5-VL rubric judge (Stage B)
+#
+# Consumed by: deploy/baseten/chain.py -> JudgeWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY311
+# Adapter:     plumb.policies.judge.QwenRubricJudge
+# Re-resolved against public PyPI on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# cluster-runtime-evidence.json records the judge diagnostic under
+# `transformers==5.17.0+computecanada` / `torch==2.6.0+computecanada` on a Queen's
+# A100.  Those Alliance local builds do not exist on PyPI.  This image pins the
+# public Transformers release that plumb/policies/judge.py's QwenJudgeProfile
+# declares by default (4.49.0, the first release with native Qwen2.5-VL support),
+# which is a DIFFERENT major line from the recorded 5.17.0 — a deliberate choice
+# to match the code's declared profile rather than the cluster's incidental
+# environment.  Either way, the recorded 29.291511048 s five-sample judge call
+# and 16,948,912,640 B GPU peak are NOT evidence about this image and must be
+# re-measured on Baseten (AGENT-BUILD-SPEC.md §12; §7 forbids an assumed
+# universal throughput preset).  Changing this pin changes the judge revision and
+# therefore requires a fresh Gate D; see DEPLOY.md.
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch==2.6.0
+torchvision==0.21.0
+
+# Qwen2.5-VL requires transformers>=4.49.0 for the native
+# Qwen2_5_VLForConditionalGeneration architecture.  QwenJudgeProfile sets
+# trust_remote_code=False and refuses to enable it, so a native architecture is
+# mandatory, not optional.
+transformers==4.49.0
+tokenizers==0.21.0
+huggingface-hub==0.29.3
+safetensors==0.5.3
+accelerate==1.4.0
+qwen-vl-utils==0.0.8
+av==14.2.0
+sentencepiece==0.2.0
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# UNRESOLVED, deliberately absent:
+#   * No `Qwen/Qwen2.5-VL-7B-Instruct` download line.  Weights arrive through
+#     chains.Assets(cached=[...]) at the immutable revision
+#     cc594898137f460bfe9f0759e9844b3ce807cfb5 and the profile is
+#     local_files_only=True.
+#   * No vLLM / SGLang / TensorRT-LLM serving engine.  A different serving stack
+#     is a different judge revision: sampling semantics, seeding, and token caps
+#     would all need re-freezing together, and Gate D would have to be rerun on a
+#     fresh held-out set.  The frozen protocol (5 samples, temperature 0.7,
+#     top_p 1.0, max_new_tokens 512, quorum 3, one bounded retry per sample) is
+#     enforced in Python by JudgeSamplingConfig.validate(), not by this file.
+#   * No V-JEPA.  `facebook/vjepa2-vitl-fpc64-256` is a separate frozen
+#     video-feature diagnostic (an encoder, not a rubric judge) and must not share
+#     this image or silently alter the deterministic Stage-A gate.
+#   * No judge calibration data.  Gate D needs 150 blinded clips
+#     (100 development / 50 held-out) with human labels; none exist.

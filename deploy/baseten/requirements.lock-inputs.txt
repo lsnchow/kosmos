@@ -1,11 +1,42 @@
-# Intentionally not an installable requirements lock.
+# SUPERSEDED — this file is now an index, not a requirements file.
 #
-# Fill this only after a compatibility profile has immutable, reviewed inputs:
-#   - exact package versions plus hashes (or an immutable uv.lock),
-#   - CUDA/container digest,
-#   - source and model revisions, asset hashes, and applicable notices,
-#   - policy/world/judge-specific separation where dependencies conflict.
+# The real, installable, per-stack lock inputs live in ./requirements/ because
+# AGENT-BUILD-SPEC.md §7 requires one image per incompatible dependency stack:
+# a single file cannot hold torch 2.2.0, torch 2.6.0, and JAX 0.4.20 at once.
 #
-# Do not add convenient floating versions or pretend that model packages are
-# pinned. chain.py intentionally does not reference this file until that review
-# is complete, and it does not trigger model downloads during image build.
+#   requirements/world-cosmos.txt        WorldWorker       BasetenImage.PY311
+#   requirements/policy-openvla.txt      OpenVLAWorker     BasetenImage.PY311
+#   requirements/policy-octo.txt         OctoWorker        BasetenImage.PY310
+#   requirements/policy-minivla.txt      MiniVLAWorker     BasetenImage.PY310
+#   requirements/policy-openpizero.txt   OpenPiZeroWorker  BasetenImage.PY310
+#   requirements/policy-susie.txt        SusieWorker       BasetenImage.PY310
+#   requirements/judge-qwen.txt          JudgeWorker       BasetenImage.PY311
+#   requirements/validity.txt            ValidityWorker    BasetenImage.PY311 (CPU)
+#   requirements/controller.txt          RolloutController BasetenImage.PY311 (CPU)
+#
+# Each is referenced by exactly one Chainlet through
+# DockerImage(pip_requirements_file=...) in chain.py, and each carries a header
+# stating that the ComputeCanada-recorded runtime evidence in
+# cluster-runtime-evidence.json does NOT transfer to it and must be re-measured
+# on Baseten.
+#
+# THE REVIEW GATE FROM THE ORIGINAL VERSION OF THIS FILE STILL APPLIES.
+# Those files are reviewed *inputs*: exact version pins re-resolved to public
+# PyPI wheels and immutable git revisions. They are NOT yet locks, because they
+# still lack:
+#   - package hashes (no `pip install --require-hashes` is satisfied),
+#   - a built container digest,
+#   - a resolved transitive dependency set,
+#   - an assets.lock.json binding weights, licences, and notices.
+# DEPLOY.md step 9 captures the in-container `pip freeze` and the image digests
+# that turn each input into a lock, and records them in model-contracts.json.
+#
+# Digest check (run from deploy/baseten and compare against
+# model-contracts.json -> chain_topology.requirements_lock_digests):
+#
+#   for f in requirements/*.txt; do \
+#     printf '%s  sha256:%s\n' "$f" "$(shasum -a 256 "$f" | awk '{print $1}')"; done
+#
+# No file under requirements/ triggers a model download during an image build.
+# Weights arrive at container start through chains.Assets(cached=[...]) at an
+# immutable revision, and every adapter is local_files_only=True.

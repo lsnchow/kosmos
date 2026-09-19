@@ -1,4 +1,12 @@
-"""Local, durable execution control plane for explicitly synthetic PLUMB runs."""
+"""Durable execution control plane for PLUMB runs.
+
+Two backends are registered (``plumb.records.BACKENDS``): a synthetic
+engineering fixture and real-model execution on a deployed Baseten Chain.  A
+gated backend is refused here unless the caller can show passing gate evidence,
+because this is the only layer that sees both the run request and the gate
+ledger.  Passing that check still does not make a cell *qualified* -- that
+remains ``plumb.gates.QualificationValidator``'s decision.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +19,11 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
+from .gates import GateLedger, GateStatus
 from .ledger import LeaseActiveError, Ledger
 from .records import (
+    BACKENDS,
+    RUN_MODES,
     ConfigurationError,
     decode_backend_output,
     deterministic_seed,
@@ -33,13 +44,21 @@ BackendCallable = Callable[..., Any]
 class RunService:
     """Owns local run creation, bounded execution, cancellation, and read models.
 
-    The default backend is deliberately synthetic and records an unqualified
-    label in every run, event, episode, and artifact.  ``backend`` is an
-    adapter hook for future offline/process workers; accepting it does not make
-    a run qualified or enable any external service.
+    The default backend is synthetic and records an unqualified label in every
+    run, event, episode, and artifact.  A registered gated backend may be
+    supplied instead; ``create_run`` then requires passing evidence for the
+    gates that backend declares before it will commit the run.  Accepting a
+    backend never makes a run qualified.
     """
 
-    def __init__(self, data_dir: Path, backend: Optional[Any] = None, lease_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        backend: Optional[Any] = None,
+        lease_seconds: float = 30.0,
+        backends: Optional[Mapping[str, Any]] = None,
+        gates_path: Optional[Path] = None,
+    ) -> None:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
         self.data_dir = Path(data_dir)
@@ -48,15 +67,82 @@ class RunService:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.ledger = Ledger(self.data_dir / "plumb.sqlite3")
         self.backend = backend
+        # Named backend registry.  ``backend`` remains the single-backend hook
+        # the tests use; ``backends`` lets the API register "baseten" alongside
+        # the fixture without either shadowing the other.
+        self.backends: Dict[str, Any] = dict(backends or {})
+        self.gates_path = Path(gates_path) if gates_path is not None else self.data_dir / "gates.json"
         self.lease_seconds = float(lease_seconds)
+
+    def gate_ledger(self) -> GateLedger:
+        """Load the on-disk gate ledger; a missing file yields all-``not_run``."""
+
+        return GateLedger.load(str(self.gates_path))
+
+    def backend_blocking_reasons(self, backend_name: str) -> List[str]:
+        """Why *backend_name* may not execute yet.  Empty means it may.
+
+        A gated backend needs, for each gate it declares: a ``pass`` status, no
+        outstanding ``pass_evidence_errors``, and a registered adapter object.
+        """
+
+        registered = BACKENDS.get(backend_name)
+        if registered is None:
+            return ["backend '%s' is not registered" % backend_name]
+        reasons: List[str] = []
+        if not registered["requires_gates"]:
+            return reasons
+        if backend_name not in self.backends and self.backend is None:
+            reasons.append("no adapter is registered for backend '%s'" % backend_name)
+        ledger = self.gate_ledger()
+        for gate_id in registered.get("required_gates", ()):
+            record = ledger.records.get(gate_id)
+            if record is None or record.status is not GateStatus.PASS:
+                status = "not_run" if record is None else record.status.value
+                reasons.append("gate %s is %s" % (gate_id, status))
+                continue
+            for error in record.pass_evidence_errors():
+                reasons.append("gate %s: %s" % (gate_id, error))
+        return reasons
+
+    def _resolve_backend(self, config: Mapping[str, Any]) -> Any:
+        name = str(config.get("backend", "synthetic"))
+        if name in self.backends:
+            return self.backends[name]
+        if name == "synthetic":
+            return self.backend or SyntheticBackend()
+        # A gated backend with no registered adapter is refused at create time,
+        # so reaching here means the single-backend hook is the intended target.
+        return self.backend or SyntheticBackend()
 
     def _make_episodes(self, run_id: str, config: Mapping[str, Any]) -> List[Dict[str, Any]]:
         episodes: List[Dict[str, Any]] = []
+        episode_mode = str(config.get("episode_mode") or RUN_MODES["synthetic"])
+        cohort = str(config.get("cohort") or "primary")
+        protocol_hash = config.get("protocol_hash")
+        scenario_hash = config.get("scenario_manifest_hash")
+        identity = config.get("identity") or {}
+        policy_identity = dict(identity.get("policy") or {})
+        world_identity = dict(identity.get("world_model") or {})
+        judge_identity = dict(identity.get("judge") or {})
+        variants = config.get("policy_variants") or {}
+        starts = config.get("starts") or {}
         for policy in config["policies"]:
             for task in config["tasks"]:
+                task_starts = starts.get(task) or []
                 for index in range(int(config["starts_per_task"])):
-                    start_id = start_id_for(index)
+                    # A supplied ScenarioManifest wins; otherwise the fixture's
+                    # deterministic synthetic lineage is used and is labelled as
+                    # such so it can never be mistaken for a real start.
+                    if index < len(task_starts):
+                        start = task_starts[index]
+                        start_id = str(start["start_id"])
+                        lineage = str(start["start_lineage_id"])
+                    else:
+                        start_id = start_id_for(index)
+                        lineage = start_lineage_for(task, index)
                     logical_key = "%s\x1f%s\x1f%s" % (policy, task, start_id)
+                    world_seed = deterministic_seed(int(config["seed"]), policy, task, start_id)
                     episodes.append(
                         {
                             "episode_id": "episode-" + uuid.uuid4().hex,
@@ -64,16 +150,42 @@ class RunService:
                             "policy": policy,
                             "task": task,
                             "start_id": start_id,
-                            "start_lineage_id": start_lineage_for(task, index),
-                            "world_seed": deterministic_seed(int(config["seed"]), policy, task, start_id),
-                            "mode": "synthetic/unqualified",
+                            "start_lineage_id": lineage,
+                            "world_seed": world_seed,
+                            "mode": episode_mode,
                             "horizon_actions": horizon_for(task),
+                            "schema_version": 1,
+                            "cohort": cohort,
+                            "protocol_hash": protocol_hash,
+                            "scenario_manifest_hash": scenario_hash,
+                            "policy_variant": variants.get(policy, policy),
+                            "policy_identity": {**policy_identity, "name": policy},
+                            "world_identity": dict(world_identity),
+                            "judge_identity": dict(judge_identity),
+                            "seeds": {
+                                "root": int(config["seed"]),
+                                "world": world_seed,
+                                "policy": deterministic_seed(int(config["seed"]), policy, task, start_id + ":policy"),
+                                "judge_samples": [
+                                    deterministic_seed(
+                                        int(config["seed"]), policy, task, "%s:judge:%d" % (start_id, sample)
+                                    )
+                                    for sample in range(int(config.get("judge_sample_count", 5)))
+                                ],
+                            },
+                            "feedback_mode": str(config.get("feedback_mode") or "unqualified"),
+                            "parity_status": str(config.get("parity_status") or "unqualified"),
                         }
                     )
         return episodes
 
     def create_run(self, config: Dict[str, Any]) -> Dict[str, Any]:
         normalised = normalise_config(config)
+        blocking = self.backend_blocking_reasons(str(normalised["backend"]))
+        if blocking:
+            raise ConfigurationError(
+                "backend '%s' cannot execute yet: %s" % (normalised["backend"], "; ".join(blocking))
+            )
         run_id = "run-" + uuid.uuid4().hex
         return self.ledger.create_run(run_id, normalised, self._make_episodes(run_id, normalised))
 
@@ -186,7 +298,7 @@ class RunService:
         return self._artifact_ref(path, "application/json")
 
     def _invoke_backend(self, episode: Mapping[str, Any], config: Mapping[str, Any], artifact_dir: Path) -> Dict[str, Any]:
-        backend = self.backend or SyntheticBackend()
+        backend = self._resolve_backend(config)
         if hasattr(backend, "execute"):
             output = backend.execute(episode, config, artifact_dir)
         elif callable(backend):

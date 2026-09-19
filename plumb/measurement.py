@@ -8,6 +8,7 @@ for the specified clustered bootstrap or simultaneous endpoint envelopes.
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import Counter, defaultdict
 from itertools import combinations, permutations
 import hashlib
@@ -27,6 +28,7 @@ from .reference import (
     reference_rate,
     reference_successes,
 )
+from .sweeps import build_cost_fidelity_report, build_drift_report
 
 
 TERMINAL_STATUSES = frozenset(("completed", "failed", "cancelled"))
@@ -2185,7 +2187,328 @@ def paired_mdd_power_curve(
     }
 
 
-def _advanced_inference_status(advanced: Mapping[str, Any], reliability: Mapping[str, Any]) -> Dict[str, Any]:
+def _binomial_cdf_table(n: int, p: float) -> Tuple[float, ...]:
+    """Exact binomial CDF, used for a version-stable deterministic inverse draw."""
+
+    if n <= 0:
+        raise ValueError("binomial n must be positive")
+    if not 0.0 <= p <= 1.0:
+        raise ValueError("binomial p must be a probability")
+    cumulative = 0.0
+    table: List[float] = []
+    for k in range(n + 1):
+        cumulative += math.comb(n, k) * (p ** k) * ((1.0 - p) ** (n - k))
+        table.append(min(1.0, cumulative))
+    # Guard the top of the table so a uniform draw of 1-epsilon cannot fall off
+    # the end through accumulated floating-point error.
+    table[-1] = 1.0
+    return tuple(table)
+
+
+def _binomial_inverse_cdf(table: Sequence[float], uniform: float) -> int:
+    """Return the smallest k with ``P(X<=k) >= uniform``."""
+
+    index = bisect_left(table, uniform)
+    return min(index, len(table) - 1)
+
+
+def _reference_numerators(
+    cells: Mapping[Tuple[str, str], Mapping[str, Any]], policies: Sequence[str], tasks: Sequence[str]
+) -> Tuple[Optional[Dict[Tuple[str, str], int]], Optional[str]]:
+    numerators: Dict[Tuple[str, str], int] = {}
+    for policy in policies:
+        for task in tasks:
+            cell = cells.get((policy, task))
+            if cell is None:
+                return None, "A required cell is absent from the analysis matrix."
+            successes = cell.get("reference_successes")
+            if successes is None:
+                return None, "At least one cell has no published reference numerator."
+            if cell.get("reference_n") != REFERENCE_TRIALS_PER_CELL:
+                return None, "The reference denominator is not the published 50 trials per cell."
+            numerators[(policy, task)] = int(successes)
+    return numerators, None
+
+
+def reference_uncertainty_parametric_bootstrap(
+    cells: Mapping[Tuple[str, str], Mapping[str, Any]],
+    policies: Sequence[str],
+    tasks: Sequence[str],
+    replicates: int = 10000,
+    seed: int = 20260918,
+    confidence: float = 0.95,
+) -> Dict[str, Any]:
+    """Propagate the published reference's finite ``n=50`` per cell separately.
+
+    The model is disclosed rather than implied: each published cell is resampled
+    from an independent ``Binomial(50, p_hat)`` with the published cell rate as
+    the plug-in probability.  Trial-level pairing and any within-policy or
+    within-session correlation in the original study are unavailable, so they are
+    explicitly not modelled, and no generated episode is ever paired with a human
+    trial whose identity is unknown.  PLUMB's own rates are held fixed here: this
+    isolates reference uncertainty from PLUMB sampling uncertainty, which the
+    lineage bootstrap covers.
+    """
+
+    if replicates <= 0:
+        raise ValueError("replicates must be positive")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be strictly between zero and one")
+    selected_policies = list(dict.fromkeys(_normalise_policy(policy) for policy in policies))
+    selected_tasks = list(dict.fromkeys(_normalise_task(task) for task in tasks))
+    disclosure = {
+        "model": "independent binomial parametric bootstrap of each published reference cell",
+        "draw": "S*_cell ~ Binomial(n=50, p_hat_cell)",
+        "plug_in_parameter": "p_hat_cell = published successes / 50",
+        "reference_n_per_cell": REFERENCE_TRIALS_PER_CELL,
+        "sampler": "exact inverse binomial CDF from one uniform draw per cell per replicate",
+        "independence_assumption": "cells are resampled independently",
+        "not_modelled": [
+            "trial-level pairing between generated episodes and human trials",
+            "within-policy, within-task or within-session correlation in the original study",
+            "annotator or operator effects in the published study",
+        ],
+        "paired_with_human_trials": False,
+        "pairing_note": (
+            "Human trial identities are unavailable, so generated episodes are never paired with human trials; "
+            "only the published cell aggregates are resampled."
+        ),
+        "plumb_rates": "held fixed; PLUMB sampling uncertainty is the separate lineage bootstrap",
+    }
+    if not selected_policies or not selected_tasks:
+        return {
+            "status": "unavailable",
+            "reason": "At least one policy and task are required.",
+            "model_disclosure": disclosure,
+        }
+    numerators, reason = _reference_numerators(cells, selected_policies, selected_tasks)
+    if numerators is None:
+        return {"status": "unavailable", "reason": reason, "model_disclosure": disclosure}
+    observed: Dict[str, Optional[float]] = {}
+    for policy in selected_policies:
+        values = [cells[(policy, task)].get("positive_rate") for task in selected_tasks]
+        observed[policy] = _safe_mean(values) if all(value is not None for value in values) else None
+    if any(value is None for value in observed.values()):
+        return {
+            "status": "unavailable",
+            "reason": "At least one policy has no complete observed-positive macro rate.",
+            "model_disclosure": disclosure,
+        }
+    published_rate = {cell: value / float(REFERENCE_TRIALS_PER_CELL) for cell, value in numerators.items()}
+    tables: Dict[int, Tuple[float, ...]] = {}
+    for successes in set(numerators.values()):
+        tables[successes] = _binomial_cdf_table(REFERENCE_TRIALS_PER_CELL, successes / float(REFERENCE_TRIALS_PER_CELL))
+    degenerate = sorted(
+        "%s/%s" % cell for cell, rate in published_rate.items() if rate in (0.0, 1.0)
+    )
+    mmrv_available = len(selected_policies) >= 2 and all(policy in HUMAN for policy in selected_policies)
+
+    def macro_reference(rates: Mapping[Tuple[str, str], float]) -> Dict[str, float]:
+        return {
+            policy: sum(rates[(policy, task)] for task in selected_tasks) / float(len(selected_tasks))
+            for policy in selected_policies
+        }
+
+    def statistics(rates: Mapping[Tuple[str, str], float]) -> Dict[str, Any]:
+        macro = macro_reference(rates)
+        result: Dict[str, Any] = {
+            "macro_reference_rate": macro,
+            "macro_observed_positive_minus_reference": {
+                policy: float(observed[policy]) - macro[policy] for policy in selected_policies
+            },
+        }
+        if mmrv_available:
+            sim_macro = [float(observed[policy]) for policy in selected_policies]
+            real_macro = [macro[policy] for policy in selected_policies]
+            per_task = {
+                task: mean_maximum_rank_violation(
+                    [float(cells[(policy, task)]["positive_rate"]) for policy in selected_policies],
+                    [rates[(policy, task)] for policy in selected_policies],
+                )
+                for task in selected_tasks
+            }
+            result["mmrv_macro"] = mean_maximum_rank_violation(sim_macro, real_macro)
+            result["mmrv_per_task"] = per_task
+            result["mmrv_task_summary_mean"] = _safe_mean(list(per_task.values()))
+        return result
+
+    conditional = statistics(published_rate)
+    samples: Dict[str, List[float]] = defaultdict(list)
+    rng = random.Random(_stable_seed(seed, "reference_binomial_parametric_bootstrap"))
+    for _ in range(replicates):
+        resampled = {
+            cell: _binomial_inverse_cdf(tables[numerators[cell]], rng.random()) / float(REFERENCE_TRIALS_PER_CELL)
+            for cell in numerators
+        }
+        replicate = statistics(resampled)
+        for policy in selected_policies:
+            samples["macro_reference_rate/" + policy].append(replicate["macro_reference_rate"][policy])
+            samples["macro_observed_positive_minus_reference/" + policy].append(
+                replicate["macro_observed_positive_minus_reference"][policy]
+            )
+        if mmrv_available:
+            samples["mmrv_macro"].append(replicate["mmrv_macro"])
+            samples["mmrv_task_summary_mean"].append(replicate["mmrv_task_summary_mean"])
+            for task in selected_tasks:
+                samples["mmrv_per_task/" + task].append(replicate["mmrv_per_task"][task])
+    sensitivity = {
+        key: {
+            "interval": _percentile_interval(values, confidence),
+            "mean": _safe_mean(values),
+            "minimum": min(values),
+            "maximum": max(values),
+            "replicates": len(values),
+        }
+        for key, values in sorted(samples.items())
+    }
+    return {
+        "status": "computed",
+        "method": "disclosed_binomial_model_parametric_bootstrap_of_published_reference",
+        "model_disclosure": disclosure,
+        "replicates": replicates,
+        "seed": seed,
+        "confidence": confidence,
+        "policies": selected_policies,
+        "tasks": selected_tasks,
+        "reference_n_per_cell": REFERENCE_TRIALS_PER_CELL,
+        "reference_cells": len(numerators),
+        "conditional_on_reference": conditional,
+        "reference_uncertainty_sensitivity": sensitivity,
+        "degenerate_plug_in_cells": degenerate,
+        "degenerate_plug_in_note": (
+            "A plug-in p_hat of exactly 0 or 1 resamples degenerately, so the interval understates reference "
+            "uncertainty in those cells."
+        ),
+        "mmrv_status": "computed" if mmrv_available else "unavailable",
+        "mmrv_reason": None if mmrv_available else "MMRV needs at least two policies present in the published table.",
+        "note": (
+            "Conditional-on-reference and reference-uncertainty results are reported distinctly; the second is a "
+            "sensitivity analysis of the published table's finite n, not a new measurement of PLUMB."
+        ),
+    }
+
+
+def _strict_relation(left: Optional[float], right: Optional[float]) -> Optional[int]:
+    if left is None or right is None:
+        return None
+    if left == right:
+        return 0
+    return 1 if left > right else -1
+
+
+def leave_one_task_out_macro(
+    cells: Mapping[Tuple[str, str], Mapping[str, Any]], policies: Sequence[str], tasks: Sequence[str]
+) -> Dict[str, Any]:
+    """Equal-weight macro rates with leave-one-task-out sensitivity, reported separately.
+
+    This is the analogue for PLUMB's own measured rates of the published table's
+    leave-one-task-out check.  The five benchmark tasks are not a random sample of
+    robotics tasks, so a macro rate that moves when one task is dropped is a
+    stated sensitivity, not a population estimate.
+    """
+
+    selected_policies = list(dict.fromkeys(_normalise_policy(policy) for policy in policies))
+    selected_tasks = list(dict.fromkeys(_normalise_task(task) for task in tasks))
+    if len(selected_tasks) < 2:
+        return {
+            "status": "unavailable",
+            "reason": "Leave-one-task-out sensitivity needs at least two tasks.",
+        }
+    missing = ["%s/%s" % (policy, task) for policy in selected_policies for task in selected_tasks if (policy, task) not in cells]
+    if missing:
+        return {"status": "unavailable", "reason": "A required cell is absent.", "missing_cells": missing}
+
+    def macro(subset: Sequence[str]) -> Dict[str, Any]:
+        observed: Dict[str, Optional[float]] = {}
+        conditional: Dict[str, Optional[float]] = {}
+        denominators: Dict[str, int] = {}
+        evaluable: Dict[str, int] = {}
+        for policy in selected_policies:
+            positive = [cells[(policy, task)].get("positive_rate") for task in subset]
+            rates = [cells[(policy, task)].get("rate") for task in subset]
+            observed[policy] = _safe_mean(positive) if all(value is not None for value in positive) else None
+            conditional[policy] = _safe_mean(rates) if all(value is not None for value in rates) else None
+            denominators[policy] = sum(int(cells[(policy, task)]["n"]) for task in subset)
+            evaluable[policy] = sum(int(cells[(policy, task)]["valid"]) for task in subset)
+        order = sorted(
+            selected_policies,
+            key=lambda policy: (observed[policy] is None, -(observed[policy] or 0.0), policy),
+        )
+        return {
+            "task_count": len(subset),
+            "tasks": list(subset),
+            "macro_observed_positive_rate": observed,
+            "macro_conditional_rate": conditional,
+            "n": denominators,
+            "evaluable": evaluable,
+            "visual_order": order,
+        }
+
+    full = macro(selected_tasks)
+    rows: List[Dict[str, Any]] = []
+    largest_shift: Optional[float] = None
+    for dropped in selected_tasks:
+        subset = [task for task in selected_tasks if task != dropped]
+        row = macro(subset)
+        changes: List[Dict[str, Any]] = []
+        for policy_a, policy_b in combinations(selected_policies, 2):
+            full_relation = _strict_relation(
+                full["macro_observed_positive_rate"][policy_a], full["macro_observed_positive_rate"][policy_b]
+            )
+            row_relation = _strict_relation(
+                row["macro_observed_positive_rate"][policy_a], row["macro_observed_positive_rate"][policy_b]
+            )
+            if full_relation is None or row_relation is None or full_relation == row_relation:
+                continue
+            changes.append(
+                {
+                    "policy_a": policy_a,
+                    "policy_b": policy_b,
+                    "full_relation": full_relation,
+                    "leave_one_out_relation": row_relation,
+                }
+            )
+        shifts = [
+            abs(row["macro_observed_positive_rate"][policy] - full["macro_observed_positive_rate"][policy])
+            for policy in selected_policies
+            if row["macro_observed_positive_rate"][policy] is not None
+            and full["macro_observed_positive_rate"][policy] is not None
+        ]
+        maximum_shift = max(shifts) if shifts else None
+        if maximum_shift is not None:
+            largest_shift = maximum_shift if largest_shift is None else max(largest_shift, maximum_shift)
+        rows.append(
+            {
+                "dropped_task": dropped,
+                **row,
+                "maximum_absolute_macro_shift": maximum_shift,
+                "pairwise_order_changes": changes,
+                "pairwise_order_change_count": len(changes),
+                "visual_order_changed": row["visual_order"] != full["visual_order"],
+            }
+        )
+    return {
+        "status": "computed",
+        "method": "equal_weight_task_macro_leave_one_task_out",
+        "endpoint": "observed_positive_lower_bound",
+        "policies": selected_policies,
+        "tasks": selected_tasks,
+        "full": full,
+        "leave_one_out": rows,
+        "maximum_absolute_macro_shift": largest_shift,
+        "total_pairwise_order_changes": sum(row["pairwise_order_change_count"] for row in rows),
+        "note": (
+            "Macro rates are equal-weight task means. Leave-one-task-out is reported separately as a sensitivity; "
+            "the five benchmark tasks are not a random sample of robotics tasks."
+        ),
+    }
+
+
+def _advanced_inference_status(
+    advanced: Mapping[str, Any],
+    reliability: Mapping[str, Any],
+    reference_uncertainty: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
     bootstrap = advanced.get("bootstrap", {}) if isinstance(advanced.get("bootstrap"), Mapping) else {}
     endpoint = advanced.get("endpoint_envelopes", {}) if isinstance(advanced.get("endpoint_envelopes"), Mapping) else {}
     outer = reliability.get("outer_bootstrap", {}) if isinstance(reliability.get("outer_bootstrap"), Mapping) else {}
@@ -2216,8 +2539,15 @@ def _advanced_inference_status(advanced: Mapping[str, Any], reliability: Mapping
             },
             {
                 "name": "reference_uncertainty_parametric_bootstrap",
-                "status": "unavailable",
-                "reason": "Reference trial identities and correlations are unavailable; no generated/human pairing is fabricated.",
+                "status": (reference_uncertainty or {}).get("status", "not_computed"),
+                "reason": (reference_uncertainty or {}).get(
+                    "reason",
+                    "Set protocol.reference_uncertainty.enabled=true to propagate the published reference's finite n=50.",
+                ),
+                "model": ((reference_uncertainty or {}).get("model_disclosure") or {}).get("model"),
+                "trial_level_pairing": (
+                    "unavailable; reference trial identities are unknown and no generated/human pairing is fabricated"
+                ),
             },
             {
                 "name": "outer_lineage_bootstrap_for_split_half",
@@ -2226,6 +2556,34 @@ def _advanced_inference_status(advanced: Mapping[str, Any], reliability: Mapping
             },
         ],
     }
+
+
+def _sweep_artifact_result(protocol: Mapping[str, Any], key: str, builder: Any) -> Dict[str, Any]:
+    """Gate a sweep measurement on supplied artifacts, never on an inference.
+
+    A cost-fidelity or drift result exists only when the protocol carries the
+    real sweep artifacts.  An enabled flag without artifacts is an explicit
+    unavailable state, not an empty sweep presented as a completed measurement.
+    """
+
+    config = protocol.get(key)
+    if not isinstance(config, Mapping):
+        return {
+            "status": "not_computed",
+            "reason": (
+                "Set protocol.%s to the sweep artifacts (tolerances, operating points and per-cell outcome "
+                "vectors); no sweep is inferred from a ledger." % key
+            ),
+        }
+    if config.get("enabled") is False:
+        return {"status": "not_computed", "reason": "protocol.%s.enabled is false." % key}
+    artifacts = config.get("artifacts", config)
+    if not isinstance(artifacts, Mapping) or not artifacts.get("points"):
+        return {
+            "status": "unavailable",
+            "reason": "protocol.%s supplies no swept operating points; an empty sweep is not a measurement." % key,
+        }
+    return builder(artifacts)
 
 
 def _opted_in(protocol: Mapping[str, Any], key: str) -> bool:
@@ -2333,6 +2691,10 @@ def analyze(episodes: List[Dict[str, Any]], protocol: Optional[Dict[str, Any]] =
             "reliability": blocked_reliability,
             "mmrv": {"status": "not_computed", "reason": block_reason},
             "mdd": {"status": "not_computed", "reason": block_reason},
+            "drift": {"status": "not_computed", "reason": block_reason},
+            "cost_fidelity": {"status": "not_computed", "reason": block_reason},
+            "leave_one_task_out": {"status": "not_computed", "reason": block_reason},
+            "reference_uncertainty": {"status": "not_computed", "reason": block_reason},
             "unimplemented_advanced_inference": _advanced_inference_status(blocked_advanced, blocked_reliability),
         }
         _assert_json_finite(result)
@@ -2460,6 +2822,45 @@ def analyze(episodes: List[Dict[str, Any]], protocol: Optional[Dict[str, Any]] =
             "status": "not_computed",
             "reason": "MDD power simulation is opt-in and intentionally not run on every analysis poll.",
         }
+    # The published reference's finite n=50 is propagated only on request: it is
+    # a separate sensitivity analysis, not part of a dashboard poll, and it never
+    # pairs a generated episode with an unknown human trial.
+    reference_config = raw_protocol.get("reference_uncertainty")
+    if has_disaggregated_arms:
+        reference_uncertainty: Dict[str, Any] = {
+            "status": "not_computed",
+            "reason": "Reference uncertainty is withheld for disaggregated diagnostic arms.",
+        }
+    elif _opted_in(raw_protocol, "reference_uncertainty"):
+        options = reference_config if isinstance(reference_config, Mapping) else {}
+        reference_uncertainty = reference_uncertainty_parametric_bootstrap(
+            indexed,
+            policies,
+            tasks,
+            replicates=int(options.get("replicates", 10000)),
+            seed=int(options.get("seed", 20260918)),
+            confidence=float(options.get("confidence", 0.95)),
+        )
+    else:
+        reference_uncertainty = {
+            "status": "not_computed",
+            "reason": (
+                "Set protocol.reference_uncertainty.enabled=true to run the disclosed binomial-model parametric "
+                "bootstrap of the published reference's finite n=50 per cell."
+            ),
+        }
+    leave_one_out = (
+        {
+            "status": "unavailable",
+            "reason": "Leave-one-task-out sensitivity is not pooled across separately labelled diagnostic arms.",
+        }
+        if has_disaggregated_arms
+        else leave_one_task_out_macro(indexed, policies, tasks)
+    )
+    # Sweep artifacts are supplied, never inferred: without them these stay
+    # not_computed, exactly like reliability, MDD and MMRV.
+    cost_fidelity = _sweep_artifact_result(raw_protocol, "cost_fidelity", build_cost_fidelity_report)
+    drift = _sweep_artifact_result(raw_protocol, "drift", build_drift_report)
     result = {
         "schema_version": 1,
         "endpoint": {
@@ -2478,7 +2879,13 @@ def analyze(episodes: List[Dict[str, Any]], protocol: Optional[Dict[str, Any]] =
         "reliability": reliability,
         "mmrv": mmrv_result,
         "mdd": mdd_result,
-        "unimplemented_advanced_inference": _advanced_inference_status(advanced_inference, reliability),
+        "drift": drift,
+        "cost_fidelity": cost_fidelity,
+        "leave_one_task_out": leave_one_out,
+        "reference_uncertainty": reference_uncertainty,
+        "unimplemented_advanced_inference": _advanced_inference_status(
+            advanced_inference, reliability, reference_uncertainty
+        ),
     }
     # Fail locally if a future change introduces a NaN/inf that JSON would
     # serialize non-portably.  The returned object otherwise contains only
@@ -2513,5 +2920,7 @@ __all__ = [
     "bonferroni_endpoint_envelopes",
     "paired_macro_sign_test",
     "paired_mdd_power_curve",
+    "reference_uncertainty_parametric_bootstrap",
+    "leave_one_task_out_macro",
     "reference_payload",
 ]

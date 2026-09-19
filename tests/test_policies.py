@@ -540,3 +540,77 @@ def test_other_policy_contracts_are_explicitly_blocked_and_do_not_make_up_action
     assert policy.capability().status is CapabilityStatus.BLOCKED
     with pytest.raises(RuntimeError, match="intentionally unimplemented"):
         policy.predict(PolicyObservation(image_history=(object(), object()), prompt="Open the drawer"))
+
+
+def test_all_six_external_policy_hooks_stay_blocked_and_never_invent_an_action():
+    from plumb.policies.native import (
+        MiniVLAPolicy,
+        OctoBaseV1Policy,
+        OpenPiZeroPolicy,
+        SuSIELowLevelPolicy,
+        SuSIEPolicy,
+    )
+
+    hooks = (
+        (OctoSmallV1Policy, 2),
+        (OctoBaseV1Policy, 2),
+        (MiniVLAPolicy, 1),
+        (OpenPiZeroPolicy, 1),
+        (SuSIEPolicy, 1),
+        (SuSIELowLevelPolicy, 1),
+    )
+    for factory, history in hooks:
+        policy = factory(ExternalPolicyProfile(profile_id="hook", local_model_path="/unused"))
+        assert policy.capability().status is CapabilityStatus.BLOCKED
+        assert policy.contract.certified_execute_prefix is None
+        assert policy.contract.required_observation_history == history
+        with pytest.raises(RuntimeError, match="intentionally unimplemented"):
+            policy.predict(PolicyObservation(image_history=(object(),) * history, prompt="Open the drawer"))
+
+
+def test_native_adapter_registry_matches_every_declared_contract():
+    from plumb.policies.native import NATIVE_POLICY_CONTRACTS, native_adapter_types
+
+    adapters = native_adapter_types()
+    assert set(adapters) == set(NATIVE_POLICY_CONTRACTS)
+    for name, adapter_class in adapters.items():
+        contract = NATIVE_POLICY_CONTRACTS[name]
+        assert adapter_class.base_contract is contract
+        assert contract.certified_execute_prefix is None
+        assert contract.implementation_status is CapabilityStatus.BLOCKED
+        # Every native adapter satisfies the controller's plan/reset/resume surface.
+        for attribute in ("plan_control", "reset", "snapshot_state", "restore_state", "propose", "certify"):
+            assert callable(getattr(adapter_class, attribute, None)), (name, attribute)
+        assert not hasattr(adapter_class, "predict_action"), name
+
+
+def test_policies_package_exports_the_certification_surface_consistently():
+    import plumb.policies as policies
+
+    for name in policies.__all__:
+        assert hasattr(policies, name), name
+    for name in (
+        "PolicyCertification",
+        "PolicyCertificationError",
+        "PolicyActionNormalizer",
+        "PolicyActionNormalizerStatistics",
+        "PolicyExecutionMode",
+        "GripperStateValue",
+        "GripperActionValue",
+        "GripperPolarityConvention",
+        "UNRESOLVED_BRIDGE_GRIPPER_CONVENTION",
+        "mint_certification_payload",
+        "OctoSmallV1PolicyAdapter",
+        "MiniVLAPolicyAdapter",
+        "OpenPiZeroPolicyAdapter",
+        "SuSIEPolicyAdapter",
+        "SuSIELowLevelPolicyAdapter",
+    ):
+        assert name in policies.__all__, name
+    assert policies.UNRESOLVED_BRIDGE_GRIPPER_CONVENTION.resolved is False
+    assert policies.BRIDGE_STATE_GRIPPER_CLOSED == 0.0
+    assert policies.BRIDGE_STATE_GRIPPER_OPEN_LIMIT == 0.39
+    assert policies.BRIDGE_ACTION_GRIPPER_HIGH == 0.996
+    assert policies.OCTO_FORBIDDEN_MODEL_IDS == ("rail-berkeley/octo-small-1.5", "rail-berkeley/octo-base-1.5")
+    assert policies.MINIVLA_VQ_LICENSE_STATUS == "absent_cardData_null"
+    assert policies.MINIVLA_VQ_REDISTRIBUTION == "prohibited_pending_resolution"

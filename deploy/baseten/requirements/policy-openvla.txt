@@ -1,0 +1,60 @@
+# PLUMB Baseten image requirements — OpenVLA policy
+#
+# Consumed by: deploy/baseten/chain.py -> OpenVLAWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY311
+# Adapter:     plumb.policies.openvla.OpenVLAPolicyAdapter
+# Re-resolved against public PyPI on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# HANDOFF.md / cluster-runtime-evidence.json record this stack as
+# `torch==2.6.0+computecanada` and `tokenizers==0.19.1+computecanada`.  Those
+# Alliance local-build version strings do not exist on PyPI and cannot be
+# installed here, so the pins below are the public upstream releases of the same
+# numbers — a different binary build with different kernels and allocator
+# behaviour.  The recorded 0.835902354 s single-action latency and
+# 15,500,827,648 B GPU peak are therefore NOT evidence about this image and must
+# be re-measured on Baseten before being used for capacity, cost, or the
+# 60-second burst plan (AGENT-BUILD-SPEC.md §12, and §7's "no assumed universal
+# throughput preset").
+#
+# Reviewed lock *input*, not a lock: no --require-hashes and no container
+# digest.  DEPLOY.md step 9 produces both.
+# ---------------------------------------------------------------------------
+
+# torch 2.6.0 is cu124 on this channel.  OpenVLA's pinned stack is
+# transformers==4.40.1 (AGENT-BUILD-SPEC.md §1) and
+# plumb/policies/openvla.py refuses to load under any other Transformers
+# version, so that pin is exact, not a floor.
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch==2.6.0
+torchvision==0.21.0
+
+# Exact, enforced by OpenVLAPolicyAdapter._load_runtime():
+transformers==4.40.1
+tokenizers==0.19.1
+timm==0.9.10
+
+# transformers 4.40.1 requires huggingface-hub<1.0,>=0.19.3; 0.25.2 is the
+# version HANDOFF.md recorded for the sibling pinned-4.40.1 environment.
+huggingface-hub==0.25.2
+safetensors==0.4.5
+accelerate==0.34.2
+sentencepiece==0.2.0
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# UNRESOLVED, deliberately absent:
+#   * No `openvla/openvla-7b` download line.  Weights arrive through
+#     chains.Assets(cached=[...]) at the immutable revision
+#     47a0ec7fc4ec123775a391911046cf33cf9ed83f, and the adapter is
+#     local_files_only=True.
+#   * `trust_remote_code=True` is required by this checkpoint and is gated in
+#     plumb/policies/openvla.py behind an explicit per-profile review opt-in
+#     plus `reviewed_remote_code_revision == remote_code_revision`.  Installing
+#     these packages does not perform that review.
+#   * flash-attn is NOT installed here.  The recorded diagnostic did not use it,
+#     so adding it would change the measured operating point without evidence.

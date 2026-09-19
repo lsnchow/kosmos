@@ -34,8 +34,17 @@ npm --prefix web run test
 
 The Python suite includes an undefined-name/syntax scan of production sources;
 GPU tensor checks skip on the lightweight laptop environment and run in the
-cluster ML environment. Frontend checks include the baseline-UI and accessibility
-constraints used for the real-evidence controls and report links.
+cluster ML environment.
+
+`npm --prefix web run test` type-checks the dashboard and then runs its Vitest
+suite under jsdom: tile frame accumulation and provenance labelling, burst
+double-submit protection, the cost slider issuing no request on drag, scoreboard
+intervals and indeterminacy, telemetry staleness, free-play generating and
+no-backend states, called-shot pending state, event-stream reconnection, and an
+axe-core pass over the rendered console. The axe pass disables the two rules
+jsdom cannot evaluate or that do not apply (computed colour contrast, which has
+no stylesheet or layout in jsdom, and video captions for silent generated
+clips); palette contrast is instead fixed by measured ratios in `styles.css`.
 
 ## Implemented components
 
@@ -79,6 +88,38 @@ Do not execute GPU jobs on the login node. Keep SLURM allocations inside the
 **cluster-side** `drac` tmux session so laptop network changes cannot end them.
 Do not copy models back to the laptop or infer successful qualification from the
 synthetic UI. Baseten credentials are not bundled or printed.
+
+## Testing the production path without a GPU
+
+`scripts/rehearse.py` runs the **entire** production code path against a simulated
+Chain that speaks the documented Baseten protocol: the real `/async_run_remote`
+envelope, real HMAC-signed webhooks, real queue-status and deployment shapes.
+
+```bash
+.venv/bin/python scripts/rehearse.py --starts 2 --policies OpenVLA,MiniVLA
+.venv/bin/python scripts/rehearse.py --starts 50      # the full 1,500-episode matrix
+```
+
+Submissions are validated against the Chain's own pydantic models and its own
+`_world_setup`, so a field-name drift between the app and the Chain fails loudly
+instead of silently nulling every measurement. Each run deliberately drops and
+duplicates a fraction of its webhooks so the reconciler and the idempotency path
+are exercised rather than assumed.
+
+The Chain is **simulated**: no model runs, and no latency or cost figure from a
+rehearsal is a measurement. Every episode it produces carries
+`transport: "simulated"` on its ledger row and its artifact manifest, and that
+manifest records `world_model: false`.
+
+For overall readiness, including what is still waiting on hardware:
+
+```bash
+.venv/bin/python scripts/e2e_smoke.py                     # pass / pending / fail
+.venv/bin/python scripts/e2e_smoke.py --require-qualified  # pending becomes failure
+```
+
+`docs/GO_LIVE.md` is the ordered sequence for the moment GPU and Baseten access
+exist.
 
 ## Remaining external evidence
 

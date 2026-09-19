@@ -1,12 +1,38 @@
 {
-  "schema_version": 1,
-  "state": "deployment_disabled_cluster_diagnostics_recorded",
-  "purpose": "Required cloud evidence and immutable inputs before the PLUMB Chains template may execute scored rollout work. Local cluster diagnostics are recorded separately and do not configure or qualify a Baseten deployment.",
+  "schema_version": 2,
+  "state": "deployable_pending_account_resolution",
+  "state_meaning": "chain.py is complete, pushable Chains wiring with real adapter calls. Every remaining null is a cloud/account/evidence value that only a live Baseten deployment or a frozen protocol artifact can supply, and each carries a resolved_by naming the exact command or step that fills it.",
+  "purpose": "Required cloud evidence and immutable inputs before the PLUMB Chains topology may execute scored rollout work. Local cluster diagnostics are recorded separately and do not configure or qualify a Baseten deployment.",
   "chain_entrypoint": "RolloutController.run_remote(request: RolloutRequest)",
+  "chain_source": "deploy/baseten/chain.py",
+  "deploy_runbook": "deploy/baseten/DEPLOY.md",
+  "push_command": "truss chains push ./deploy/baseten/chain.py --environment production",
+  "prepush_requirement": "python deploy/baseten/stage_packages.py  (fills deploy/_chain_packages/ with the plumb package, declared as DockerImage.external_package_dirs)",
+  "sdk": {
+    "package": "truss",
+    "verified_against_version": "0.18.30",
+    "verified_at": "2026-09-19T08:40:00+00:00",
+    "notes": [
+      "chains.RemoteConfig in 0.18.30 has no autoscaling field: the only min_replica occurrence in the installed SDK is a docstring. Replica and concurrency-target settings are applied post-push through the management API, which is the side plumb/platform.py:598 already reads back.",
+      "truss_chains.framework reads endpoint signatures with inspect.signature() and no eval_str, and _validate_io_type rejects string annotations, so chain.py deliberately omits `from __future__ import annotations`.",
+      "utils.make_abs_path_here must be called inline at module level; chain.py does that for every requirements path.",
+      "truss renders build_commands after the requirements install, which is why MiniVLA's flash-attn source build can rely on torch 2.2.0 already being present.",
+      "DockerImage takes `requirements_file` on modern truss and the deprecated alias `pip_requirements_file` on older ones. chain.py feature-detects the field name from DockerImage.model_fields, so it is pushable on either and emits no deprecation warning on 0.18.30."
+    ],
+    "validated": {
+      "method": "Installed truss==0.18.30 in a throwaway venv, imported deploy/baseten/chain.py, and ran truss_chains.framework.raise_validation_errors().",
+      "result": "no validation errors collected; all nine Chainlets constructed, the entrypoint resolved eight dependencies each with retries=0, and both endpoints validated as async with pydantic I/O",
+      "performed_at": "2026-09-19T09:20:00+00:00",
+      "does_not_establish": "This validates the SDK surface and the module's own definitions. It is NOT a push, NOT an image build, and NOT evidence about GPU behaviour, capacity, latency, or cost.",
+      "reproduce": "python3 -m venv /tmp/plumb-truss && /tmp/plumb-truss/bin/pip install 'truss==0.18.30' && /tmp/plumb-truss/bin/python -m pytest tests/test_chain.py -k framework_validator -v"
+    }
+  },
   "cluster_runtime_evidence": {
     "path": "cluster-runtime-evidence.json",
     "status": "recorded_unqualified",
     "scope": "allocated cluster GPUs only",
+    "transfers_to_baseten": false,
+    "why_it_does_not_transfer": "HANDOFF.md pins Alliance/ComputeCanada local wheel builds (torch 2.6.0+computecanada, tokenizers 0.19.1+computecanada, transformers 5.17.0+computecanada). Those version strings do not exist on PyPI, so every Baseten image installs a different binary build of the same upstream version. Kernels, CUDA minor versions, attention backends, and allocator behaviour all differ, so the recorded timings, GPU peaks, and cold-load seconds are not evidence about any image defined here (AGENT-BUILD-SPEC.md 12).",
     "does_not_establish": [
       "Baseten container digests, deployed images, routes, or serializers",
       "Baseten account capacity, active replicas, pricing, or cost",
@@ -16,22 +42,273 @@
   "async_submission": {
     "documented_suffix": "/async_run_remote",
     "model_only_suffix_not_allowed": "/async_predict",
+    "accepted_endpoint_shapes": [
+      "https://chain-<chain_id>.api.baseten.co/production/async_run_remote",
+      "https://chain-<chain_id>.api.baseten.co/development/async_run_remote",
+      "https://chain-<chain_id>.api.baseten.co/deployment/<deployment_id>/async_run_remote",
+      "https://chain-<chain_id>.api.baseten.co/environments/<environment_name>/async_run_remote"
+    ],
+    "endpoint_validator": "plumb.platform.ChainAsyncEndpoint (HTTPS only, chain-*.api.baseten.co host, port 443 or default, no credentials/query/fragment)",
+    "internal_rpc_rule": "Only the Chain entrypoint uses the external async queue. Internal Chainlet calls are awaited RPCs created by chains.depends(..., retries=0) and must never re-enter the queue.",
     "queue_status_route": null,
-    "queue_status_reason": "The model-scoped async_queue_status route is not evidence of a Chain route. Add a tested exact route plus evidence before enabling it."
+    "queue_status_reason": "The model-scoped async_queue_status route is not evidence of a Chain route. Until an account-tested exact route exists, plumb.platform reports the platform queue as unavailable rather than guessing.",
+    "queue_status_route_resolved_by": "After the push, call the candidate Chain queue route with the deployment's API key, save the raw response body as the evidence artifact, then construct plumb.platform.VerifiedChainQueueRoute(url=..., evidence_uri=<saved response URI>, verified_at=<ISO-8601 with offset>). See DEPLOY.md step 8."
+  },
+  "chain_topology": {
+    "entrypoint": "plumb-rollout-controller",
+    "policy_dispatch": "PolicyRouter (entrypoint-side table lookup in chain.py, deliberately not a Chainlet: an extra network hop for a table lookup would cost burst latency)",
+    "worker_to_image": {
+      "plumb-rollout-controller": "requirements/controller.txt",
+      "plumb-world-worker": "requirements/world-cosmos.txt",
+      "plumb-openvla-worker": "requirements/policy-openvla.txt",
+      "plumb-octo-worker": "requirements/policy-octo.txt",
+      "plumb-minivla-worker": "requirements/policy-minivla.txt",
+      "plumb-openpizero-worker": "requirements/policy-openpizero.txt",
+      "plumb-susie-worker": "requirements/policy-susie.txt",
+      "plumb-validity-worker": "requirements/validity.txt",
+      "plumb-judge-worker": "requirements/judge-qwen.txt"
+    },
+    "policy_arm_to_worker": {
+      "OpenVLA": "plumb-openvla-worker",
+      "Octo-Small": "plumb-octo-worker",
+      "Octo-Base": "plumb-octo-worker",
+      "MiniVLA": "plumb-minivla-worker",
+      "OpenPiZero": "plumb-openpizero-worker",
+      "SuSIE": "plumb-susie-worker",
+      "SuSIE_LL": "plumb-susie-worker"
+    },
+    "requirements_lock_digests": {
+      "requirements/controller.txt": "sha256:423cb6a9de525fa6a6f8ccedac61c91eba7d559aae657629b75ca52dfa87307e",
+      "requirements/judge-qwen.txt": "sha256:bc3a98cc311c006fb6d9827892c8e23cd59f96bffe8f04de3fc5cee903fe84da",
+      "requirements/policy-minivla.txt": "sha256:889f8ef634a7ec3c1a0ecd64a5b8599728f56b27e247650ee9422472dd26f2fd",
+      "requirements/policy-octo.txt": "sha256:fa9e8790b3b8d298e0009b0803bff790986852090ecb4d3c01581cc2032b394a",
+      "requirements/policy-openpizero.txt": "sha256:2aa87948db1f4cb22d69ca38994e6199f53c6d8753e337f7691902f6ad428756",
+      "requirements/policy-openvla.txt": "sha256:d7e32713da626bfe5e8a2f7817fe31348a3e823cad191ac85098227da9638308",
+      "requirements/policy-susie.txt": "sha256:0ec0617eeb69772411356e000ceddc20dca039bb262e1fe6a49b1838a45b5d91",
+      "requirements/validity.txt": "sha256:8bf4ed1b870b75a9e515fe9e742b77710f81cd2daaa0eef5bbee28e753755922",
+      "requirements/world-cosmos.txt": "sha256:7890f77e95fc2d9866b799a66d7d4b558549f5fbcc72430e624fc0bbc7a5a1c1"
+    },
+    "requirements_digest_verification": "cd deploy/baseten && for f in requirements/*.txt; do printf '%s  sha256:%s\\n' \"$f\" \"$(shasum -a 256 \"$f\" | awk '{print $1}')\"; done",
+    "lock_status": "reviewed_inputs_not_hash_pinned",
+    "lock_status_reason": "The requirement files are reviewed inputs with exact version pins re-resolved to public PyPI wheels and immutable git revisions. They are not `pip install --require-hashes` locks and carry no container digest.",
+    "lock_resolved_by": "After the first successful build of each image, capture `uv pip freeze` (or `pip freeze`) from inside the container plus the built image digest; store both next to the lock input. See DEPLOY.md step 9.",
+    "image_count": 9,
+    "image_isolation_verified": "Nine distinct Chainlet names and nine distinct requirements files, asserted by tests/test_chain.py::test_chainlets_pass_the_real_framework_validator against the resolved RemoteConfigs."
+  },
+  "autoscaling": {
+    "declared_in": "deploy/baseten/chain.py::AUTOSCALING_HYPOTHESES (also mirrored into each Chainlet's ChainletOptions.metadata)",
+    "status": "initial_hypotheses_not_measured",
+    "spec_constraint": "AGENT-BUILD-SPEC.md:285 states there is no assumed universal throughput preset: hardware, batching, and concurrency must be chosen from measured memory and full-chain throughput. Every value below is a starting hypothesis to be re-tuned from Gate A measurements on Baseten hardware.",
+    "configured_max_replica_meaning": "A configured maximum is neither an active replica count nor reserved GPU capacity (spec 7).",
+    "applied_by": "Baseten management API after the push; chains.RemoteConfig in truss 0.18.30 cannot declare it.",
+    "payload_generator": "python -c \"import json,sys; sys.path.insert(0,'deploy/baseten'); import chain; print(json.dumps(chain.autoscaling_patch_payloads(), indent=2))\"",
+    "read_back_by": "plumb/platform.py ChainletReplicaStatus.configured_min_replica / configured_max_replica from chainlet.autoscaling_settings",
+    "settings": {
+      "plumb-world-worker": {
+        "min_replica": 1,
+        "max_replica": 100,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_WORLD_MAX_REPLICA"
+      },
+      "plumb-judge-worker": {
+        "min_replica": 1,
+        "max_replica": 100,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_JUDGE_MAX_REPLICA"
+      },
+      "plumb-openvla-worker": {
+        "min_replica": 1,
+        "max_replica": 25,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_POLICY_MAX_REPLICA"
+      },
+      "plumb-octo-worker": {
+        "min_replica": 0,
+        "max_replica": 25,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_POLICY_MAX_REPLICA"
+      },
+      "plumb-minivla-worker": {
+        "min_replica": 0,
+        "max_replica": 25,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_POLICY_MAX_REPLICA"
+      },
+      "plumb-openpizero-worker": {
+        "min_replica": 0,
+        "max_replica": 25,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_POLICY_MAX_REPLICA"
+      },
+      "plumb-susie-worker": {
+        "min_replica": 0,
+        "max_replica": 25,
+        "concurrency_target": 1,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_POLICY_MAX_REPLICA"
+      },
+      "plumb-validity-worker": {
+        "min_replica": 1,
+        "max_replica": 10,
+        "concurrency_target": 4,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_VALIDITY_MAX_REPLICA"
+      },
+      "plumb-rollout-controller": {
+        "min_replica": 1,
+        "max_replica": 10,
+        "concurrency_target": 32,
+        "autoscaling_window": 60,
+        "env_override": "PLUMB_CONTROLLER_MAX_REPLICA"
+      }
+    },
+    "exact_management_api_body": null,
+    "exact_management_api_body_resolved_by": "Confirm the chain-deployment autoscaling route and accepted field names against the Baseten management-API reference, PATCH one Chainlet, then GET the chain deployment and diff the echoed autoscaling_settings. See DEPLOY.md step 7."
   },
   "workers": {
-    "PolicyWorker": {
+    "WorldWorker": {
+      "chainlet_name": "plumb-world-worker",
+      "base_image": "chains.BasetenImage.PY311",
+      "requirements_lock_input": "requirements/world-cosmos.txt",
+      "requirements_lock_sha256": "sha256:7890f77e95fc2d9866b799a66d7d4b558549f5fbcc72430e624fc0bbc7a5a1c1",
+      "adapter_revision": "plumb.adapters.worlds.Cosmos3NanoDiffusersAdapter (repository revision recorded by deployment_chain_source_sha256)",
+      "adapter_profile_class": "plumb.adapters.worlds.Cosmos3NanoDiffusersProfile",
+      "deployment_backend": "cosmos3_diffusers",
+      "deployment_request_serializer": "diffusers.CosmosActionCondition(mode='forward_dynamics', chunk_size=len(compiled_actions), domain_name='bridge_orig_lerobot', resolution_tier, raw_actions, image, view_point) then Cosmos3OmniPipeline(prompt, action, fps, num_inference_steps, guidance_scale, generator, output_type='np', use_system_prompt)",
+      "deployment_domain_registry_revision": "bridge_orig_lerobot bound through the pinned Diffusers source revision a3e0b8ec235c27a6c17a21976daf7fd32d819d05, not an unversioned numeric domain ID",
+      "deployment_action_compiler_revision": "plumb.adapters.bridge.BridgeToCosmosCompiler with BridgeControlProfile.source_revision=b841131ecd512bafb303075bd8f8b677e0bf9f1f and NormalizationBoundary.BACKEND",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 8,
+        "memory": "64Gi",
+        "predict_concurrency": 16
+      },
+      "batch_settings": {
+        "batch_max": 16,
+        "batch_max_env": "PLUMB_WORLD_BATCH_MAX",
+        "batch_window_ms": 15.0,
+        "batch_window_env": "PLUMB_WORLD_BATCH_WINDOW_MS",
+        "predict_concurrency_follows_batch_max": true,
+        "planner": "deploy/baseten/chain.py::MicroBatchPlanner (pure, unit-tested in tests/test_chain.py)",
+        "batch_key_fields": [
+          "profile_id",
+          "domain",
+          "action_row_count",
+          "action_width",
+          "resolution_tier",
+          "num_inference_steps",
+          "guidance_scale",
+          "fps",
+          "view_point"
+        ],
+        "default_execution_mode": "sequential_adapter_calls",
+        "default_execution_mode_reason": "Cosmos3NanoDiffusersAdapter exposes only generate(request). A genuinely fused forward needs a reviewed batched CosmosActionCondition path; until plumb adds generate_batch, the collected group runs as consecutive adapter calls and the result is labelled batch_execution_mode='sequential_adapter_calls' rather than claimed as one forward.",
+        "fused_execution_mode": "fused_adapter_generate_batch",
+        "fused_execution_enabled_by": "PLUMB_WORLD_FUSED_BATCH=1 plus a plumb-side adapter.generate_batch"
+      },
+      "variants": {
+        "cosmos3_nano": {
+          "repo_id": "nvidia/Cosmos3-Nano",
+          "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+          "volume_folder": "cosmos3-nano",
+          "selected_by": "PLUMB_WORLD_VARIANT=cosmos3_nano (default)"
+        },
+        "cosmos3_edge": {
+          "repo_id": "nvidia/Cosmos3-Edge",
+          "revision": null,
+          "revision_resolved_by": "Read the Cosmos3-Edge model card's current commit from the Hugging Face API, record it with a retrieval timestamp, then set PLUMB_WORLD_EDGE_REVISION to that 40-hex value at push time. Until then the Edge arm is unselectable and returns blocked.",
+          "volume_folder": "cosmos3-edge",
+          "selected_by": "PLUMB_WORLD_VARIANT=cosmos3_edge",
+          "known_mislabel": "Cosmos3NanoDiffusersProfile.as_backend_profile() hard-codes model_id='nvidia/Cosmos3-Nano', so adapter metadata reports Nano on the Edge arm. The worker publishes variant.authoritative_model_id alongside and flags adapter_metadata_model_id_is_profile_default=true; a clean fix needs a plumb-side change."
+        }
+      },
+      "assets": {
+        "cached": [
+          {
+            "repo_id": "nvidia/Cosmos3-Nano",
+            "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+            "use_volume": true,
+            "volume_folder": "cosmos3-nano",
+            "runtime_secret_name": "hf_access_token"
+          }
+        ],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "mounted_path": "/app/model_cache/cosmos3-nano",
+        "mounted_path_override_env": "PLUMB_MODEL_CACHE_ROOT",
+        "purpose": "Avoid paying the recorded 167.683719175 s Cosmos cold load on every replica, which would be fatal to a 60-second burst. The residual cold-start cost on THIS image is unmeasured.",
+        "residual_cold_start_seconds": null,
+        "residual_cold_start_seconds_resolved_by": "Time a scale-from-zero replica start on Baseten separately from steady-state inference, per spec 7's requirement to keep the live 1-to-100 scale-up experiment separately timed.",
+        "cached_selection_rule": "Only the SELECTED arm is cached. Mounting the unused sibling would add its multi-gigabyte download to every container start for no benefit, and container-start time is exactly what the 60-second burst cannot afford. Selecting cosmos3_edge without an immutable revision caches nothing and the worker blocks."
+      },
+      "safety_configuration": {
+        "enable_safety_checker": false,
+        "guardrail_model_fetched": false,
+        "note": "The fixed robotics-fixture profile uses the documented Diffusers enable_safety_checker=False and does not fetch nvidia/Cosmos-1.0-Guardrail. Recorded, not silently inherited across backends."
+      },
       "deployment_container_digest": null,
-      "requirements_lock_input": "requirements.lock-inputs.txt",
+      "deployment_container_digest_resolved_by": "After `truss chains push`, GET the chain deployment via the management API and read this Chainlet's image digest, or read it from the build logs' final image line. Never derive it from a local docker build.",
       "deployment_model_revision": null,
-      "adapter_revision": null,
-      "normalizer_revision": null,
-      "native_feedback_contract": null,
+      "deployment_model_revision_resolved_by": "Exec into a running replica and read the revision actually materialised in /app/model_cache/cosmos3-nano (for example the HF snapshot ref or the cached .no_exist/refs metadata), then compare it to the declared e59a53c25979a090fa8706c9acc0c254a6e89b92.",
+      "deployment_backend_profile_hash": null,
+      "deployment_backend_profile_hash_resolved_by": "Once the container digest and the deployed model revision exist, hash the canonical JSON of {profile_id, model_id, model_revision, diffusers_revision, container_digest, resolution_tier, fps, num_inference_steps, guidance_scale, scheduler_flow_shift, view_point, enable_safety_checker} with plumb.policies.provenance.canonical_json_sha256.",
+      "unresolved": [
+        "Immutable deployed container digest for this image.",
+        "Gate A conformance fixture run against the actual Chain deployment payload (action shape, condition-frame semantics, output frame mapping, timestamps).",
+        "Gate B feedback fidelity: the pinned Cosmos/OpenVLA one-step profile FAILED on the cluster (native one-action inference returned only the condition frame, job 937372/937423) and must not be patched over with hidden future actions or padding.",
+        "Measured Baseten GPU memory, batch-size ceiling, and full-chain throughput.",
+        "Verification that the checkpoint applies its own action normalizer exactly once at the BACKEND boundary; the worker currently assumes it and records the assumption."
+      ]
+    },
+    "OpenVLAWorker": {
+      "chainlet_name": "plumb-openvla-worker",
+      "base_image": "chains.BasetenImage.PY311",
+      "requirements_lock_input": "requirements/policy-openvla.txt",
+      "requirements_lock_sha256": "sha256:d7e32713da626bfe5e8a2f7817fe31348a3e823cad191ac85098227da9638308",
+      "arms": [
+        "OpenVLA"
+      ],
+      "adapter_revision": "plumb.policies.openvla.OpenVLAPolicyAdapter",
+      "model_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+      "reviewed_remote_code_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+      "remote_code_opt_in": "PLUMB_OPENVLA_REVIEWED_REMOTE_CODE_ACK must equal 47a0ec7fc4ec123775a391911046cf33cf9ed83f at push time. Without it the worker returns blocked, so trust_remote_code is never enabled by a successful download alone.",
+      "normalizer_revision": "OpenVLA native predict_action(..., unnorm_key='bridge_orig'); the checkpoint's own bridge_orig statistics, applied inside the reviewed remote code",
+      "native_feedback_contract": "One 7-D action per fresh generated image, no proprio input, native_proposal_horizon=1, certified_execute_prefix=1, do_sample=False, no action cache (plumb.policies.openvla.OPENVLA_CONTRACT)",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "32Gi",
+        "predict_concurrency": 2
+      },
+      "compute_basis": "GPU, not CPU: cluster-runtime-evidence.json records a 15,500,827,648 B peak for this model. That recording used a +computecanada build on another cluster, so the size here is a starting hypothesis to be re-measured, not a transplanted measurement.",
+      "assets": {
+        "cached": [
+          {
+            "repo_id": "openvla/openvla-7b",
+            "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+            "use_volume": true,
+            "volume_folder": "openvla-7b",
+            "runtime_secret_name": "hf_access_token"
+          }
+        ],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "mounted_path": "/app/model_cache/openvla-7b"
+      },
       "local_cluster_diagnostic_profile": {
         "status": "completed_unqualified",
         "model": "openvla/openvla-7b",
         "model_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
-        "reviewed_remote_code_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
         "runtime": {
           "transformers": "4.40.1",
           "tokenizers": "0.19.1+computecanada",
@@ -43,110 +320,419 @@
           "single_action_inference_wall_seconds": 0.8359023539815098,
           "gpu_peak_memory_bytes": 15500827648
         },
-        "evidence_key": "openvla_native_action_937500"
+        "evidence_key": "openvla_native_action_937500",
+        "transfers_to_this_image": false
       },
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, GET the chain deployment via the management API and read this Chainlet's image digest, or take it from the build log's final image line.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Exec into a running replica and read the revision materialised in /app/model_cache/openvla-7b; compare to the declared 47a0ec7fc4ec123775a391911046cf33cf9ed83f.",
       "unresolved": [
-        "One Baseten compatibility profile, reviewed image, and immutable deployed container digest per incompatible policy dependency stack.",
-        "Deployed source/wrapper configuration, action proposal horizon, executed prefix, and feedback cadence.",
-        "Gate-B action interventions and state/normalization fixtures."
+        "Immutable deployed container digest.",
+        "Gate B action interventions, state/normalization fixtures, and the one-tick generated-image feedback test. The cluster showed this exact profile fails causal feedback against Cosmos."
       ]
     },
-    "WorldWorker": {
-      "deployment_container_digest": null,
-      "requirements_lock_input": "requirements.lock-inputs.txt",
-      "deployment_backend": null,
-      "deployment_backend_profile_hash": null,
-      "deployment_request_serializer_hash": null,
-      "deployment_domain_registry_revision": null,
-      "deployment_action_compiler_revision": null,
-      "local_cluster_diagnostic_profiles": {
-        "cosmos3_nano_diffusers": {
-          "status": "completed_unqualified",
-          "model": "nvidia/Cosmos3-Nano",
-          "model_revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
-          "diffusers_source_revision": "a3e0b8ec235c27a6c17a21976daf7fd32d819d05",
-          "runtime": {
-            "diffusers": "0.41.0.dev0",
-            "transformers": "5.17.0+computecanada",
-            "torch": "2.6.0+computecanada"
-          },
-          "observed_16_action_fixture": {
-            "returned_frame_count": 17,
-            "inference_wall_seconds": 4.524269458983326,
-            "model_load_seconds": 167.68371917499462,
-            "gpu_peak_memory_bytes": 36521475584
-          },
-          "evidence_key": "cosmos3_nano_diffusers_bridge_fixture_937372"
-        },
-        "irasim_original_frame_ada": {
-          "status": "completed_unqualified",
-          "source_revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
-          "safe_checkpoint_sha256": "sha256:d0ea8e8bec50818e414a278fe58fb8d187f577cfe8b260cadc880cfa6107778d",
-          "runtime": {
-            "diffusers": "0.24.0",
-            "transformers": "4.40.1",
-            "torch": "2.6.0+computecanada"
-          },
-          "observed_one_action_fixture": {
-            "returned_frame_count": 2,
-            "inference_wall_seconds": 2.546707167988643,
-            "model_load_seconds": 23.11404774908442,
-            "gpu_peak_memory_bytes": 3516738560
-          },
-          "evidence_key": "irasim_original_one_step_937666"
-        }
+    "OctoWorker": {
+      "chainlet_name": "plumb-octo-worker",
+      "base_image": "chains.BasetenImage.PY310",
+      "requirements_lock_input": "requirements/policy-octo.txt",
+      "requirements_lock_sha256": "sha256:fa9e8790b3b8d298e0009b0803bff790986852090ecb4d3c01581cc2032b394a",
+      "arms": [
+        "Octo-Small",
+        "Octo-Base"
+      ],
+      "adapter_revision": "plumb.policies.native.OctoSmallV1Policy / OctoBaseV1Policy (ExternalPolicyHook with no bundled loader)",
+      "native_feedback_contract": "Two-image history, four-action proposal, temporal ensembling ON, obs_horizon=2, pred_horizon=4. certified_execute_prefix is null, so the controller blocks instead of choosing a cadence.",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "32Gi",
+        "predict_concurrency": 2
       },
+      "named_deviation": "requirements/policy-octo.txt installs jax[cuda12_pip]==0.4.20 where AGENT-BUILD-SPEC.md 1 lists cuda11_pip. The JAX Python version is unchanged; the compiled jaxlib binary is not the one upstream validated, so Gate B must re-certify Octo under this deviation.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "cached_reason": "No immutable Hugging Face commit has been resolved for rail-berkeley/octo-small or octo-base. truss_config.ModelRepo requires a revision for a cached volume and inventing one would forge provenance."
+      },
+      "checkpoint_traps": [
+        "Weights are at 270000/default/checkpoint (small) and 300000/default/checkpoint (base), NOT at the repo root; resolve/main/checkpoint returns 404.",
+        "Must be Octo v1.0. octo-small-1.5 is a different policy identity and is excluded."
+      ],
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Resolve the immutable commit of rail-berkeley/octo-small at the checkpoint path from the Hugging Face API with a retrieval timestamp, add it to assets.lock.json, then declare it as a cached ModelRepo and re-push.",
       "unresolved": [
-        "Baseten backend choice, immutable container/image digest, asset accessibility, and deployment serializer.",
-        "Actual Chain deployment fixture proving action payload shape, condition-frame semantics, output frame mapping, and timestamps.",
-        "Gate A conformance, Gate B feedback fidelity, and measured Baseten memory/concurrency."
-      ]
+        "Immutable deployed container digest.",
+        "Immutable checkpoint revisions and an assets.lock.json entry.",
+        "A source-reviewed native loader. OctoSmallV1Policy has no loader_hook, so this worker returns blocked with that reason; installing packages does not create a wrapper.",
+        "Certification of temporal ensembling and the executed prefix against the released wrapper."
+      ],
+      "certified_adapter": {
+        "adapter": "plumb.policies.OctoSmallV1PolicyAdapter / OctoBaseV1PolicyAdapter",
+        "profile": "plumb.policies.OctoPolicyProfile",
+        "constructed_by_the_chain": false,
+        "why_not": "Every required profile field is provenance the Chain does not have and must not invent: converted-artifact digests, conversion-report hashes, immutable checkpoint revisions, PaliGemma support-file records, and a pinned PolicyActionNormalizer. The Chain therefore loads the non-fabricating ExternalPolicyHook and reports blocked, naming the adapter and its exact missing fields in the block reason and in StageResult.output['certified_adapter'].",
+        "required_profile_fields_discovered_at_runtime": true
+      }
+    },
+    "MiniVLAWorker": {
+      "chainlet_name": "plumb-minivla-worker",
+      "base_image": "chains.BasetenImage.PY310",
+      "requirements_lock_input": "requirements/policy-minivla.txt",
+      "requirements_lock_sha256": "sha256:889f8ef634a7ec3c1a0ecd64a5b8599728f56b27e247650ee9422472dd26f2fd",
+      "arms": [
+        "MiniVLA"
+      ],
+      "adapter_revision": "plumb.policies.native.MiniVLAPolicy (ExternalPolicyHook with no bundled loader)",
+      "native_feedback_contract": "Seven-action proposal with use_extra=True in the supplied configuration; certified_execute_prefix is null, so the controller blocks rather than picking a prefix.",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "32Gi",
+        "predict_concurrency": 2
+      },
+      "build_commands": [
+        "pip install --no-cache-dir --no-build-isolation flash-attn==2.5.5"
+      ],
+      "build_commands_reason": "flash-attn 2.5.5 needs torch importable at build time and --no-build-isolation, which pip does not accept inside a requirements file. truss runs build_commands after the requirements install, so torch 2.2.0 is already present.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "cached_reason": "No immutable revision resolved, and Stanford-ILIAD/pretrain_vq declares no license (cardData: null), so redistribution/access rights are unresolved."
+      },
+      "checkpoint_traps": [
+        "checkpoints/step-362500-epoch-21-loss=0.2259.pt contains '=' and must be URL-encoded as %3D.",
+        "Skip the 76 MB .jsonl; it is a training log.",
+        "Legacy .pt pickles require isolated, credential-free, network-free conversion with retained hashes before normal inference; strict=True is not a safety boundary."
+      ],
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Resolve immutable commits for Stanford-ILIAD/minivla-vq-bridge-prismatic and Stanford-ILIAD/pretrain_vq, record the pretrain_vq license/access resolution, add both to assets.lock.json, then declare cached ModelRepos and re-push.",
+      "unresolved": [
+        "Immutable deployed container digest.",
+        "pretrain_vq license/access resolution (flagged to the user; do not redistribute).",
+        "Safe offline conversion of the legacy .pt checkpoints with retained artifact hashes.",
+        "A source-reviewed native loader and a certified executed prefix."
+      ],
+      "certified_adapter": {
+        "adapter": "plumb.policies.MiniVLAPolicyAdapter",
+        "profile": "plumb.policies.MiniVLAPolicyProfile",
+        "constructed_by_the_chain": false,
+        "why_not": "Every required profile field is provenance the Chain does not have and must not invent: converted-artifact digests, conversion-report hashes, immutable checkpoint revisions, PaliGemma support-file records, and a pinned PolicyActionNormalizer. The Chain therefore loads the non-fabricating ExternalPolicyHook and reports blocked, naming the adapter and its exact missing fields in the block reason and in StageResult.output['certified_adapter'].",
+        "required_profile_fields_discovered_at_runtime": true
+      }
+    },
+    "OpenPiZeroWorker": {
+      "chainlet_name": "plumb-openpizero-worker",
+      "base_image": "chains.BasetenImage.PY310",
+      "requirements_lock_input": "requirements/policy-openpizero.txt",
+      "requirements_lock_sha256": "sha256:2aa87948db1f4cb22d69ca38994e6199f53c6d8753e337f7691902f6ad428756",
+      "arms": [
+        "OpenPiZero"
+      ],
+      "adapter_revision": "plumb.policies.native.OpenPiZeroPolicy (ExternalPolicyHook with no bundled loader)",
+      "source_revision": "c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+      "native_feedback_contract": "Four-action proposal with refreshed proprioception at each native feedback boundary; action_normalization_type='bounds' is this wrapper's setting, not a universal adapter API. certified_execute_prefix is null.",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "48Gi",
+        "predict_concurrency": 2
+      },
+      "install_path_note": "Upstream installs with `uv sync` against its own lock. requirements/policy-openpizero.txt is an explicitly-labelled pip re-resolution of that environment; switching this Chainlet to DockerImage(requirements_file=<vendored uv.lock>) is the strictly more reproducible follow-up.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "cached_reason": "No immutable revision resolved for allenzren/open-pi-zero, and PaliGemma access terms are unresolved."
+      },
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Resolve the immutable commit for allenzren/open-pi-zero and for google/paligemma-3b-pt-224 under accepted terms, record both in assets.lock.json, then declare cached ModelRepos and re-push.",
+      "unresolved": [
+        "Immutable deployed container digest.",
+        "PaliGemma provenance under accepted terms; leo009/paligemma-3b-pt-224 is a candidate mirror only after provenance, hashes, and terms are resolved, and byte identity must not be claimed without a saved comparison.",
+        "Safe offline conversion of bridge_beta_step19296_2024-12-26_22-30_42.pt and verification of full state-dict coverage in the pinned loader.",
+        "A source-reviewed native loader and a certified executed prefix."
+      ],
+      "certified_adapter": {
+        "adapter": "plumb.policies.OpenPiZeroPolicyAdapter",
+        "profile": "plumb.policies.OpenPiZeroPolicyProfile",
+        "constructed_by_the_chain": false,
+        "why_not": "Every required profile field is provenance the Chain does not have and must not invent: converted-artifact digests, conversion-report hashes, immutable checkpoint revisions, PaliGemma support-file records, and a pinned PolicyActionNormalizer. The Chain therefore loads the non-fabricating ExternalPolicyHook and reports blocked, naming the adapter and its exact missing fields in the block reason and in StageResult.output['certified_adapter'].",
+        "required_profile_fields_discovered_at_runtime": true
+      }
+    },
+    "SusieWorker": {
+      "chainlet_name": "plumb-susie-worker",
+      "base_image": "chains.BasetenImage.PY310",
+      "requirements_lock_input": "requirements/policy-susie.txt",
+      "requirements_lock_sha256": "sha256:0ec0617eeb69772411356e000ceddc20dca039bb262e1fe6a49b1838a45b5d91",
+      "arms": [
+        "SuSIE",
+        "SuSIE_LL"
+      ],
+      "arm_selection": "StageRequest.payload['policy'], resolved through chain.py's explicit POLICY_ARM_ALIASES table. The arm is never inferred from the worker identity.",
+      "adapter_revision": "plumb.policies.native.SuSIEPolicy / SuSIELowLevelPolicy (ExternalPolicyHooks with no bundled loaders)",
+      "native_feedback_contract": "Goal-image inputs with subgoal cadence for SuSIE and direct low-level goal-conditioned execution for SuSIE_LL; both unresolved until fixture-tested. certified_execute_prefix is null for both.",
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "48Gi",
+        "predict_concurrency": 2
+      },
+      "named_deviation": "Same CUDA 12 jaxlib deviation as the Octo image, for the same reason. Gate B must re-certify SuSIE under it.",
+      "arm_disclosure": "The released AutoEval configuration is preserved as the replication arm and its mismatch with upstream SuSIE is disclosed; a corrected upstream configuration is a separately NAMED sensitivity arm, never a quiet substitution inside this image.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "cached_reason": "No immutable revision resolved for kvablack/susie or patreya/gcbc-bridge."
+      },
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Resolve immutable commits for kvablack/susie (subgoal) and patreya/gcbc-bridge checkpoint_75000 (low-level), record them in assets.lock.json, then declare cached ModelRepos and re-push.",
+      "unresolved": [
+        "Immutable deployed container digest.",
+        "Separate subgoal and low-level components at immutable revisions.",
+        "Source-reviewed native loaders for both arms and fixture-tested subgoal cadence / low-level execution rule."
+      ],
+      "certified_adapter": {
+        "adapter": "plumb.policies.SuSIEPolicyAdapter / SuSIELowLevelPolicyAdapter",
+        "profile": "plumb.policies.SuSIEPolicyProfile",
+        "constructed_by_the_chain": false,
+        "why_not": "Every required profile field is provenance the Chain does not have and must not invent: converted-artifact digests, conversion-report hashes, immutable checkpoint revisions, PaliGemma support-file records, and a pinned PolicyActionNormalizer. The Chain therefore loads the non-fabricating ExternalPolicyHook and reports blocked, naming the adapter and its exact missing fields in the block reason and in StageResult.output['certified_adapter'].",
+        "required_profile_fields_discovered_at_runtime": true
+      }
     },
     "ValidityWorker": {
+      "chainlet_name": "plumb-validity-worker",
+      "base_image": "chains.BasetenImage.PY311",
+      "requirements_lock_input": "requirements/validity.txt",
+      "requirements_lock_sha256": "sha256:8bf4ed1b870b75a9e515fe9e742b77710f81cd2daaa0eef5bbee28e753755922",
+      "gate_implementation": "plumb.validity.StageAValidityGate (landed; the Chain binds and calls it)",
+      "expected_keyword_contract": [
+        "frames",
+        "actions",
+        "nominal_timestamps",
+        "conditioning_frame",
+        "states",
+        "expected_static",
+        "episode_id"
+      ],
+      "expected_return": "plumb.validity.ValidityReport: validity in {valid, invalid, unknown}, a closed enum of reason codes, parameters_hash, calibration_reference_hash, primary_scoring_eligible, calibration_class, and per-check details. The Chain passes the whole report through via as_dict() rather than cherry-picking fields.",
+      "compute": {
+        "cpu_count": 4,
+        "memory": "16Gi",
+        "predict_concurrency": 4,
+        "accelerator": null,
+        "accelerator_reason": "CPU-only by design; null here is a deliberate declaration, not an unknown value."
+      },
+      "compute_basis": "CPU is correct. Stage A is fixed-parameter classical analysis; an accelerator would only invite a learned check into a gate that must stay deterministic. No V-JEPA in this image.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [],
+        "secret_keys_reason": "Least privilege: this worker performs no weight download, so it is not granted hf_access_token."
+      },
       "container_digest": null,
-      "parameters_hash": null,
+      "container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "parameters_hash": "sha256:f870a0ed404f14c48eefe036560ba051660afedb5ce386325fa900be6fb26862",
       "calibration_reference_hash": null,
+      "calibration_reference_hash_resolved_by": "Freeze the camera/scene motion references used by the command-motion consistency check, store them in the project artifact store, and hash the stored bundle.",
       "unresolved": [
-        "Frozen deterministic checks, calibrated motion references, and reason-code persistence."
-      ]
+        "A MotionReference fitted from real Bridge trajectories; without it the calibrated command-motion check cannot run.",
+        "Frozen camera/scene calibration references and their stored hash.",
+        "Immutable deployed container digest."
+      ],
+      "gate_version": "plumb-stage-a-gate-v1",
+      "keyword_contract_note": "Mirrors the gate's keyword-only signature exactly. The gate requires len(frames) == len(actions) + 1 -- the original start frame plus one generated frame per executed action -- and the start frame is ALSO passed as conditioning_frame so the gate can verify frames[0] rather than take it on trust. tests/test_chain.py::test_stage_a_keyword_contract_matches_the_real_gate_signature fails if either side drifts.",
+      "calibration_class": {
+        "default": "calibrated_primary",
+        "env_override": "PLUMB_VALIDITY_CALIBRATION_CLASS",
+        "development_option": "uncalibrated_development",
+        "why_exposing_development_is_safe": "plumb.validity stamps development reports with primary_scoring_eligible=False and the uncalibrated_development_mode reason code, so a development verdict cannot be mistaken for primary evidence."
+      },
+      "parameters_hash_source": "StageAValidityGate.parameters_hash over {gate_version, declared_parameters, resolved_flow_estimator} with the default StageAParameters. Recomputed by the worker at runtime and reported as declared_parameters_hash; a frozen protocol may override it through ValidityStagePayload.parameters_hash.",
+      "motion_reference": null,
+      "motion_reference_resolved_by": "Fit a plumb.validity.MotionReference from real held-out Bridge trajectories and mount it. Until then the gate reports the no_motion_reference code rather than equating low optical flow with invalidity, and the worker records motion_reference_missing=true in its output."
     },
     "JudgeWorker": {
-      "deployment_container_digest": null,
-      "deployment_model_revision": null,
-      "deployment_processor_revision": null,
-      "rubric_hash": null,
-      "sampling_hash": null,
-      "local_cluster_diagnostic_profile": {
-        "status": "completed_unqualified",
-        "model": "Qwen/Qwen2.5-VL-7B-Instruct",
-        "model_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
-        "processor_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
-        "runtime": {
-          "transformers": "5.17.0+computecanada",
-          "tokenizers": "0.23.2",
-          "torch": "2.6.0+computecanada"
-        },
-        "observed": {
-          "raw_sample_count": 5,
-          "judge_call_seconds": 29.291511047631502,
-          "raw_report_gpu_peak_memory_bytes": 16948912640,
-          "raw_judge_status": "unknown"
-        },
-        "evidence_key": "qwen_judge_diagnostic_12238810"
+      "chainlet_name": "plumb-judge-worker",
+      "base_image": "chains.BasetenImage.PY311",
+      "requirements_lock_input": "requirements/judge-qwen.txt",
+      "requirements_lock_sha256": "sha256:bc3a98cc311c006fb6d9827892c8e23cd59f96bffe8f04de3fc5cee903fe84da",
+      "adapter_revision": "plumb.policies.judge.QwenRubricJudge",
+      "declared_model_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+      "declared_processor_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+      "declared_transformers_version": "4.49.0",
+      "declared_transformers_version_note": "The code's QwenJudgeProfile default, chosen over the cluster's incidental transformers 5.17.0+computecanada. Changing it changes the judge revision and requires a fresh Gate D on a new held-out set.",
+      "trust_remote_code": false,
+      "compute": {
+        "gpu": "H100",
+        "gpu_count": 1,
+        "cpu_count": 4,
+        "memory": "48Gi",
+        "predict_concurrency": 2
       },
+      "compute_basis": "GPU, not CPU: cluster-runtime-evidence.json records a 16,948,912,640 B peak for Qwen2.5-VL. That number came from a different build on a Queen's A100 and does not size this image.",
+      "assets": {
+        "cached": [
+          {
+            "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+            "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+            "use_volume": true,
+            "volume_folder": "qwen2p5-vl-7b-instruct",
+            "runtime_secret_name": "hf_access_token"
+          }
+        ],
+        "secret_keys": [
+          "hf_access_token"
+        ],
+        "mounted_path": "/app/model_cache/qwen2p5-vl-7b-instruct"
+      },
+      "sampling_contract": {
+        "sample_count": 5,
+        "quorum": 3,
+        "temperature": 0.7,
+        "top_p": 1.0,
+        "max_new_tokens": 512,
+        "retries_per_sample": 1,
+        "retry_scope": "schema/transport failures only, same sampling configuration, both attempts recorded",
+        "label_computed_in": "Python, by plumb.policies.judge._aggregate_sample_reports; the Chainlet additionally calls JudgeReport.validate_aggregation() so a forged summary field cannot survive transport",
+        "enforced_by": "plumb.policies.judge.JudgeSamplingConfig.validate(), which raises on any drift",
+        "seeds": "five distinct explicitly logged integers supplied by the run protocol; the worker never invents a sampling lineage"
+      },
+      "sampling_hash": "sha256:978c8fa9fe5945bca996d7b25c34321132edbe01c274443f49660ee3fdc7a9b8",
+      "sampling_hash_source": "plumb.policies.provenance.canonical_json_sha256 over {sample_count, quorum, temperature, top_p, max_new_tokens, retries_per_sample} of the frozen JudgeSamplingConfig default",
+      "rubric_hash_source": "plumb.policies.tasks.BenchmarkTask.rubric_hash = canonical_json_sha256({'task_id': ..., 'rubric': ...}); the registry-wide hash is TaskRegistry.registry_hash",
+      "rubric_registry_id": "plumb-benchmark-tasks-v1",
+      "rubric_registry_hash": "sha256:41d24de02fa54ea77424e1a8270702cf2b5a5d2db3d527a87aed3421e9fa4304",
+      "rubric_hash": {
+        "open_drawer": "sha256:e8186c00a5fdb93ff7e202e7359a55f06b6f497bd19b3f37fb9b90ff4dd3472d",
+        "close_drawer": "sha256:4b84b07ac709efbee55bad8c82f5aafc6931b0e31b912a284c07d3ec0b832e78",
+        "to_basket": "sha256:dbe3a5b288dc72cedc3b346cefbf659ab1687a167a5a7aa3674da5544e89312b",
+        "to_sink": "sha256:bcce0a5ceb4dbe8a92744b23eab81ac1793e716096d6f3cc8719a8fa08e4a11c",
+        "fold_cloth": "sha256:48b0dfd509237bf1f966d2243708dc3cf09782b8fd53bab34adfeca24937b066"
+      },
+      "output_contract_version": "qwen-rubric-output-contract-v2",
+      "output_contract_hash": "sha256:1a4a524dcca1cc632253edd3362ee69545d4ddad374d6ef17eff0bfe3de09f49",
+      "output_contract_format_retry_hash": "sha256:ec6367a5353aa62e62bacdf5b223a70c802a61727087d2bbb7ae333382b0fb5f",
+      "blinding": {
+        "mechanism": "JudgeStagePayload is a pydantic model with extra='forbid' and no field for a policy name, action row, command, published reference rate, source-condition label, or Stage-A outcome. Unknown keys are rejected with a named judge_payload_forbidden_fields failure before the model is even loaded.",
+        "frame_contract": "exactly 16 frames sampled uniformly from the original start through the final control tick including both endpoints; a shorter clip is rejected, never padded or resampled"
+      },
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "deployment_model_revision": null,
+      "deployment_model_revision_resolved_by": "Exec into a running replica and read the revision materialised in /app/model_cache/qwen2p5-vl-7b-instruct; compare to the declared cc594898137f460bfe9f0759e9844b3ce807cfb5.",
+      "deployment_processor_revision": null,
+      "deployment_processor_revision_resolved_by": "Same replica inspection: the processor files ship in the same snapshot, so confirm both resolve to one revision rather than assuming it.",
       "unresolved": [
-        "Baseten image/container, asset manifest, runtime lock, rubric/sampling/protocol lock, and deployment configuration.",
-        "Gate-D blinded human calibration and frozen held-out qualification.",
-        "Primary-report provenance binding for a real held-out calibration manifest; the recorded diagnostic is intentionally not primary evidence."
+        "Immutable deployed container digest and the revisions actually materialised on the volume.",
+        "Gate D blinded human calibration: 150 clips (100 development, 50 held-out), stratified across five tasks, with both annotators independently labelling all 50 held-out clips. None exist.",
+        "assets.lock.json and a runtime lock with hashes; until they exist every judge report is correctly reported as Gate-D unavailable.",
+        "A real held-out calibration manifest for primary-report provenance binding. The recorded cluster diagnostic (five raw samples, unknown/insufficient quorum) is intentionally not primary evidence."
+      ]
+    },
+    "RolloutController": {
+      "chainlet_name": "plumb-rollout-controller",
+      "base_image": "chains.BasetenImage.PY311",
+      "requirements_lock_input": "requirements/controller.txt",
+      "requirements_lock_sha256": "sha256:423cb6a9de525fa6a6f8ccedac61c91eba7d559aae657629b75ca52dfa87307e",
+      "entrypoint": true,
+      "compute": {
+        "cpu_count": 4,
+        "memory": "8Gi",
+        "predict_concurrency": 32,
+        "accelerator": null,
+        "accelerator_reason": "CPU-only by design; the entrypoint holds no model and must not be a cold-start bottleneck."
+      },
+      "loop_contract": "For each control boundary: policy -> compile actions (plumb.adapters.bridge.BridgeToCosmosCompiler on CPU) -> world -> accumulate frames, dropping the echoed conditioning frame -> persist a SegmentResult; after the horizon: validity, then judge.",
+      "prefix_rule": "The loop advances by the adapter's certified executed prefix. When certified_execute_prefix is null the episode returns blocked. It never assumes five chunks, never truncates, and never pads; a shorter terminal prefix requires demonstrated prefix invariance or an exact supported terminal length.",
+      "retries": "chains.depends(..., retries=0) for every dependency. A transport retry creates an attempt, not a new statistical episode, and attempt accounting belongs to the application ledger.",
+      "frame_transport": "PNG base64 with separate png_sha256 and pixels_sha256, because HANDOFF.md records that schema-v1 labelled pixel hashes ambiguously. Digests are verified on every decode; a mismatch is an explicit failure.",
+      "segment_events": "RolloutResult.segments carries hash-bound per-segment records so the control plane can emit segment_completed events and persist artifacts before advancing.",
+      "assets": {
+        "cached": [],
+        "secret_keys": [],
+        "secret_keys_reason": "Least privilege: the entrypoint downloads no weights."
+      },
+      "deployment_container_digest": null,
+      "deployment_container_digest_resolved_by": "After the push, read this Chainlet's image digest from the chain deployment management response or the build log.",
+      "unresolved": [
+        "Immutable deployed container digest.",
+        "Durable callback association: HANDOFF.md records that Baseten submission retries are hard-disabled after ambiguous POST outcomes and that callback association still needs integration before deployment is enabled.",
+        "External normalization path: NormalizationBoundary.EXTERNAL needs a pinned ActionNormalizer built from the checkpoint's own statistics file. None is mounted, so the controller blocks rather than inferring q01/q99 bounds."
       ]
     }
   },
   "telemetry_and_economics": {
-    "active_replicas_source": "Chain deployment management response active_replica_count",
+    "active_replicas_source": "Chain deployment management response active_replica_count (plumb.platform.ChainletReplicaStatus)",
     "desired_or_starting_replicas": null,
+    "desired_or_starting_replicas_resolved_by": "Query the account's supported metrics export for desired/starting replica series. If the account does not expose it, display unavailable; never derive it from max_replica.",
+    "compute_seconds_source": "RolloutResult.gpu_seconds, an instrumented per-stage measure (stage wall seconds times declared GPU count)",
+    "allocated_gpu_seconds": null,
+    "allocated_gpu_seconds_resolved_by": "The application's resource-allocation ledger, recording every allocation interval from prewarm start through cooldown exactly once. It is a separate ledger from instrumented stage timings and must stay separately labelled.",
     "pricing_currency": null,
+    "pricing_currency_resolved_by": "Read the account's instance-type prices via the management API AND confirm currency, billing unit, resource applicability, and tax/egress/storage treatment against the vendor/account contract; then construct plumb.platform.VerifiedPriceBasis(currency=<3-letter uppercase>, unit=<PriceUnit>, evidence_uri=<saved contract or API response URI>, retrieved_at=<ISO-8601 with offset>). See DEPLOY.md step 10.",
     "pricing_unit": null,
+    "pricing_unit_resolved_by": "Same step. Do not assume an API field named `price` is already per-hour USD; plumb.platform keeps rate_per_hour unavailable until the unit is evidenced.",
     "estimated_usd": null,
-    "reason": "No currency, billing unit, or resource applicability is assumed from the numeric instance-type price field."
+    "estimated_usd_resolved_by": "Only after a VerifiedPriceBasis exists: estimated_usd = sum(resource_rate_per_hour * allocated_resource_hours) + other_charges, over nonoverlapping allocations, reported separately as a marginal execution estimate and a total demonstration-run cost.",
+    "settled_cost": null,
+    "settled_cost_resolved_by": "Billing reconciliation after usage posts. Until then every cost result stays qualified as an estimate.",
+    "reason": "No currency, billing unit, or resource applicability is assumed from the numeric instance-type price field, and null means unknown, never zero."
+  },
+  "performance_target": {
+    "target": "1,500 episodes in 60 seconds for approximately $11 (operationally <= $11.25 total demonstration-run cost)",
+    "initial_capacity_hypothesis": "100 world-model replicas",
+    "throughput_preset": null,
+    "throughput_preset_reason": "AGENT-BUILD-SPEC.md:285 states there is no assumed universal throughput preset. Batch size, concurrency, and replica counts in this file are hypotheses to be re-tuned from measured memory and full-chain throughput.",
+    "measured_full_chain_throughput": null,
+    "measured_full_chain_throughput_resolved_by": "Gate A on Baseten: run the deployed payload at increasing batch sizes and replica counts, record GPU memory, per-stage latency, and episodes/second, then re-derive batch_max, predict_concurrency, and max_replica from those measurements.",
+    "measured_cold_start_seconds": null,
+    "measured_cold_start_seconds_resolved_by": "Time the 1-to-100 scale-up as a separately reported measurement; cold starts must not be hidden inside a supposedly instantaneous transition."
+  },
+  "qualification": {
+    "gates": {
+      "A": "blocked",
+      "B": "blocked_or_failed_by_profile",
+      "C": "blocked",
+      "D": "not_run",
+      "E": "not_run",
+      "F": "not_run"
+    },
+    "statement": "No Chainlet may declare itself qualified. RolloutResult.qualified is hard-coded false: Gates A-D are external reviews recorded in plumb.gates and are never inferred from a call that happened to return."
+  },
+  "tests": {
+    "path": "tests/test_chain.py",
+    "count": 160,
+    "requires_gpu": false,
+    "requires_truss_chains": false,
+    "note": "159 pass in the project venv with truss_chains absent; the 160th runs only in the deploy venv and executes the real truss_chains framework validator. Two AST guards cover the branch under `if CHAINS_RUNTIME_AVAILABLE:` that cannot execute locally: every pydantic construction uses declared fields, and every local call uses declared keywords. Both were verified to fail when the bug they guard is reintroduced.",
+    "command": ".venv/bin/python -m pytest tests/test_chain.py -q"
+  },
+  "result_contract": {
+    "stages": "Dict[str, StageResult] -- TERMINAL status per stage name, indexed by stage name by plumb/backends/baseten.py.",
+    "stage_history": "List[StageResult] -- the full ordered record. A rollout makes one policy and one world call per certified executed prefix, so the mapping above keeps only the last of each.",
+    "progress_score": "Rollout-level progress, named to match plumb.rollout.RolloutReport and the reader in plumb/backends/baseten.py. The judge's own report keeps its `progress` field.",
+    "gpu_seconds": "Instrumented per-stage GPU seconds only. allocated_gpu_seconds stays null and no USD is derived.",
+    "segments": "Hash-bound per-segment records so the control plane can emit segment_completed events and persist artifacts before advancing.",
+    "missing_reason": "Composed as stage_<name>_<status> (for example stage_world_blocked), matching the format plumb/backends/baseten.py builds when it has to derive one."
   }
 }

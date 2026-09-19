@@ -1,25 +1,46 @@
-"""Declared, non-fabricating hooks for policy stacks with incompatible runtimes.
+"""Declared native contracts for the five non-OpenVLA benchmark policies.
 
-These are deliberately not partial reimplementations of Octo, MiniVLA,
-OpenPiZero, or SuSIE.  Their released wrappers carry important execution,
-normalization, and feedback semantics that must be certified from fixtures in
-their own environments.  The hooks make those constraints inspectable while
-remaining unable to invent a result on a CPU planning host.
+This module holds the *uncertified* baseline contract for each policy: the
+native observation history, native proposal horizon, temporal-ensembling flag,
+and normalization family that its released wrapper declares.  Every one of them
+keeps ``certified_execute_prefix=None`` and ``CapabilityStatus.BLOCKED``,
+because the spec is explicit that the executed prefix is unresolved until a
+golden action fixture is replayed against the pinned wrapper.
+
+The real loaders live beside this module in :mod:`plumb.policies.octo`,
+:mod:`plumb.policies.minivla`, :mod:`plumb.policies.openpizero`, and
+:mod:`plumb.policies.susie`.  They attach a :class:`PolicyCertification` to the
+contracts below; nothing else may change ``certified_execute_prefix``.
+
+:class:`ExternalPolicyHook` subclasses remain for the case where an operator
+owns a reviewed third-party wrapper in its own isolated image and wants to
+attach it without PLUMB's loader.  They still never synthesize an action.
 """
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from plumb.adapters.contracts import CapabilityStatus, PolicyContract
 
-from .contracts import AUTOEVAL_POLICY_SOURCE_COMMIT, OPEN_PI_ZERO_SOURCE_COMMIT, ExternalPolicyHook, ExternalPolicyProfile, NativePolicyCallable
+from .contracts import (
+    AUTOEVAL_POLICY_SOURCE_COMMIT,
+    OPEN_PI_ZERO_SOURCE_COMMIT,
+    ExternalPolicyHook,
+    ExternalPolicyProfile,
+    NativePolicyCallable,
+)
 
 
 AUTOEVAL_POLICY_SOURCE = (
     "https://github.com/zhouzypaul/auto_eval/blob/"
     + AUTOEVAL_POLICY_SOURCE_COMMIT
     + "/auto_eval/robot/policy.py"
+)
+AUTOEVAL_EVAL_CONFIG_SOURCE = (
+    "https://github.com/zhouzypaul/auto_eval/blob/"
+    + AUTOEVAL_POLICY_SOURCE_COMMIT
+    + "/scripts/configs/eval_config.py"
 )
 OPEN_PI_ZERO_SOURCE = (
     "https://github.com/allenzren/open-pi-zero/tree/" + OPEN_PI_ZERO_SOURCE_COMMIT
@@ -56,7 +77,7 @@ OCTO_BASE_V1_CONTRACT = PolicyContract(
     reset_rule="Reset two-image history using released wrapper semantics.",
     rng_rule="Pinned JAX/Octo RNG stream required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="Diagnostic contract only; no bundled JAX loader or certified prefix.",
+    limitation="Diagnostic contract only; certified prefix requires its own golden action fixture.",
 )
 
 MINIVLA_CONTRACT = PolicyContract(
@@ -71,7 +92,7 @@ MINIVLA_CONTRACT = PolicyContract(
     reset_rule="Released wrapper reset behavior must be preserved.",
     rng_rule="Pinned Torch RNG stream required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="No bundled MiniVLA/VQ loader; action chunk is declared, executed prefix is not certified.",
+    limitation="Action chunk is declared, executed prefix is not certified; pretrain_vq license is unresolved.",
 )
 
 OPEN_PI_ZERO_CONTRACT = PolicyContract(
@@ -116,8 +137,46 @@ SUSIE_LL_CONTRACT = PolicyContract(
     reset_rule="Reset released low-level policy state.",
     rng_rule="Pinned JAX/Flax RNG stream required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="No bundled goal-conditioned low-level loader; exact native execution remains fixture-blocked.",
+    limitation="Executes the low-level goal-conditioned policy directly; exact native execution remains fixture-blocked.",
 )
+
+
+NATIVE_POLICY_CONTRACTS: Mapping[str, PolicyContract] = {
+    "Octo-Small v1.0": OCTO_SMALL_V1_CONTRACT,
+    "Octo-Base v1.0 diagnostic": OCTO_BASE_V1_CONTRACT,
+    "MiniVLA": MINIVLA_CONTRACT,
+    "OpenPiZero": OPEN_PI_ZERO_CONTRACT,
+    "SuSIE": SUSIE_CONTRACT,
+    "SuSIE_LL": SUSIE_LL_CONTRACT,
+}
+
+
+def uncertified_contracts() -> Tuple[PolicyContract, ...]:
+    """Every declared native contract, all of them still uncertified."""
+
+    return tuple(NATIVE_POLICY_CONTRACTS.values())
+
+
+def native_adapter_types() -> Dict[str, Any]:
+    """Map contract name to its real loader class.
+
+    Imported lazily so this module stays free of an import cycle and so the
+    declarative contracts can be read without touching the loaders.
+    """
+
+    from .minivla import MiniVLAPolicyAdapter
+    from .octo import OctoBaseV1PolicyAdapter, OctoSmallV1PolicyAdapter
+    from .openpizero import OpenPiZeroPolicyAdapter
+    from .susie import SuSIELowLevelPolicyAdapter, SuSIEPolicyAdapter
+
+    return {
+        "Octo-Small v1.0": OctoSmallV1PolicyAdapter,
+        "Octo-Base v1.0 diagnostic": OctoBaseV1PolicyAdapter,
+        "MiniVLA": MiniVLAPolicyAdapter,
+        "OpenPiZero": OpenPiZeroPolicyAdapter,
+        "SuSIE": SuSIEPolicyAdapter,
+        "SuSIE_LL": SuSIELowLevelPolicyAdapter,
+    }
 
 
 class OctoSmallV1Policy(ExternalPolicyHook):

@@ -1,0 +1,188 @@
+{
+  "alpha_families": {
+    "cell_endpoint_envelopes": {
+      "alpha": 0.0008333333333333334,
+      "description": "30 cells x lower/upper endpoint",
+      "members": 60
+    },
+    "macro_pairwise": {
+      "alpha": 0.0033333333333333335,
+      "description": "15 policy pairs, equal-task macro",
+      "members": 15
+    },
+    "per_task_pairwise": {
+      "alpha": 0.0006666666666666668,
+      "description": "15 policy pairs x 5 tasks",
+      "members": 75
+    }
+  },
+  "amends": null,
+  "analysis": {
+    "bootstrap_unit": "start_state_bundle_within_fixed_task",
+    "code_revision": "88c1b0dec583327d36d2f6dd9753fc57e54c188f",
+    "mmrv_implementation": "simpler_env.utils.metrics (perf_sim, perf_real)",
+    "opt_ins": [
+      "reliability",
+      "mdd",
+      "mmrv",
+      "advanced_inference",
+      "cost_fidelity",
+      "drift"
+    ]
+  },
+  "asset_lock_hash": "sha256:2615ae462a00e82c335d91ff52a36b8b7ffad2109e03c75a8512ef726dc927de",
+  "cohorts": [
+    "primary",
+    "development",
+    "calibration",
+    "cost_confirmation",
+    "reverse_validation"
+  ],
+  "cost_selection_rule": {
+    "confirmation": "required on a disjoint cost-confirmation panel before any qualified claim",
+    "held_fixed": [
+      "task_caps",
+      "starts",
+      "seeds",
+      "judge"
+    ],
+    "horizon_guard": "fixed task horizon and coverage travel with every point; a shorter task is not a cheaper equivalent",
+    "preserve_failures": true,
+    "rule": "cheapest development-panel point satisfying all preregistered tolerances",
+    "search_space": [
+      "resolution",
+      "denoise_steps",
+      "chunk_partition",
+      "batch_size"
+    ]
+  },
+  "created_at": "2026-09-19T09:59:09.579502+00:00",
+  "exclusion_policy": {
+    "deletion_permitted": false,
+    "judge_no_quorum": "unevaluable_for_primary_rates_retained_in_coverage",
+    "judge_refusal": "explicit_missing_outcome",
+    "never_executed_cell": "incomplete_not_a_zero_success_measurement",
+    "partial_identification": "horowitz_manski_bounds_reported_alongside_complete_case",
+    "primary_endpoint": "Y = 1{evaluable AND success}; missing outcomes are 0 only for this labelled lower bound",
+    "terminal_service_failure": "retained_in_intent_to_evaluate_denominator",
+    "validity_invalid": "unevaluable_for_primary_rates_retained_in_coverage",
+    "validity_unknown": "unevaluable_for_primary_rates_retained_in_coverage"
+  },
+  "frozen": true,
+  "judge_sampling": {
+    "max_new_tokens": 512,
+    "progress_aggregation": "lower_median_of_agreeing_decisive_samples",
+    "quorum": 3,
+    "retries_per_sample": 1,
+    "retry_eligible": [
+      "schema_error",
+      "transient_transport_error"
+    ],
+    "sample_count": 5,
+    "temperature": 0.7,
+    "top_p": 1.0
+  },
+  "matrix": {
+    "policies": [
+      "OpenVLA",
+      "OpenPiZero",
+      "Octo",
+      "MiniVLA",
+      "SuSIE",
+      "SuSIE_LL"
+    ],
+    "starts_per_task": 50,
+    "task_horizons": {
+      "close_drawer": 70,
+      "fold_cloth": 80,
+      "open_drawer": 70,
+      "to_basket": 100,
+      "to_sink": 100
+    },
+    "task_prompts": {
+      "close_drawer": "Close the drawer",
+      "fold_cloth": "fold the cloth from top right to bottom left",
+      "open_drawer": "Open the drawer",
+      "to_basket": "Put the eggplant in the yellow basket",
+      "to_sink": "Put the eggplant in the blue sink"
+    },
+    "tasks": [
+      "open_drawer",
+      "close_drawer",
+      "to_basket",
+      "to_sink",
+      "fold_cloth"
+    ],
+    "total_planned_episodes": 1500
+  },
+  "notes": [
+    "Tolerances are candidates until a PreregistrationRecord reports status=registered.",
+    "A changed adapter, backend, judge or operating point invalidates its dependent gates."
+  ],
+  "operating_point_id": null,
+  "preregistration": {
+    "blocking_reasons": [
+      "no remote preregistration URI",
+      "no commit bound to the protocol hash",
+      "no externally auditable timestamp",
+      "preregistration artifact is not signed"
+    ],
+    "commit": null,
+    "external_timestamp": null,
+    "kind": "signed_git_tag",
+    "notes": [
+      "tag prereg/protocol-v1 does not exist locally"
+    ],
+    "protocol_sha256": "sha256:1f1c2d13ae3b9ec908ebbc485dad2d0cfbec4a938626a0190d4fb491aa9538af",
+    "signed": false,
+    "status": "unregistered",
+    "tag": null,
+    "uri": null,
+    "verified_at": null
+  },
+  "protocol_id": "protocol-v1",
+  "protocol_sha256": "sha256:1f1c2d13ae3b9ec908ebbc485dad2d0cfbec4a938626a0190d4fb491aa9538af",
+  "scenario_manifest_hash": null,
+  "schema_version": 1,
+  "seeds": {
+    "derivation": "sha256(root, policy, task, start_id)",
+    "root": 20260919
+  },
+  "tolerances": {
+    "gate_a": {
+      "frame_count_exact": true,
+      "max_nonfinite_fraction": 0.0
+    },
+    "gate_b": {
+      "max_suffix_invariance_mae": 0.25,
+      "min_intervention_effect_mae": 0.5,
+      "repeat_determinism_max_mae": 0.0
+    },
+    "gate_c": {
+      "min_distinct_lineages_per_task": 50,
+      "min_starts_per_task": 50
+    },
+    "gate_d": {
+      "max_leniency_offset": 0.15,
+      "min_binary_kappa": 0.6,
+      "min_consensus_coverage": 0.8,
+      "min_weighted_progress_kappa": 0.6
+    },
+    "gate_e": {
+      "max_cell_rate_error": 0.1,
+      "min_coverage": 0.8,
+      "min_pairwise_order_agreement": 0.9
+    },
+    "gate_f": {
+      "max_burst_seconds": 60.0,
+      "max_total_demonstration_usd": 11.25,
+      "required_rehearsals": 3
+    },
+    "power": {
+      "bootstrap_replicates": 10000,
+      "mdd_simulations_per_gap": 10000,
+      "power_target": 0.8,
+      "split_half_repetitions": 1000
+    }
+  }
+}

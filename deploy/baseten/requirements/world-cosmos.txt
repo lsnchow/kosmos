@@ -1,0 +1,77 @@
+# PLUMB Baseten image requirements — world model (Cosmos3, Diffusers FD path)
+#
+# Consumed by: deploy/baseten/chain.py -> WorldWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY311  (transformers 5.17.0 requires >=3.10)
+# Adapter:     plumb.adapters.worlds.Cosmos3NanoDiffusersAdapter
+# Re-resolved against public PyPI / public git revisions on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# HANDOFF.md pins the Alliance/ComputeCanada locally-built wheels
+# `torch==2.6.0+computecanada` and `transformers==5.17.0+computecanada`.
+# Those local-build version strings DO NOT EXIST on PyPI and cannot be
+# installed in a Baseten image.  Every pin below is the *public upstream*
+# release of the same version number, which is a different binary build.
+#
+# Therefore every number recorded in deploy/baseten/cluster-runtime-evidence.json
+# for this stack — 167.683719175 s model load, 4.524269459 s inference,
+# 36,521,475,584 B GPU peak, resolution tier, frame counts — is NOT evidence
+# about this image and MUST be re-measured on Baseten before it is quoted in
+# any telemetry, capacity plan, or cost figure.  This is AGENT-BUILD-SPEC.md
+# §12's point, reinforced by §7: "there is no assumed universal throughput
+# preset"; hardware, batching, and concurrency come from measured memory and
+# full-chain throughput, not from these transplanted numbers.
+#
+# This file is a reviewed lock *input*, not a lock: no --require-hashes, no
+# container digest, no resolved transitive set.  DEPLOY.md step 9 captures the
+# `uv pip freeze` output and the built image digest that turn it into a lock and
+# fill `workers.WorldWorker.deployment_container_digest` in model-contracts.json.
+# ---------------------------------------------------------------------------
+
+# CUDA build channel.  PyPI's default torch 2.6.0 wheel is cu124; the explicit
+# extra index keeps that choice auditable instead of implicit.  It is an extra
+# (not primary) index so non-torch packages still resolve from PyPI.
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch==2.6.0
+torchvision==0.21.0
+
+# Diffusers is installed from the EXACT source revision recorded in
+# plumb/adapters/worlds.py::DIFFUSERS_COSMOS3_PIN, because `Cosmos3OmniPipeline`
+# and `CosmosActionCondition` are not in any tagged PyPI release (the cluster
+# reported `diffusers 0.41.0.dev0`).  An immutable commit is required: a branch
+# name would silently change the request serializer under a frozen protocol.
+diffusers @ git+https://github.com/huggingface/diffusers@a3e0b8ec235c27a6c17a21976daf7fd32d819d05
+
+# transformers 5.17.0 constrains huggingface-hub<2.0,>=1.5.0 and
+# tokenizers<0.24.0,>=0.23.1; the pins below sit inside those ranges and match
+# the versions HANDOFF.md recorded upstream (Transformers 5.17, hub 1.32).
+transformers==5.17.0
+huggingface-hub==1.32.0
+tokenizers==0.23.2
+safetensors==0.8.0
+accelerate==1.15.0
+sentencepiece==0.2.0
+
+# Media + array handling for conditioning frames and returned video.
+numpy==1.26.4
+pillow==11.1.0
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+opencv-python-headless==4.11.0.86
+einops==0.8.1
+
+# Control-plane contracts shared with the entrypoint payloads.
+pydantic==2.11.7
+
+# UNRESOLVED, deliberately absent:
+#   * No `nvidia/Cosmos3-Nano` download line.  Weights arrive through
+#     chains.Assets(cached=[...]) in chain.py, which mounts them under
+#     /app/model_cache/<volume_folder>; the adapter is local_files_only=True.
+#   * No `nvidia/Cosmos-1.0-Guardrail`.  The fixed robotics-fixture profile
+#     uses enable_safety_checker=False (AGENT-BUILD-SPEC.md §1) and that choice
+#     is recorded rather than silently inherited from another backend.
+#   * No vLLM-Omni / SGLang packages.  Those are a *different* compatibility
+#     profile with a different request serializer and would need their own
+#     Gate A fixture; they are not a drop-in alternative.

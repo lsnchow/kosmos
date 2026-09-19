@@ -68,4 +68,5 @@ Virtual success is not automatically real-world success. Show indeterminate orde
 
 - [AGENT-BUILD-SPEC.md](AGENT-BUILD-SPEC.md) — implementation requirements, evidence, gates, and known missing dependencies.
 - [README.md](README.md) — run the implemented app; [HANDOFF.md](HANDOFF.md) — cluster jobs, source releases, diagnostics, and continuation instructions.
-- **Missing from this workspace:** `BUILD-SPEC.md`, `SCRIPT.md`, `htn2026-field-guide.md`, and `reverse_validation.py`. Recover their original sources before treating them as evidence. Reverse validation remains planned; its original question and script have not been supplied.
+- [BUILD-SPEC.md](BUILD-SPEC.md) and [SCRIPT.md](SCRIPT.md) — **recovered 2026-09-19.** SCRIPT.md supplies the word-for-word 180-second sequence and, at its Q&A line, specifies the reverse-validation question: whether training loss can validate an LLM judge. The answer is no, and the mechanism is that scrambling a judge's per-item scores toward chance leaves the loss correlation pinned at about -0.92. `reverse_validation.py` is implemented from that specification.
+- **Still missing from this workspace:** `htn2026-field-guide.md`. Nothing in the build depends on it.

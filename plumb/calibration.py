@@ -937,7 +937,30 @@ def _agreement_metrics(pairs: Sequence[Tuple[Annotation, Annotation]]) -> Dict[s
             [(first.completion_evidence, second.completion_evidence) for first, second in pairs], COMPLETION_VALUES
         ),
         "progress": _weighted_progress_agreement([(first.progress, second.progress) for first, second in pairs]),
+        "binary_success": _binary_success_agreement(pairs),
     }
+
+
+def _binary_success_agreement(pairs: Sequence[Tuple[Annotation, Annotation]]) -> Dict[str, Any]:
+    """Cohen's kappa on the two-category visible-completion label.
+
+    Only pairs where *both* annotators were decisive contribute.  An indecisive
+    label is not recoded as a failure, so ``n`` is smaller than the paired clip
+    count and ``indecisive_pairs`` records the difference rather than hiding it.
+    """
+
+    decisive = [
+        (first.binary_success, second.binary_success)
+        for first, second in pairs
+        if first.binary_success is not None and second.binary_success is not None
+    ]
+    metrics = _categorical_agreement(
+        [("met" if first else "not_met", "met" if second else "not_met") for first, second in decisive],
+        ("met", "not_met"),
+    )
+    metrics["indecisive_pairs"] = len(pairs) - len(decisive)
+    metrics["paired_clips"] = len(pairs)
+    return metrics
 
 
 def _categorical_agreement(pairs: Sequence[Tuple[str, str]], categories: Sequence[str]) -> Dict[str, Any]:
@@ -1638,6 +1661,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report.add_argument("--judge-reports", action="append")
     report.add_argument("--protocol")
     report.add_argument("--tolerances")
+    report.add_argument(
+        "--annotator-registry",
+        help="Annotator registry JSON declaring each annotator_type (human/model/external_label).",
+    )
+    report.add_argument(
+        "--output",
+        help="Write results/judge_calibration.json atomically; requires --annotator-registry.",
+    )
 
     args = parser.parse_args(argv)
     try:
@@ -1673,6 +1704,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             protocol=protocol,
             tolerances=tolerances,
         )
+        if args.output:
+            if not args.annotator_registry:
+                raise CalibrationError(
+                    "--output requires --annotator-registry: the report records each annotator's "
+                    "declared type, and a missing type is never treated as human"
+                )
+            # Imported lazily so this module stays importable without the
+            # annotation surface, and so there is no import cycle.
+            from .annotation import AnnotationError, AnnotatorRegistry, write_judge_calibration_json
+
+            try:
+                registry = AnnotatorRegistry.load(args.annotator_registry)
+                if set(registry.annotator_ids) != set(args.annotators):
+                    raise CalibrationError("--annotators must match the annotator registry IDs exactly")
+                written = write_judge_calibration_json(
+                    args.output,
+                    result,
+                    registry,
+                    manifest=manifest,
+                    annotation_rows=[
+                        {"clip_id": label.clip_id, "annotator_id": label.annotator_id}
+                        for label in human_labels
+                    ],
+                )
+            except AnnotationError as error:
+                raise CalibrationError(str(error)) from error
+            print(json.dumps(written, ensure_ascii=False, sort_keys=True, allow_nan=False))
+            return 0
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False))
         return 0
     except CalibrationError as error:

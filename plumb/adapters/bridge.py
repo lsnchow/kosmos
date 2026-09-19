@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from .contracts import CapabilityResult, CapabilityStatus, COSMOS3_FRAMEWORK_COMMIT, FeedbackMode
 

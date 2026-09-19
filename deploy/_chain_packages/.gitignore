@@ -1,0 +1,7 @@
+# Build staging only. `deploy/baseten/stage_packages.py` fills this directory
+# with a copy of the `plumb` package immediately before `truss chains push`,
+# because chain.py declares it as `DockerImage(external_package_dirs=[...])`.
+# The copies are derived artifacts and are never the source of truth.
+*
+!.gitignore
+!README.md

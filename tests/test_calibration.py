@@ -367,5 +367,162 @@ class AnnotationAndReportTests(unittest.TestCase):
         self.assertEqual(2, labels[0].progress)
 
 
+class SplitPlanTests(unittest.TestCase):
+    def test_the_twenty_and_ten_plan_is_enforced_per_task_not_only_in_total(self):
+        rows = full_manifest()
+        # Move one held-out clip from open_drawer to close_drawer: the total
+        # stays 150 but two task cells are now wrong.
+        target = next(
+            row for row in rows if row["task"] == "open_drawer" and row["split"] == HELDOUT_SPLIT
+        )
+        target["task"] = "close_drawer"
+        with self.assertRaises(CalibrationError) as raised:
+            validate_manifest(rows)
+        self.assertIn("requires 10 heldout clips for open_drawer", str(raised.exception))
+
+    def test_a_manifest_short_of_one_hundred_and_fifty_clips_is_refused(self):
+        rows = full_manifest()[:-1]
+        with self.assertRaises(CalibrationError) as raised:
+            validate_manifest(rows)
+        self.assertIn("exactly 150 clips", str(raised.exception))
+
+    def test_a_partial_manifest_is_only_accepted_when_the_caller_says_so(self):
+        rows = full_manifest()[:5]
+        with self.assertRaises(CalibrationError):
+            validate_manifest(rows)
+        self.assertEqual(5, len(validate_manifest(rows, require_full_plan=False)))
+
+
+class BlindedFieldContractTests(unittest.TestCase):
+    def test_the_allowlist_and_denylist_never_overlap(self):
+        from plumb.calibration import BLINDED_EXPORT_FIELDS, _FORBIDDEN_BLIND_FIELDS
+
+        self.assertTrue(_FORBIDDEN_BLIND_FIELDS.isdisjoint(set(BLINDED_EXPORT_FIELDS)))
+        for name in ("policy", "backend", "world_seed", "cohort", "condition", "gate_status"):
+            self.assertIn(name, _FORBIDDEN_BLIND_FIELDS)
+
+    def test_a_blinded_row_carries_no_field_outside_the_allowlist(self):
+        from plumb.calibration import BLINDED_EXPORT_FIELDS
+
+        clips = validate_manifest(full_manifest())
+        for row in blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS):
+            self.assertEqual(set(BLINDED_EXPORT_FIELDS), set(row))
+
+
+class BinarySuccessAgreementTests(unittest.TestCase):
+    def test_indecisive_labels_are_retained_as_missing_not_recoded_as_failure(self):
+        clips = validate_manifest(full_manifest())
+        rows = complete_human_labels(clips)
+        heldout = next(clip for clip in clips if clip.split == HELDOUT_SPLIT)
+        for row in rows:
+            if row["clip_id"] == heldout.clip_id:
+                row.update({"integrity": "uncertain", "completion_evidence": "uncertain", "progress": 2})
+        report = build_calibration_report(clips, rows, ANNOTATORS)
+        binary = report["human_human_agreement"]["pooled"]["binary_success"]
+        self.assertEqual(50, binary["paired_clips"])
+        self.assertEqual(1, binary["indecisive_pairs"])
+        self.assertEqual(49, binary["n"])
+        self.assertEqual(1.0, binary["raw_agreement"])
+
+    def test_a_degenerate_binary_kappa_is_null_and_never_nan(self):
+        report = build_calibration_report(full_manifest(), complete_human_labels(full_manifest()), ANNOTATORS)
+        binary = report["human_human_agreement"]["pooled"]["binary_success"]
+        # Every label is the same category, so expected agreement is 1 and
+        # kappa is undefined. It must be null, not NaN and not zero.
+        self.assertIsNone(binary["kappa"])
+        self.assertEqual(1.0, binary["raw_agreement"])
+        encoded = json.dumps(report, allow_nan=False)
+        self.assertNotIn("NaN", encoded)
+
+
+class CalibrationJsonOutputTests(unittest.TestCase):
+    def test_the_report_command_writes_the_artifact_atomically(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(full_manifest()))
+            labels_path = root / "labels.jsonl"
+            clips = validate_manifest(full_manifest())
+            surrogates = ("external:autoeval", "model:qwen")
+            assignments = deterministic_annotation_assignments(clips, surrogates)
+            rows = [
+                annotation_row(clip, annotator_id)
+                for clip in clips
+                for annotator_id in assignments[clip.clip_id]
+            ]
+            labels_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            registry_path = root / "annotators.json"
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "annotators": [
+                            {
+                                "annotator_id": "external:autoeval",
+                                "annotator_type": "external_label",
+                                "label_source": "AutoEval classifier labels",
+                                "source_uri": "hf://datasets/zhouzypaul/auto_eval",
+                            },
+                            {
+                                "annotator_id": "model:qwen",
+                                "annotator_type": "model",
+                                "model_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+                                "model_revision": "c" * 40,
+                            },
+                        ]
+                    }
+                )
+            )
+            output = root / "results" / "judge_calibration.json"
+            exit_code = main(
+                [
+                    "report",
+                    "--manifest",
+                    str(manifest_path),
+                    "--annotations",
+                    str(labels_path),
+                    "--annotators",
+                    "external:autoeval",
+                    "model:qwen",
+                    "--annotator-registry",
+                    str(registry_path),
+                    "--output",
+                    str(output),
+                ]
+            )
+            self.assertEqual(0, exit_code)
+            payload = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual("external_label + model_reference", payload["calibration_class"])
+            self.assertEqual("pass_with_limitations", payload["gate_d"]["status"]) if payload["gate_d"][
+                "thresholds_satisfied"
+            ] else self.assertFalse(payload["gate_d"]["passed"])
+            self.assertEqual(["human_annotation"], payload["gate_d"]["open_dependency_names"])
+            self.assertNotIn("NaN", output.read_text(encoding="utf-8"))
+            self.assertEqual(
+                ["judge_calibration.json"], [item.name for item in output.parent.iterdir()]
+            )
+
+    def test_the_output_option_refuses_to_guess_an_annotator_type(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path = root / "manifest.json"
+            manifest_path.write_text(json.dumps(full_manifest()))
+            labels_path = root / "labels.jsonl"
+            labels_path.write_text("")
+            with self.assertRaises(SystemExit):
+                main(
+                    [
+                        "report",
+                        "--manifest",
+                        str(manifest_path),
+                        "--annotations",
+                        str(labels_path),
+                        "--annotators",
+                        *ANNOTATORS,
+                        "--output",
+                        str(root / "out.json"),
+                    ]
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

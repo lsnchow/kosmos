@@ -35,12 +35,45 @@ def test_fixture_run_is_persisted_and_never_qualified(tmp_path):
 
 def test_unqualified_real_run_and_unknown_inputs_rejected(tmp_path):
     with TestClient(create_app(tmp_path / "data")) as client:
-        assert client.post("/api/runs", json={"mode": "qualified"}).status_code == 409
+        # "qualified" is not a settable mode at all: qualification is decided by
+        # QualificationValidator from frozen manifests, never asserted by a caller.
+        rejected = client.post("/api/runs", json={"mode": "qualified"})
+        assert rejected.status_code == 422
+        assert "QualificationValidator" in rejected.text
         assert client.post("/api/runs", json={"policies": ["invented"]}).status_code == 422
         assert client.post("/api/runs", json={"policies": []}).status_code == 422
         assert client.get("/api/runs/missing").status_code == 404
         assert client.get("/api/sweeps").json()["points"] == []
         assert client.get("/api/gates").json()["qualified"] is False
+
+
+def test_real_model_backend_is_refused_with_named_gate_evidence(tmp_path):
+    """A gated backend must be refused with its blockers, not silently downgraded."""
+
+    with TestClient(create_app(tmp_path / "data")) as client:
+        health = client.get("/api/health").json()
+        assert "baseten" not in health["available_backends"]
+        registered = {entry["name"]: entry for entry in health["registered_backends"]}
+        assert registered["baseten"]["available"] is False
+        assert registered["baseten"]["blocking_reasons"], "a blocked backend must say why"
+
+        response = client.post(
+            "/api/runs", json={"mode": "qualification", "backend": "baseten", "starts_per_task": 1}
+        )
+        assert response.status_code == 409, response.text
+        detail = response.json()["detail"]
+        assert detail["blocking_reasons"], "the refusal must name its blockers"
+        # The gate ledger travels with the refusal so the console can show it.
+        assert detail["gates"]["qualified"] is False
+        assert {item["id"] for item in detail["gates"]["gates"]} == {"A", "B", "C", "D", "E", "F"}
+        assert all(item["status"] == "not_run" for item in detail["gates"]["gates"])
+
+
+def test_synthetic_backend_cannot_claim_a_real_mode(tmp_path):
+    with TestClient(create_app(tmp_path / "data")) as client:
+        response = client.post("/api/runs", json={"mode": "qualification", "backend": "synthetic"})
+        assert response.status_code == 422
+        assert "synthetic" in response.text
 
 
 def test_artifacts_cannot_escape_data_directory(tmp_path):
@@ -51,14 +84,50 @@ def test_artifacts_cannot_escape_data_directory(tmp_path):
         assert client.get("/api/artifacts/escape.json").status_code == 404
 
 
-def test_freeplay_is_bounded_and_explicitly_synthetic(tmp_path):
+def test_freeplay_refuses_to_fabricate_a_frame(tmp_path):
+    """Free-play exists to prove the video is generated live.
+
+    With no certified world backend it must fail loudly rather than return a
+    placeholder frame, because a placeholder would defeat the entire point of
+    the beat.
+    """
+
     with TestClient(create_app(tmp_path / "data")) as client:
-        response = client.post("/api/freeplay/step", json={"action": [999, -999, 999, 0, 0, 0, 8]})
-        assert response.status_code == 200
-        body = response.json()
-        assert body["qualified"] is False and body["mode"] == "synthetic"
-        assert body["state"] == {"x": 0.53, "y": 0.47, "z": 0.53, "gripper": 1.0}
-        assert client.post("/api/freeplay/step", json={"action": [0]}).status_code == 422
+        response = client.post("/api/freeplay/step", json={"direction": "right"})
+        assert response.status_code == 503, response.text
+        detail = response.json()["detail"]
+        assert detail["missing"], "the refusal must name what is missing"
+        assert "placeholder" in detail["reason"]
+        # The commanded chunk is still reported so the caller can see that one
+        # keypress expands to a whole action chunk.
+        assert detail["commanded_chunk"]["rows"] == 16
+        assert detail["commanded_chunk"]["direction"] == "right"
+
+
+def test_freeplay_takes_a_direction_not_an_arbitrary_trajectory(tmp_path):
+    with TestClient(create_app(tmp_path / "data")) as client:
+        # A raw action vector is not an accepted input: expanding the chunk
+        # server-side is what keeps a client from commanding anything it likes.
+        assert client.post("/api/freeplay/step", json={"action": [999, -999, 999, 0, 0, 0, 8]}).status_code == 422
+        assert client.post("/api/freeplay/step", json={"direction": "teleport"}).status_code == 422
+        # Release-to-stop never reaches the world model and is always available.
+        stopped = client.post("/api/freeplay/step", json={"direction": "stop"})
+        assert stopped.status_code == 200
+        body = stopped.json()
+        assert body["commanded_rows"] == 0
+        assert body["scored"] is False and body["qualified"] is False
+
+
+def test_freeplay_chunk_is_constant_and_within_bridge_action_ranges():
+    from plumb.api import _freeplay_chunk
+
+    chunk = _freeplay_chunk("right", None)
+    assert len(chunk) == 16, "one keypress commands a whole chunk"
+    assert all(row == chunk[0] for row in chunk), "the chunk is constant in one direction"
+    # Observed Bridge translation range is about +/-0.015; free-play must not be
+    # able to command an implausible jump.
+    assert all(abs(value) <= 0.015 for row in chunk for value in row)
+    assert _freeplay_chunk("stop", None)[0] == [0.0] * 7
 
 
 def test_imported_smoke_evidence_never_becomes_qualification(tmp_path):

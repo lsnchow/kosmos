@@ -1,0 +1,45 @@
+# PLUMB Baseten image requirements — CPU RolloutController entrypoint
+#
+# Consumed by: deploy/baseten/chain.py -> RolloutController.remote_config.docker_image
+#              and PolicyRouter-side dispatch (the router is entrypoint-side code,
+#              not a separate Chainlet, so it shares this image).
+# Base image:  chains.BasetenImage.PY311
+# Re-resolved against public PyPI on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# The controller was never benchmarked on the ComputeCanada clusters, and the
+# `+computecanada` wheel builds in HANDOFF.md do not exist on PyPI.  Controller
+# CPU time, per-stage RPC latency, and the number of controller replicas needed to
+# keep 100 world replicas busy are all unmeasured and must be measured on Baseten
+# (AGENT-BUILD-SPEC.md §12; §7 forbids an assumed universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+#
+# DELIBERATELY TINY.  The entrypoint holds no model.  It compiles Bridge actions
+# on the CPU with plumb.adapters.bridge (pure Python: no torch, no numpy needed
+# for the transforms), sequences the per-episode policy -> world feedback loop,
+# and returns typed results.  Adding a model framework here would make the
+# entrypoint a cold-start bottleneck for the 60-second burst for no benefit.
+
+pydantic==2.11.7
+pillow==11.1.0
+numpy==1.26.4
+
+# `pillow` and `numpy` are here only to decode/encode the PNG frame payloads that
+# cross Chainlet RPC boundaries and to hash pixels for the segment ledger.  They
+# are NOT used to synthesize, resample, pad, or repair a frame: the controller
+# drops the echoed conditioning frame and otherwise passes generated pixels
+# through unchanged.
+#
+# DELIBERATELY ABSENT:
+#   * No torch/JAX/diffusers.  Policy, world, and judge work happens in the
+#     GPU Chainlets.
+#   * No queue client.  Only the Chain entrypoint is invoked through the external
+#     async queue (/async_run_remote); internal Chainlet calls are awaited RPCs
+#     and must never re-enter the queue (AGENT-BUILD-SPEC.md §7).
+#   * No database/object-store client.  The durable run ledger, outbox, artifact
+#     writes, retry-attempt records, and callback reconciliation belong to the
+#     application control plane, not to this stateless worker.

@@ -1,0 +1,78 @@
+# PLUMB Baseten image requirements — Octo-Small v1.0 (and Octo-Base diagnostic)
+#
+# Consumed by: deploy/baseten/chain.py -> OctoWorker.remote_config.docker_image
+# Base image:  chains.BasetenImage.PY310   (AGENT-BUILD-SPEC.md §1: "python 3.10")
+# Adapter:     plumb.policies.native.OctoSmallV1Policy / OctoBaseV1Policy
+# Re-resolved against public PyPI and public git revisions on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# No Octo diagnostic was ever run on the ComputeCanada clusters, so there is no
+# transferable evidence at all for this stack: no latency, no GPU peak memory,
+# no executed-prefix certification.  The Alliance `+computecanada` wheel pins
+# recorded in HANDOFF.md for the sibling torch environments do not exist on PyPI
+# and are irrelevant to a JAX image.  Everything about this worker's memory,
+# batch size, and throughput must be measured on Baseten before any capacity,
+# concurrency, or cost value is quoted (AGENT-BUILD-SPEC.md §12; §7 forbids an
+# assumed universal throughput preset).
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+#
+# DEVIATION FROM THE SPEC, RECORDED DELIBERATELY:
+# AGENT-BUILD-SPEC.md §1 lists `jax[cuda11_pip]==0.4.20`.  This image installs
+# `jax[cuda12_pip]==0.4.20` instead.  Reason: the CUDA 11 jaxlib build targets
+# cuDNN 8.6 / CUDA 11.8 and there is no supported CUDA 11 driver path on the
+# modern Baseten H100/A100 instance types used by the rest of this chain.  The
+# JAX *Python* version is unchanged (0.4.20), so Octo's own code path is
+# unchanged, but the compiled jaxlib binary is NOT the one the upstream Octo
+# release was validated against.  That makes this a named deviation that Gate B
+# must re-certify for Octo specifically; it is not a free substitution.
+
+# jaxlib CUDA builds are published on Google's find-links index, not PyPI.
+-f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+jax[cuda12_pip]==0.4.20
+# Pinned explicitly so a resolver cannot silently pick a CPU jaxlib and make an
+# "it ran" result meaningless.  This exact local version only exists on the
+# find-links index above.
+jaxlib==0.4.20+cuda12.cudnn89
+
+# Octo v1.0's released training/inference stack.  Versions are those that
+# resolve against jax 0.4.20 (flax 0.7.5 requires jax>=0.4.19).
+flax==0.7.5
+optax==0.1.7
+orbax-checkpoint==0.4.4
+chex==0.1.85
+distrax==0.1.5
+ml-collections==0.1.1
+einops==0.8.1
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# Octo's dataset/observation wrappers import TensorFlow and dlimp even for
+# inference-only use.  TF is installed CPU-only on purpose: two frameworks must
+# not both claim the GPU inside one replica.
+tensorflow-cpu==2.15.0
+tensorflow-probability==0.23.0
+tensorflow-datasets==4.9.4
+dlimp @ git+https://github.com/kvablack/dlimp@5edaa4691567873d495633f2708982b42edf1972
+
+# Octo itself is not on PyPI.  Immutable revision resolved from
+# https://api.github.com/repos/octo-models/octo/commits at 2026-09-19T08:45:06Z.
+octo @ git+https://github.com/octo-models/octo@241fb3514b7c40957a86d869fecb7c7fc353f540
+
+# UNRESOLVED, deliberately absent:
+#   * No checkpoint download.  `rail-berkeley/octo-small` weights live at
+#     `270000/default/checkpoint` — NOT at the repo root; `resolve/main/checkpoint`
+#     returns 404 — and arrive through chains.Assets(cached=[...]).
+#   * Must be Octo v1.0.  `octo-small-1.5` is a different policy identity and is
+#     explicitly excluded by AGENT-BUILD-SPEC.md §1.
+#   * No loader is wired: plumb.policies.native.OctoSmallV1Policy is an
+#     ExternalPolicyHook with no bundled wrapper, so OctoWorker returns
+#     status="blocked" until a reviewed `loader_hook` and its golden-action
+#     fixture exist.  Installing these packages does not create that loader,
+#     and does not certify obs_horizon=2 / pred_horizon=4 / temporal ensembling
+#     or the executed prefix.
