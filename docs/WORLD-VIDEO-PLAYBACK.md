@@ -29,7 +29,8 @@ Verification: all37 MP4s decoded with FFmpeg and were played end-to-end in
 Chromium's real native player, automatically advancing through the complete
 queue. No JavaScript errors or POST/model requests occurred; the 390px mobile
 view had no horizontal overflow. All70 unique MP4/report links returned206 for
-byte-range reads. Tests:1360 Python passed/6skipped,261 frontend passed/build.
+byte-range reads. Tests:1360 Python passed/6skipped. After merging the latest
+landing-page changes,256 frontend tests passed and the production build passed.
 
 Recordings retain “recorded model output / not live / unqualified” labels.
 Some have visible distortion. Their presence is not proof of physical fidelity,

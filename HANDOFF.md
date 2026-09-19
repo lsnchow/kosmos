@@ -11,7 +11,8 @@ synthetic/episode grid is retained under Run frames, not relabelled or deleted.
 Catalog `/api/world-videos` verifies output hashes and excludes source footage.
 All37 fully decoded and played through in a real browser;70 media/report range
 reads passed, zero JS errors/POSTs, mobile390px no overflow. No GPU job launched.
-Tests:1360 Python passed/6skipped;261 frontend passed/build passed.
+Tests:1360 Python passed/6skipped;256 frontend passed/build after the latest
+landing-page merge (abd70ec preserves origin/main06bbf55 and the video queue).
 See docs/WORLD-VIDEO-PLAYBACK.md. Model generation/scoring gates remain unchanged.
 
 ## Baseten diagnostic MVP verified — localhost E2E is live
