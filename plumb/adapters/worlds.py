@@ -14,6 +14,7 @@ from .contracts import (
     CapabilityResult,
     CapabilityStatus,
     COSMOS3_DIFFUSERS_SOURCE,
+    FUSED_BATCH_EQUAL_SHARE,
     IRASIM_COMMIT,
     ServerTiming,
     WorldRequest,
@@ -23,6 +24,11 @@ from .contracts import (
 
 DIFFUSERS_COSMOS3_PIN = "a3e0b8ec235c27a6c17a21976daf7fd32d819d05"
 COSMOS3_NANO_MODEL_REVISION = "e59a53c25979a090fa8706c9acc0c254a6e89b92"
+#: Hub identifiers for the two selectable arms.  They are *labels*: a profile
+#: carries whichever one matches the weights it was pointed at, so the speed arm
+#: cannot emit a Nano label into a backend-profile hash or an episode record.
+COSMOS3_NANO_MODEL_ID = "nvidia/Cosmos3-Nano"
+COSMOS3_EDGE_MODEL_ID = "nvidia/Cosmos3-Edge"
 COSMOS3_VENDOR_FIXTURE = (
     "https://raw.githubusercontent.com/NVIDIA/cosmos-framework/"
     "c23e51f2f157ae3e51cfcd86ebfb5464850894f2/inputs/omni/action_forward_dynamics_robot.json"
@@ -48,6 +54,16 @@ class BackendContractError(ValueError):
 
 class BackendUnavailableError(RuntimeError):
     """A local model/dependency/loader required for a real call is missing."""
+
+
+class MixedBatchError(BackendContractError):
+    """The submitted batch cannot be one forward pass.
+
+    Raised instead of quietly splitting the batch into several calls.  A silent
+    split would let a deployment report a batch size it never actually fused,
+    which would make every GPU-second-per-item attribution derived from that
+    batch size wrong.
+    """
 
 
 class CertificationError(ValueError):
@@ -438,11 +454,24 @@ class Cosmos3NanoDiffusersProfile:
     length and reports ``action_length_certification_class="uncertified_default"``.
     Supplying a certification requires ``allowed_action_lengths`` to equal its
     certified supported lengths exactly, so a profile can never claim a length
-    the deployment never demonstrated.
+    the deployment never demonstrated.  A certified-supported length is no
+    longer an open Gate-B probe, so ``__post_init__`` removes it from
+    ``probe_action_lengths`` and records the removal in
+    ``probe_lengths_superseded_by_certification``.  That is what makes a
+    certification including length 1 (the one-action-per-call cadence Octo uses
+    under temporal ensembling) representable next to the default probe list
+    instead of colliding with it.
+
+    The class name records the reviewed *Nano* serializer, but ``model_id`` is a
+    field rather than a constant so the ``Cosmos3-Edge`` speed arm labels itself
+    honestly in the backend-profile hash and in every episode record.  Pointing
+    ``local_model_path`` at Edge weights while leaving ``model_id`` at the Nano
+    default would publish a Nano label for an Edge run.
     """
 
     profile_id: str
     local_model_path: str
+    model_id: str = COSMOS3_NANO_MODEL_ID
     model_revision: str = COSMOS3_NANO_MODEL_REVISION
     diffusers_revision: str = DIFFUSERS_COSMOS3_PIN
     container_digest: Optional[str] = None

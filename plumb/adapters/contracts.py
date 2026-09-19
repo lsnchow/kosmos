@@ -20,6 +20,12 @@ COSMOS3_DIFFUSERS_SOURCE = (
 )
 IRASIM_COMMIT = "c72b6dade6fcd65971e0aa8ab49ea39b15108c90"
 
+#: Attribution method for a backend call that several requests shared.  The
+#: fused call's wall time is divided equally between its members.  Equal share
+#: is a *convention*, not a per-item measurement: nothing in a single fused
+#: diffusion forward isolates one batch member's share of the GPU.
+FUSED_BATCH_EQUAL_SHARE = "fused_batch_equal_share"
+
 
 class CapabilityStatus(str, Enum):
     """A capability is not a qualification result.
@@ -94,6 +100,15 @@ class ServerTiming:
     Values are optional by design.  ``None`` means not observed, never zero.
     ``backend_calls`` counts actual Python backend invocations, not planned
     calls, and is therefore safe to put in an artifact report.
+
+    Batch fields describe a *shared* backend call.  When ``batch_size`` is
+    greater than one, ``wall_seconds``, ``gpu_peak_memory_bytes`` and
+    ``model_load_seconds`` belong to the whole fused call rather than to this
+    one result, and ``backend_calls`` counts the invocation that produced this
+    result even though ``batch_size - 1`` other results came out of the same
+    invocation.  Summing ``wall_seconds`` or ``backend_calls`` across the
+    members of one batch therefore overcounts; use ``attributed_gpu_seconds``,
+    which is explicitly an attribution named by ``attribution_method``.
     """
 
     backend_calls: int
@@ -105,6 +120,32 @@ class ServerTiming:
     server_seconds: Optional[float] = None
     started_at_unix: Optional[float] = None
     finished_at_unix: Optional[float] = None
+    #: How many requests shared the backend call that produced this result.
+    #: ``None`` means the call was not batched or the batch size is unknown;
+    #: it never means one.
+    batch_size: Optional[int] = None
+    #: ``wall_seconds`` divided between the batch members.  An attribution, not
+    #: an independently measured per-item duration.
+    attributed_gpu_seconds: Optional[float] = None
+    #: Names the attribution rule, e.g. :data:`FUSED_BATCH_EQUAL_SHARE`.  It is
+    #: ``None`` whenever ``attributed_gpu_seconds`` is ``None``, so an
+    #: unlabelled attribution cannot exist.
+    attribution_method: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if (self.attributed_gpu_seconds is None) != (self.attribution_method is None):
+            raise ValueError(
+                "attributed_gpu_seconds and attribution_method must be set together; an attribution without a "
+                "named method would be indistinguishable from a measurement."
+            )
+        if self.batch_size is not None and int(self.batch_size) < 1:
+            raise ValueError("ServerTiming.batch_size must be at least 1 when it is recorded at all.")
+
+    @property
+    def is_shared_backend_call(self) -> bool:
+        """Whether this timing was measured around a call shared with others."""
+
+        return self.batch_size is not None and int(self.batch_size) > 1
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -117,6 +158,13 @@ class ServerTiming:
             "server_seconds": self.server_seconds,
             "started_at_unix": self.started_at_unix,
             "finished_at_unix": self.finished_at_unix,
+            "batch_size": None if self.batch_size is None else int(self.batch_size),
+            "attributed_gpu_seconds": (
+                None if self.attributed_gpu_seconds is None else float(self.attributed_gpu_seconds)
+            ),
+            "attribution_method": self.attribution_method,
+            "is_shared_backend_call": self.is_shared_backend_call,
+            "wall_seconds_is_per_item_measurement": not self.is_shared_backend_call,
         }
 
 
