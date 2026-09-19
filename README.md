@@ -1,4 +1,4 @@
-# Nightshift
+# Kosmos
 
 A working control plane and measurement console for world-model robot-policy
 evaluation. The full scientific scope remains in [AGENT-BUILD-SPEC.md](AGENT-BUILD-SPEC.md).
@@ -20,7 +20,14 @@ Open <http://127.0.0.1:8787>. API documentation is at `/docs`. The default
 listener is localhost, not a public service. Mutable run data lives in `data/`
 (or `PLUMB_DATA_DIR`) and is excluded from source control.
 
-The dashboard's **Development review** link opens `/review`: opaque review
+Go to [Video gallery](http://127.0.0.1:8787/console) to watch saved model outputs.
+**Saved runs** contains run history and measurements. The remaining pages are
+grouped under **Tools & validation**, each with a plain-language description.
+The gallery is experimental footage, not a completed six-policy comparison.
+Read the [architecture breakdown](docs/ARCHITECTURE.md) for the page map, model
+roles, current execution paths, storage boundaries, and remaining product work.
+
+The dashboard's **Review clips** link opens `/review`: opaque review
 media and private, explicitly entered drafts. See the
 [operator guide](docs/DEVELOPMENT-REVIEW.md). These development clips and
 self-reported reviewers do not constitute held-out calibration or a Gate D pass.
@@ -37,7 +44,7 @@ identity and startup command. It does not turn synthetic runs into real rollouts
 or enable uncalibrated judge scoring.
 
 Previously generated world-model MP4s can also be watched in the
-[rollout viewport's playback queue](http://127.0.0.1:8787/live#world-model-videos).
+[recording archive](http://127.0.0.1:8787/clips).
 See [video playback and provenance](docs/WORLD-VIDEO-PLAYBACK.md). Playback is
 separate from submitting new generation jobs.
 

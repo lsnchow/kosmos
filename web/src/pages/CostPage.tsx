@@ -25,7 +25,8 @@ export function CostPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Cost"
+        title="Compute & cost"
+        lede="Inspect saved speed, resource, and quality experiments. Estimates are not an invoice; missing measurements stay unavailable."
       />
 
       <ErrorBoundary region="Cost–fidelity slider">

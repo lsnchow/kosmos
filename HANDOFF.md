@@ -1,5 +1,34 @@
 # PLUMB execution handoff — implementation in progress
 
+## Media-first console implemented — 2026-09-19
+
+Open `http://127.0.0.1:8787/console` and refresh. The built frontend now opens
+on a responsive six-recording video gallery, not the qualification wall.
+Only **Video gallery** and **Saved runs** are primary navigation; **Tools &
+validation** contains Recording archive, Developer tools, Validation,
+Compute & cost, and Review clips. Existing URLs remain valid. Published
+reference percentages moved into a collapsed Validation section, explicitly
+identified as reference-study results. Run selection now precedes the scoreboard.
+
+The gallery reads the existing hash-checked catalog, excludes two-frame probes
+and duplicate media, and loops visible clips muted. Pause all, offscreen and
+background pausing, reduced-motion behavior, failure/retry states and downloads
+are implemented. It shows saved experiments, NOT six authentic policy results.
+Exact conditioning is still in source reports. No new render, poster pipeline,
+live world-video route, interpolation, judge training or gate changes occurred.
+
+Verification: 263 frontend tests passed, typecheck/build passed. Real Chromium
+loaded/played all six clips and paused them; desktop and mobile navigation
+passed; 390 px had no horizontal overflow; reduced-motion stayed paused;
+zero JS errors or non-GET requests during checks. Vite's existing >500 kB chunk
+warning remains. The existing API serves the rebuilt assets without restart.
+Python backend code was unchanged and its full suite was not rerun this turn.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the deep, current breakdown
+of UI, control plane, ML paths, persistence, deployment and remaining work.
+[docs/DEMO-RESTRUCTURE-PLAN.md](docs/DEMO-RESTRUCTURE-PLAN.md) remains the broader
+plan; the matched-policy generation and quality phases are still outstanding.
+
 ## World-model videos delivered to Downloads and rollout viewport
 
 The unchanged Cosmos3 MP4 is in Downloads as

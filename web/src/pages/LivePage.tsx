@@ -1,10 +1,6 @@
 /**
- * The page the demo is driven from.
- *
- * Panel order is the script's, not a layout preference. SCRIPT.md gives the
- * live block 85 seconds in four beats — wall, arrow keys, burst, dial — and
- * ends by landing on the scoreboard, so all five sit on one scroll here. Every
- * panel is the same component the dedicated pages render; nothing is a copy.
+ * Advanced developer tools, preserved at the original /live URL. The old
+ * engineering panel sequence remains here; the demo now opens at /console.
  */
 import { useAppData } from "../AppData";
 import { BurstPanel } from "../components/BurstPanel";
@@ -49,14 +45,18 @@ export function LivePage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Live run"
+        title="Developer tools"
+        lede="Run an isolated cloud policy check or a synthetic rehearsal. These tools do not generate the gallery’s matched policy-comparison videos."
       />
 
       <ErrorBoundary region="Cloud diagnostic">
         <CloudDiagnosticPanel />
       </ErrorBoundary>
 
-      <TaskPrompt onSubmit={(text) => void launchPrompt(text)} busy={promptBusy} />
+      <TaskPrompt
+        onSubmit={(text) => void launchPrompt(text)}
+        busy={promptBusy}
+      />
 
       <ErrorBoundary region="Rollout viewport">
         <RolloutWall
@@ -70,7 +70,12 @@ export function LivePage() {
       </ErrorBoundary>
 
       <ErrorBoundary region="Chain stages">
-        <StageLadder wall={wall} episodes={episodes} runId={activeRun?.id} runTerminal={runIsTerminal} />
+        <StageLadder
+          wall={wall}
+          episodes={episodes}
+          runId={activeRun?.id}
+          runTerminal={runIsTerminal}
+        />
       </ErrorBoundary>
 
       <ErrorBoundary region="Live telemetry">

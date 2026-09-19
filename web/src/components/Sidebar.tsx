@@ -1,60 +1,93 @@
-/**
- * The console's primary navigation.
- *
- * Six pages grouped by what a person is trying to do, not by which component
- * happens to render the data. `Live run` is deliberately first among the
- * working pages: it is the one the 180-second demo is driven from, and it keeps
- * the wall, the burst and the dial in script order on a single scroll.
- *
- * Ordered as the product is used, not alphabetically: Overview states the
- * claim, Live run produces the evidence, Results reads it. The last three are
- * supporting detail and sit below a divider so the spine is obvious.
- */
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { Glyph, type GlyphName } from "./Terminal";
 
 export type NavItem = {
   to: string;
   label: string;
-  /** A printable glyph, not a drawn icon: this console is set in one cell grid. */
+  hint: string;
   icon: GlyphName;
-  /** First of the supporting pages; a divider is drawn above it. */
-  startsSecondary?: boolean;
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/console", label: "Overview", icon: "dash" },
-  { to: "/live", label: "Live run", icon: "activity" },
-  { to: "/results", label: "Results", icon: "table" },
-  { to: "/evidence", label: "Evidence", icon: "shield", startsSecondary: true },
-  { to: "/cost", label: "Cost", icon: "gauge" },
-  { to: "/clips", label: "Clips", icon: "flask" },
-  { to: "/review", label: "Development review", icon: "shield" },
+  {
+    to: "/console",
+    label: "Video gallery",
+    hint: "Watch saved model outputs",
+    icon: "play",
+  },
+  {
+    to: "/results",
+    label: "Saved runs",
+    hint: "Past runs and their measurements",
+    icon: "table",
+  },
+  {
+    to: "/clips",
+    label: "Recording archive",
+    hint: "All clips, including short probes",
+    icon: "flask",
+  },
+  {
+    to: "/live",
+    label: "Developer tools",
+    hint: "Cloud checks and synthetic tests",
+    icon: "activity",
+  },
+  {
+    to: "/evidence",
+    label: "Validation",
+    hint: "What is verified—and what is not",
+    icon: "shield",
+  },
+  {
+    to: "/cost",
+    label: "Compute & cost",
+    hint: "Recorded resource measurements",
+    icon: "gauge",
+  },
+  {
+    to: "/review",
+    label: "Review clips",
+    hint: "Manually annotate development clips",
+    icon: "shield",
+  },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { pathname } = useLocation();
+  const links = (items: NavItem[]) => (
+    <ul>
+      {items.map((item) => (
+        <li key={item.to}>
+          <NavLink
+            to={item.to}
+            end
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              isActive ? "sidebar-link sidebar-link-active" : "sidebar-link"
+            }
+          >
+            <Glyph name={item.icon} className="shrink-0" />
+            <span className="sidebar-text">
+              <span>{item.label}</span>
+              <small className="sidebar-hint">{item.hint}</small>
+            </span>
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  );
   return (
     <nav className="sidebar" aria-label="Console sections">
-      <ul>
-        {NAV_ITEMS.map((item) => {
-          return (
-            <li key={item.to} className={item.startsSecondary ? "sidebar-divider" : undefined}>
-              <NavLink
-                to={item.to}
-                end={item.to === "/console"}
-                onClick={onNavigate}
-                // `aria-current="page"` is what a screen reader announces;
-                // reverse video is only its visual echo, so the state is never
-                // carried by colour alone.
-                className={({ isActive }) => (isActive ? "sidebar-link sidebar-link-active" : "sidebar-link")}
-              >
-                <Glyph name={item.icon} className="shrink-0" />
-                <span className="sidebar-text">{item.label}</span>
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
+      {links(NAV_ITEMS.slice(0, 2))}
+      <details
+        className="sidebar-tools"
+        key={pathname}
+        open={NAV_ITEMS.slice(2).some((item) => item.to === pathname)}
+      >
+        <summary>Tools & validation</summary>
+        {links(NAV_ITEMS.slice(2))}
+      </details>
     </nav>
   );
 }

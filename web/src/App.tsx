@@ -5,10 +5,9 @@
  * ten stacked sections. The state moved to `AppData`, the chrome to `AppShell`,
  * and each section to the page it belongs on.
  *
- * `/` is the landing page and `/console` is the console's overview. The five
- * working pages keep the flat paths they have always had — `/live` in
- * particular is typed from memory under stage lights, and moving it to buy URL
- * symmetry would be a bad trade.
+ * `/` is the landing page; `/console` opens the saved-video gallery. Existing
+ * flat paths are preserved while their labels explain their actual purpose.
+ * `/live` now houses developer tools, not the primary demo entry.
  */
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppDataProvider } from "./AppData";
@@ -52,7 +51,7 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-<AppDataProvider>
+    <AppDataProvider>
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>

@@ -31,9 +31,9 @@ export function calledShotFromProtocol(protocol: JsonRecord | undefined): Called
 /**
  * The called shot.
  *
- * Nightshift's estimate for this cell is pre-registered and frozen *before* the
+ * Kosmos's estimate for this cell is pre-registered and frozen *before* the
  * published human number is looked at. When there is no estimate yet the panel
- * shows it as pending — never as a number, and never as a comparison Nightshift has
+ * shows it as pending — never as a number, and never as a comparison Kosmos has
  * already won.
  */
 export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
@@ -68,7 +68,7 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
           </span>
         </div>
         <div className="calledshot-cell calledshot-cell-plumb">
-          <span>Nightshift pre-registered estimate</span>
+          <span>Kosmos pre-registered estimate</span>
           {estimate === undefined ? (
             <strong className="calledshot-pending">
               <StatusPill status="pending" title={status}>
@@ -128,8 +128,8 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
       </div>
 
       <Note summary="Where these reference numbers come from">
-        Both reference numbers are AutoEval's published results, not Nightshift outcomes. The already-published
-        human value is not treated as a blind target; what is frozen is Nightshift's own estimate and the time it
+        Both reference numbers are AutoEval's published results, not Kosmos outcomes. The already-published
+        human value is not treated as a blind target; what is frozen is Kosmos's own estimate and the time it
         was recorded.
       </Note>
     </Panel>

@@ -1,72 +1,40 @@
-/**
- * The entry point, and the start of the path through the product.
- *
- * The claim, then the one thing blocking it, then the called shot and the
- * gates. The primary action goes to the run, because the run is what the rest
- * of the console is about — free-play is a demonstration, not the flow.
- */
-import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
-import { STARTS_PER_TASK, useAppData } from "../AppData";
-import { CalledShotPanel } from "../components/CalledShotPanel";
-import { ErrorBoundary } from "../components/ErrorBoundary";
-import { GatePanel } from "../components/GatePanel";
-import { StatusPill } from "../components/Primitives";
-import { pickString } from "../lib/format";
+import { WorldVideoGrid } from "../components/WorldVideoGrid";
 import { PageHeader } from "./PageHeader";
 
+/** The demo opens on saved media. Playback never submits inference work. */
 export function OverviewPage() {
-  const { protocol, policies, tasks, blockers, calledShot, gates, openFreeplay } = useAppData();
-  const matrix =
-    policies.length > 0 && tasks.length > 0
-      ? `${policies.length} policies × ${tasks.length} tasks × ${STARTS_PER_TASK} starts`
-      : undefined;
-
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow={
-          <StatusPill status="unqualified" title={`mode: ${pickString(protocol?.mode) ?? "not reported"}`}>
-            unqualified
-          </StatusPill>
-        }
-        title="Measure the ruler before trusting the ranking."
-        lede="Six robot policies scored inside a generative world model, with four numbers saying how far to trust the ranking."
+        eyebrow="Watch first · no GPU request"
+        title="Video gallery"
+        lede="Watch saved robot world-model videos. A world model predicts what the camera would see after a robot moves."
         actions={
-          <>
-            <Link className="button button-primary" to="/live">
-              Start a run
-              <Glyph name="arrowRight" />
-            </Link>
-            <button type="button" className="button button-quiet" onClick={() => openFreeplay()}>
-              <Glyph name="expand" />
-              Drive the world model
-            </button>
-          </>
+          <Link className="button button-secondary" to="/clips">
+            Browse all recordings →
+          </Link>
         }
       />
-
-      {/* One line, not a paragraph. The blockers themselves are the content. */}
-      <section className="status-strip" aria-label="Qualification status">
-        <p>
-          <strong>Not qualified.</strong> Real backends stay blocked until these pass
-          {matrix ? ` · ${matrix}` : ""}
+      <WorldVideoGrid />
+      <details className="gallery-guide">
+        <summary>What are policies, and what will we compare?</summary>
+        <p className="text-pretty">
+          A policy is the robot’s controller: it looks at the scene and goal,
+          then chooses arm and gripper movements. The world model predicts the
+          next view; a separate judge can assess the result.
         </p>
-        <ul>
-          {blockers.slice(0, 3).map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
-      </section>
-
-      <div className="split-grid">
-        <ErrorBoundary region="Called shot">
-          <CalledShotPanel calledShot={calledShot} />
-        </ErrorBoundary>
-        <ErrorBoundary region="Qualification gates">
-          <GatePanel gates={gates} />
-        </ErrorBoundary>
-      </div>
+        <p className="text-pretty">
+          The planned comparison gives OpenVLA, OpenPiZero, Octo-Small, MiniVLA,
+          SuSIE, and SuSIE_LL the same task and starting scene. SuSIE_LL is the
+          low-level, goal-image-conditioned controller.
+        </p>
+        <p className="text-pretty">
+          That matched six-policy set is not ready. The recordings above are
+          saved experiments, not a policy ranking. No success score is claimed.
+        </p>
+        <Link to="/evidence">See what has been verified →</Link>
+      </details>
     </div>
   );
 }

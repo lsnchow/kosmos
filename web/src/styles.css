@@ -386,12 +386,8 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 }
 
 .brand { display: inline-flex; align-items: center; gap: var(--space-2); text-decoration: none; color: var(--text-strong); font-family: var(--font-display); font-weight: 400; font-size: var(--fs-2xs); }
-/* The wordmark reads as a shell would print it: a bracketed sigil, then the
-   name. Brackets are generated content, so the accessible name is untouched. */
-.brand-mark { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0; color: var(--accent); font-weight: 600; }
-.brand-mark::before { content: "["; color: var(--text-dim); }
-.brand-mark::after { content: "]"; color: var(--text-dim); }
-.brand::after { content: "_"; margin-left: -0.15ch; color: var(--accent); animation: caret-blink var(--duration-blink) var(--ease-step) infinite; }
+/* Reuse the landing page's boxed Kosmos K mark in the console palette. */
+.brand-mark { display: grid; place-items: center; flex: none; width: 1.5rem; height: 1.5rem; font-family: var(--font-display); font-size: var(--fs-sm); line-height: 1; color: var(--accent-ink); background: var(--text-strong); }
 .topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
 .topbar nav a { color: var(--text-muted); text-decoration: none; font-size: var(--fs-2xs); }
 .topbar nav a:hover { color: var(--text-strong); }
@@ -433,9 +429,13 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .sidebar-link-active::before { color: var(--caution); }
 .sidebar-link-active:hover { background: transparent; color: var(--text-strong); }
 .sidebar-text { display: grid; gap: var(--space-0-5); min-width: 0; }
+.sidebar li { padding-block: var(--space-2); }
+.sidebar-tools { margin-top: var(--space-4); border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }
+.sidebar-tools summary { cursor: pointer; color: var(--text-muted); font-size: var(--fs-2xs); }
+.sidebar-hint { white-space: normal; text-wrap: pretty; }
 .sidebar-text strong { font-size: var(--fs-2xs); font-weight: 400; }
 .sidebar-hint { color: var(--text-dim); font-size: var(--fs-2xs); line-height: var(--leading-snug); }
-.sidebar-link-active .sidebar-hint { color: var(--accent-ink); opacity: 0.78; }
+.sidebar-link-active .sidebar-hint { color: var(--text-muted); }
 
 /*
  * Density. The rhythm was built for a card dashboard — 2 rem page padding,
@@ -450,6 +450,26 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-8); margin-bottom: 0; }
 .page-header-main { display: grid; gap: var(--space-2); min-width: 0; }
 .page-lede { max-width: 62ch; color: var(--text-muted); font-size: var(--fs-2xs); line-height: var(--leading-normal); }
+
+/* Media-first console. Retain the existing terminal palette and spacing. */
+.gallery-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.gallery-toolbar h2 { font-size: var(--fs-sm); }
+.gallery-toolbar p, .gallery-footnote { color: var(--text-muted); font-size: var(--fs-2xs); }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: var(--space-4); }
+.gallery-card { min-width: 0; overflow: hidden; border: var(--border-width) solid var(--line-3); border-radius: var(--radius); }
+.gallery-card video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: black; }
+.gallery-card-body { display: grid; gap: var(--space-2); padding: var(--space-3); }
+.gallery-card h3 { font-size: var(--fs-sm); }
+.gallery-caption { color: var(--text-muted); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
+.gallery-card details { font-size: var(--fs-2xs); }
+.gallery-card summary, .gallery-guide summary { cursor: pointer; color: var(--text-strong); }
+.gallery-card details p { margin-top: var(--space-3); color: var(--text-muted); }
+.gallery-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-3); }
+.gallery-links a, .gallery-guide a { text-decoration: underline; text-underline-offset: 0.2em; }
+.gallery-footnote { margin-top: var(--space-4); }
+.gallery-guide { border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-4); font-size: var(--fs-2xs); }
+.gallery-guide > p { max-width: 85ch; color: var(--text-muted); margin-block: var(--space-3); }
+.gallery-placeholder { aspect-ratio: 4 / 3; display: grid; place-items: center; border: var(--border-width) solid var(--line-3); color: var(--text-muted); }
 .page-header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .page-header-actions p { margin: 0; color: var(--text-dim); font-size: var(--fs-2xs); line-height: var(--leading-snug); }
 .split-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-3); align-items: start; min-width: 0; }
