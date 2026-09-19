@@ -112,9 +112,9 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
             return (
               <article className="smoke-card" key={pickString(experiment.id, experiment.report_url) ?? index}>
                 <div className="smoke-card-topline">
-                  <div className="truncate">
-                    <strong className="truncate">{profile.title}</strong>
-                    <span className="truncate">{label}</span>
+                  <div>
+                    <strong>{profile.title}</strong>
+                    <span>{label}</span>
                   </div>
                   <StatusPill status={experiment.qualification ?? "unknown"}>
                     {String(experiment.qualification ?? "unknown")}

@@ -67,7 +67,9 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
                 : `${formatCount(pickNumber(hero.certified_frame_count))} certified frames`}
             </span>
           </div>
-          <p className="hero-id truncate">{pickString(hero.episode_id, hero.id) ?? "episode id not reported"}</p>
+          <p className="hero-id truncate" title={pickString(hero.episode_id, hero.id) ?? "episode id not reported"}>
+            {pickString(hero.episode_id, hero.id) ?? "episode id not reported"}
+          </p>
         </>
       )}
       <Note>

@@ -84,8 +84,8 @@ function RolloutTile({
           <StatusPill status="waiting">waiting</StatusPill>
         </div>
         <div className="tile-caption">
-          <div className="truncate">Unassigned slot</div>
-          <span className="truncate">Awaiting a persisted episode event</span>
+          <div>Unassigned slot</div>
+          <span>Awaiting a persisted episode event</span>
         </div>
       </article>
     );
@@ -134,8 +134,8 @@ function RolloutTile({
         </div>
       </div>
       <div className="tile-caption">
-        <div className="truncate">{slot.policy}</div>
-        <span className="truncate">{slot.task}</span>
+        <div>{slot.policy}</div>
+        <span>{slot.task}</span>
       </div>
       <dl className="tile-meta">
         <div>

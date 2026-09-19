@@ -105,7 +105,15 @@ export function EmptyState({
 }
 
 export function SourceChip({ children }: { children: ReactNode }) {
-  return <span className="source-chip">{children}</span>;
+  // The only surviving truncation in the sheet: run ids are values, not labels,
+  // so abbreviating one loses nothing a hover cannot restore. `title` is what
+  // makes that true -- without it the id would be gone.
+  const full = typeof children === "string" ? children : undefined;
+  return (
+    <span className="source-chip" title={full}>
+      {children}
+    </span>
+  );
 }
 
 export function Note({ children }: { children: ReactNode }) {

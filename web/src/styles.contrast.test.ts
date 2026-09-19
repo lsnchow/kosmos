@@ -233,3 +233,86 @@ describe("type scale and presentation mode", () => {
     }
   });
 });
+
+/**
+ * A semantic label is a word the reader has to be able to read.
+ *
+ * A provenance badge saying "no provena…" is not a shorter way of saying "no
+ * provenance" — it is a different, unreadable claim, on the one control whose
+ * whole job is letting a viewer tell generated media from replayed. The badge
+ * shipped clipped because `max-width: 62%` resolved against a shrink-to-fit
+ * sibling group rather than the tile, so the badge inflated its own container
+ * and was then clamped to a fraction of the number it had just set.
+ *
+ * These tests make that class of bug fail at the stylesheet, where it lives.
+ */
+describe("semantic labels are never abbreviated", () => {
+  /** Declaration blocks whose selector mentions a label-bearing class. */
+  const LABEL_CLASSES = ["provenance-badge", "status-pill", "chip", "gate-index", "stage-label"];
+
+  function rulesMatching(names: string[]): { selector: string; body: string }[] {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const found: { selector: string; body: string }[] = [];
+    for (const match of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = match[1].trim();
+      if (names.some((name) => selector.includes(`.${name}`))) {
+        found.push({ selector, body: match[2] });
+      }
+    }
+    return found;
+  }
+
+  it("finds the label rules it is meant to be guarding", () => {
+    // Guards the guard: if a rename made the selectors invisible to this test,
+    // it would pass by looking at nothing.
+    expect(rulesMatching(LABEL_CLASSES).length).toBeGreaterThan(5);
+  });
+
+  it("never truncates a label with an ellipsis", () => {
+    for (const { selector, body } of rulesMatching(LABEL_CLASSES)) {
+      expect(body, `${selector} truncates a semantic label`).not.toContain("text-overflow: ellipsis");
+    }
+  });
+
+  it("never constrains a label to a fraction of its parent", () => {
+    // The original defect was `max-width: 62%`. A percentage below 100 resolves
+    // against whichever box the label sits in — for a shrink-to-fit flex parent
+    // that is a width the label itself determined — and guarantees a clip.
+    //
+    // `max-width: 100%` is the opposite and is allowed: it says "do not overflow
+    // your parent", which paired with wrapping is how .calledshot-cell already
+    // handles a long status word correctly.
+    for (const { selector, body } of rulesMatching(LABEL_CLASSES)) {
+      for (const match of body.matchAll(/max-width:\s*(\d+(?:\.\d+)?)%/g)) {
+        expect(Number(match[1]), `${selector} caps a label at ${match[1]}% of its parent`).toBe(100);
+      }
+    }
+  });
+
+  it("leaves exactly one ellipsis in the sheet, on a value that carries its full text", () => {
+    // `.source-chip` holds run ids. A value may abbreviate because a hover
+    // restores it; `SourceChip` passes `title`. A label may not, because there
+    // is nothing to restore it from.
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const ellipsised = [...stripped.matchAll(/([^{}]+)\{[^{}]*text-overflow:\s*ellipsis[^{}]*\}/g)].map((m) =>
+      m[1].trim(),
+    );
+    expect(ellipsised).toEqual([".source-chip"]);
+  });
+});
+
+describe("spacing comes from tokens", () => {
+  it("defines a spacing scale", () => {
+    for (const step of ["--space-1", "--space-2", "--space-3", "--space-4", "--space-6", "--space-8"]) {
+      expect(tokens[step], `styles.css declares no ${step}`).toBeDefined();
+    }
+  });
+
+  it("names every stacking level rather than hand-typing z-index", () => {
+    // Nine raw values previously sat on an unnamed 10-point convention, with
+    // .skip-link and .freeplay-dialog both on 50.
+    for (const step of ["--z-sticky", "--z-overlay", "--z-modal", "--z-skip"]) {
+      expect(tokens[step], `styles.css declares no ${step}`).toBeDefined();
+    }
+  });
+});

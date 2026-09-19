@@ -135,7 +135,7 @@ export function GalleryModal({
             <h2 id={headingId} className="text-balance">
               {title}
             </h2>
-            {subtitle && <p className="truncate">{subtitle}</p>}
+            {subtitle && <p title={subtitle}>{subtitle}</p>}
           </div>
           <div className="viewer-header-right">
             {badge}
