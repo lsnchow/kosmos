@@ -944,9 +944,16 @@ def create_app(
 
     @app.get("/api/artifacts/{artifact_path:path}")
     def artifact(artifact_path: str):
+        def private_namespace(parts):
+            return any(part.casefold() == "private" or part.casefold().endswith("-development-review-private") for part in parts)
+
+        if private_namespace(Path(artifact_path).parts):
+            raise HTTPException(404, "Artifact not found")
         path = (root / artifact_path).resolve()
         suffix = path.suffix.lower()
         if root not in path.parents or not path.is_file() or suffix not in _ARTIFACT_MEDIA:
+            raise HTTPException(404, "Artifact not found")
+        if private_namespace(path.relative_to(root).parts):
             raise HTTPException(404, "Artifact not found")
         return FileResponse(
             path,

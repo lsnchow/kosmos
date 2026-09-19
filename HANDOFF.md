@@ -1,5 +1,54 @@
 # PLUMB execution handoff — implementation in progress
 
+Final access note: after successful job940190 and an empty scheduler check,
+the final Trillium BatchMode check returned permission denied. Authentication
+has expired again; no new job was submitted afterward. Do not retry Duo while
+the user is away. Completed evidence is already mirrored. SuSIE implementation
+and source/results documentation are pushed in `892e221`.
+The final artifact-route hardening denies reserved private directories, even
+through symlink aliases, when a broader data root is served. The review API also
+rejects null/non-string reviewer identities instead of coercing them into names.
+
+## Current judge format-only pilot — adapter disabled
+
+Job 939998 trained a **structure-only** JSON-format adapter on 12 development
+train rows for 24 optimizer steps; all semantic target tokens were masked. Its
+4-row development syntax loss changed 1.71370849→0.02586903. Reload compare
+job 940000 changed bare JSON 0/4→4/4 while schema validity remained 4/4 for both
+base and adapter, but semantic tuples drifted on 4/4 rows. The adapter is
+therefore disabled: this is no semantic, human-quality, calibration, Gate D,
+or production-scoring result. Reports are local under
+`data/live-integrated/cluster-evidence/judge-format-{pilot-939998,compare-940000}/report.json`;
+cluster artifacts are `/scratch/lchow432/plumb/experiments/judge-format-only-v1`
+and `evidence/judge-format-only-v1-comparison.json`, source release
+`f6b30d952be1b2e9cccf4c5915a4e85a636b22b620634e485dfde0ab77c08fc5`.
+No new weights were downloaded; adapters remain cluster-only. Root verified
+live `/review` at `http://127.0.0.1:8787/review` in isolated Chromium QA with a
+temporary DB: 16 clips/images decoded, drafts saved/reloaded/resumed, no JS
+errors, and no 390px horizontal overflow. Production review DB is absent and no
+human labels exist; the isolated `model_assisted` test draft is not human data.
+App tmux `plumb-live` PID19103 now exposes24 diagnostic cards; all24 report
+URLs return200. Health remains `qualified=false`, all gates are
+`not_run`, and execution remains synthetic-only. See `docs/JUDGE-FORMAT-PILOT.md`.
+
+SuSIE_LL job940190 **COMPLETED0:0** in20 seconds on one H100, status
+`completed_unqualified`. It made two finite `[1,7]` gc_bc calls with exact
+reset/repeat on a static vendor-video first/final-frame conditioning fixture;
+this is not rollout, task success, Gate A/B, or a primary row. Checkpoint is
+cluster-only at `/scratch/lchow432/plumb/models/patreya--gcbc-bridge/checkpoint/checkpoint`, SHA
+`80b354...`; publisher README declares MIT (not independently re-licensed).
+The correct clean staged source is SOAR
+`/scratch/lchow432/plumb/source-soar-gcbc@eabd5f16a856e484884a22e257a941bb358cea08/model_training`,
+not the wrong `bc60...` upstream source. Restore was strict inference-only
+params-only (`target_params=None`; optimizer state excluded), not training
+resume; failed full restore940180 and failures940172/940173/940174 are preserved
+in local report directories. Evidence: local
+`data/live-integrated/cluster-evidence/susie-ll-gcbc-940190/report.json`, remote
+`evidence/susie-ll-gcbc-static-goal-v5.json`, release
+`fdc52dcb09cebae2bdcd3d213a4865aa28c43f87be425f483a456a01afca44ea`.
+No adapter promotion follows from this smoke. Latest checks: Python1267 passed,
+6 skipped; frontend144 passed and build passed. Scheduler is empty.
+
 ## Access restored; actual development-review packets ready
 
 User reauthenticated Trillium. BatchMode SSH works again; latest scheduler

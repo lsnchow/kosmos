@@ -1,5 +1,45 @@
 # PLUMB cluster operations — handoff for num2
 
+Final authentication recheck: Trillium BatchMode returned permission denied
+after job940190 completed and its evidence was mirrored. The last successful
+scheduler check was empty; no later job was submitted. No Duo retry was sent.
+Do not treat the earlier authenticated snapshots below as current access.
+
+## Current judge format-only pilot — do not deploy the adapter
+
+Training job 939998 and reload comparison 940000 completed from immutable release
+`f6b30d952be1b2e9cccf4c5915a4e85a636b22b620634e485dfde0ab77c08fc5`.
+The pilot used 12 development-train rows, 4 development rows, 24 steps, and a
+structure-only mask with zero semantic supervised tokens. Syntax loss changed
+1.71370849→0.02586903 and bare JSON 0/4→4/4, but judgments drifted 4/4 while
+both base and adapter remained schema-valid 4/4. Keep the adapter disabled.
+Evidence: local `data/live-integrated/cluster-evidence/judge-format-{pilot-939998,compare-940000}/report.json`; remote
+`/scratch/lchow432/plumb/experiments/judge-format-only-v1` and
+`evidence/judge-format-only-v1-comparison.json`. No new weights were downloaded;
+adapters stay cluster-only, gates are unchanged, and no human labels exist.
+Root verified live `/review` in isolated Chromium/temporary-DB QA: 16 clips and
+decoded images loaded; draft save/reload/resume, no JS errors, and no 390px
+horizontal overflow. Production review DB is absent and isolated
+`model_assisted` test drafts are not human labels. App tmux `plumb-live`
+PID19103 exposes24 diagnostics and all24 report URLs return200; health is
+`qualified=false`, all gates `not_run`, synthetic-only. Do not claim a live
+human-review outcome or full-scope completion. See `docs/JUDGE-FORMAT-PILOT.md`.
+
+SuSIE_LL job940190 COMPLETED0:0 in20 seconds on one H100, status
+`completed_unqualified`. It made two finite `[1,7]` gc_bc calls with exact
+reset/repeat on a static vendor first/final-frame fixture—not rollout, task
+success, Gate A/B, or primary evidence. Checkpoint:
+`/scratch/lchow432/plumb/models/patreya--gcbc-bridge/checkpoint/checkpoint`, SHA`80b354...`; publisher
+README declares MIT. Correct SOAR source is
+`/scratch/lchow432/plumb/source-soar-gcbc@eabd5f16a856e484884a22e257a941bb358cea08/model_training`,
+not wrong `bc60...`. Strict params-only inference restore used
+`target_params=None` and excluded optimizer state; it is not training resume.
+Full restore940180 and failures940172/940173/940174 are preserved locally.
+Evidence local `data/live-integrated/cluster-evidence/susie-ll-gcbc-940190/report.json`,
+remote `evidence/susie-ll-gcbc-static-goal-v5.json`, release `fdc52d...`. No
+adapter promotion; last successful scheduler check empty. Latest checks: Python1267 passed/6 skipped,
+frontend144 passed/build passed.
+
 ## Access restored — latest continuation
 
 User reauthenticated; Trillium BatchMode SSH now works. Scheduler check showed

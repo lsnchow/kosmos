@@ -7,6 +7,23 @@ from fastapi.testclient import TestClient
 from plumb.api import create_app
 
 
+def test_artifacts_never_serve_private_namespaces_or_symlink_aliases(tmp_path):
+    root = tmp_path / "data"
+    root.mkdir()
+    for namespace in ("private", "live-integrated-development-review-private"):
+        directory = root / namespace
+        directory.mkdir()
+        (directory / "resolver.json").write_text('{"private":true}')
+    (root / "public.json").write_text('{"public":true}')
+    (root / "alias.json").symlink_to(root / "private" / "resolver.json")
+    (root / "directory-alias").symlink_to(root / "private", target_is_directory=True)
+    with TestClient(create_app(root)) as client:
+        for path in ("private/resolver.json", "PRIVATE/resolver.json", "live-integrated-development-review-private/resolver.json",
+                     "alias.json", "directory-alias/resolver.json"):
+            assert client.get("/api/artifacts/" + path).status_code == 404
+        assert client.get("/api/artifacts/public.json").json() == {"public": True}
+
+
 def test_fixture_run_is_persisted_and_never_qualified(tmp_path):
     app = create_app(tmp_path / "data")
     with TestClient(app) as client:
