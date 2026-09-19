@@ -20,6 +20,11 @@ Open <http://127.0.0.1:8787>. API documentation is at `/docs`. The default
 listener is localhost, not a public service. Mutable run data lives in `data/`
 (or `PLUMB_DATA_DIR`) and is excluded from source control.
 
+The dashboard's **Development review** link opens `/review`: opaque review
+media and private, explicitly entered drafts. See the
+[operator guide](docs/DEVELOPMENT-REVIEW.md). These development clips and
+self-reported reviewers do not constitute held-out calibration or a Gate D pass.
+
 The orange button executes the full 6 × 5 × 50 **synthetic engineering fixture**
 matrix. It exercises real persistence, cancellation, event delivery, artifact
 serving, and analysis, but its images/labels are not learned-model or robot results.
