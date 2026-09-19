@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "state": "deployment_disabled_cluster_diagnostics_recorded",
+  "purpose": "Required cloud evidence and immutable inputs before the PLUMB Chains template may execute scored rollout work. Local cluster diagnostics are recorded separately and do not configure or qualify a Baseten deployment.",
+  "chain_entrypoint": "RolloutController.run_remote(request: RolloutRequest)",
+  "cluster_runtime_evidence": {
+    "path": "cluster-runtime-evidence.json",
+    "status": "recorded_unqualified",
+    "scope": "allocated cluster GPUs only",
+    "does_not_establish": [
+      "Baseten container digests, deployed images, routes, or serializers",
+      "Baseten account capacity, active replicas, pricing, or cost",
+      "scenario parity, policy/world feedback fidelity, human calibration, or Gates A-F"
+    ]
+  },
+  "async_submission": {
+    "documented_suffix": "/async_run_remote",
+    "model_only_suffix_not_allowed": "/async_predict",
+    "queue_status_route": null,
+    "queue_status_reason": "The model-scoped async_queue_status route is not evidence of a Chain route. Add a tested exact route plus evidence before enabling it."
+  },
+  "workers": {
+    "PolicyWorker": {
+      "deployment_container_digest": null,
+      "requirements_lock_input": "requirements.lock-inputs.txt",
+      "deployment_model_revision": null,
+      "adapter_revision": null,
+      "normalizer_revision": null,
+      "native_feedback_contract": null,
+      "local_cluster_diagnostic_profile": {
+        "status": "completed_unqualified",
+        "model": "openvla/openvla-7b",
+        "model_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+        "reviewed_remote_code_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+        "runtime": {
+          "transformers": "4.40.1",
+          "tokenizers": "0.19.1+computecanada",
+          "timm": "0.9.10",
+          "torch": "2.6.0+computecanada"
+        },
+        "observed": {
+          "single_native_action_dimensions": 7,
+          "single_action_inference_wall_seconds": 0.8359023539815098,
+          "gpu_peak_memory_bytes": 15500827648
+        },
+        "evidence_key": "openvla_native_action_937500"
+      },
+      "unresolved": [
+        "One Baseten compatibility profile, reviewed image, and immutable deployed container digest per incompatible policy dependency stack.",
+        "Deployed source/wrapper configuration, action proposal horizon, executed prefix, and feedback cadence.",
+        "Gate-B action interventions and state/normalization fixtures."
+      ]
+    },
+    "WorldWorker": {
+      "deployment_container_digest": null,
+      "requirements_lock_input": "requirements.lock-inputs.txt",
+      "deployment_backend": null,
+      "deployment_backend_profile_hash": null,
+      "deployment_request_serializer_hash": null,
+      "deployment_domain_registry_revision": null,
+      "deployment_action_compiler_revision": null,
+      "local_cluster_diagnostic_profiles": {
+        "cosmos3_nano_diffusers": {
+          "status": "completed_unqualified",
+          "model": "nvidia/Cosmos3-Nano",
+          "model_revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+          "diffusers_source_revision": "a3e0b8ec235c27a6c17a21976daf7fd32d819d05",
+          "runtime": {
+            "diffusers": "0.41.0.dev0",
+            "transformers": "5.17.0+computecanada",
+            "torch": "2.6.0+computecanada"
+          },
+          "observed_16_action_fixture": {
+            "returned_frame_count": 17,
+            "inference_wall_seconds": 4.524269458983326,
+            "model_load_seconds": 167.68371917499462,
+            "gpu_peak_memory_bytes": 36521475584
+          },
+          "evidence_key": "cosmos3_nano_diffusers_bridge_fixture_937372"
+        },
+        "irasim_original_frame_ada": {
+          "status": "completed_unqualified",
+          "source_revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+          "safe_checkpoint_sha256": "sha256:d0ea8e8bec50818e414a278fe58fb8d187f577cfe8b260cadc880cfa6107778d",
+          "runtime": {
+            "diffusers": "0.24.0",
+            "transformers": "4.40.1",
+            "torch": "2.6.0+computecanada"
+          },
+          "observed_one_action_fixture": {
+            "returned_frame_count": 2,
+            "inference_wall_seconds": 2.546707167988643,
+            "model_load_seconds": 23.11404774908442,
+            "gpu_peak_memory_bytes": 3516738560
+          },
+          "evidence_key": "irasim_original_one_step_937666"
+        }
+      },
+      "unresolved": [
+        "Baseten backend choice, immutable container/image digest, asset accessibility, and deployment serializer.",
+        "Actual Chain deployment fixture proving action payload shape, condition-frame semantics, output frame mapping, and timestamps.",
+        "Gate A conformance, Gate B feedback fidelity, and measured Baseten memory/concurrency."
+      ]
+    },
+    "ValidityWorker": {
+      "container_digest": null,
+      "parameters_hash": null,
+      "calibration_reference_hash": null,
+      "unresolved": [
+        "Frozen deterministic checks, calibrated motion references, and reason-code persistence."
+      ]
+    },
+    "JudgeWorker": {
+      "deployment_container_digest": null,
+      "deployment_model_revision": null,
+      "deployment_processor_revision": null,
+      "rubric_hash": null,
+      "sampling_hash": null,
+      "local_cluster_diagnostic_profile": {
+        "status": "completed_unqualified",
+        "model": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "model_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "processor_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "runtime": {
+          "transformers": "5.17.0+computecanada",
+          "tokenizers": "0.23.2",
+          "torch": "2.6.0+computecanada"
+        },
+        "observed": {
+          "raw_sample_count": 5,
+          "judge_call_seconds": 29.291511047631502,
+          "raw_report_gpu_peak_memory_bytes": 16948912640,
+          "raw_judge_status": "unknown"
+        },
+        "evidence_key": "qwen_judge_diagnostic_12238810"
+      },
+      "unresolved": [
+        "Baseten image/container, asset manifest, runtime lock, rubric/sampling/protocol lock, and deployment configuration.",
+        "Gate-D blinded human calibration and frozen held-out qualification.",
+        "Primary-report provenance binding for a real held-out calibration manifest; the recorded diagnostic is intentionally not primary evidence."
+      ]
+    }
+  },
+  "telemetry_and_economics": {
+    "active_replicas_source": "Chain deployment management response active_replica_count",
+    "desired_or_starting_replicas": null,
+    "pricing_currency": null,
+    "pricing_unit": null,
+    "estimated_usd": null,
+    "reason": "No currency, billing unit, or resource applicability is assumed from the numeric instance-type price field."
+  }
+}

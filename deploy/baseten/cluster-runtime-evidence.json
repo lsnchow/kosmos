@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "kind": "plumb_cluster_runtime_diagnostic_evidence",
+  "scope": "allocated_cluster_GPU_diagnostics_only",
+  "cloud_deployment": {
+    "baseten_deployed": false,
+    "baseten_container_digest": null,
+    "baseten_account_gpu_capacity": null,
+    "baseten_price_contract": null,
+    "baseten_qualification": "blocked"
+  },
+  "qualification": {
+    "status": "unqualified",
+    "statement": "These records bind local allocated-GPU diagnostics only. They do not certify a Baseten image, Chain serialization, scenario parity, feedback fidelity, calibration, capacity, cost, or any Gate A-F result.",
+    "gates": {
+      "A": "blocked",
+      "B": "blocked_or_failed_by_profile",
+      "C": "blocked",
+      "D": "not_run",
+      "E": "not_run",
+      "F": "not_run"
+    }
+  },
+  "local_reports": {
+    "cosmos3_nano_diffusers_bridge_fixture_937372": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/cosmos-smoke-937372.json",
+        "sha256": "sha256:d248016aa09b13a4a95696bc16a15a1f280009cb76f71a1da1ec7c0de5f32d9e"
+      },
+      "model": {
+        "id": "nvidia/Cosmos3-Nano",
+        "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+        "diffusers_source_revision": "a3e0b8ec235c27a6c17a21976daf7fd32d819d05"
+      },
+      "runtime": {
+        "python": "3.11.5",
+        "torch": "2.6.0+computecanada",
+        "transformers": "5.17.0+computecanada",
+        "diffusers": "0.41.0.dev0",
+        "accelerate": "1.15.0",
+        "cluster_gpu": "NVIDIA H100 80GB HBM3",
+        "cluster_cuda_version": "12.2"
+      },
+      "request": {
+        "domain": "bridge_orig_lerobot",
+        "action_count": 16,
+        "action_width": 10,
+        "returned_frame_count": 17,
+        "feedback_mode": "unqualified"
+      },
+      "observed": {
+        "model_load_seconds": 167.68371917499462,
+        "inference_wall_seconds": 4.524269458983326,
+        "gpu_peak_memory_bytes": 36521475584
+      },
+      "not_established": [
+        "Baseten container/image digest or deployed serializer",
+        "Gate A conformance or Gate B feedback fidelity",
+        "cloud capacity, queueing, pricing, or replica count"
+      ]
+    },
+    "cosmos3_nano_diffusers_480_fixture_937575": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/cosmos-smoke-937575.json",
+        "sha256": "sha256:9a1137545470fdde68973216417f350bb2656de153a8288b7f343f3eb5203a2d"
+      },
+      "model": {
+        "id": "nvidia/Cosmos3-Nano",
+        "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+        "diffusers_source_revision": "a3e0b8ec235c27a6c17a21976daf7fd32d819d05"
+      },
+      "runtime": {
+        "torch": "2.6.0+computecanada",
+        "transformers": "5.17.0+computecanada",
+        "diffusers": "0.41.0.dev0",
+        "cluster_gpu": "NVIDIA H100 80GB HBM3"
+      },
+      "request": {
+        "resolution_tier": 480,
+        "num_inference_steps": 30,
+        "fps": 5.0,
+        "action_count": 16,
+        "returned_frame_count": 17,
+        "enable_safety_checker": false,
+        "feedback_mode": "unqualified"
+      },
+      "observed": {
+        "model_load_seconds": 169.79308983997907,
+        "inference_wall_seconds": 4.107460099970922,
+        "gpu_peak_memory_bytes": 36527117824
+      },
+      "not_established": [
+        "Primary 256p operating point performance",
+        "Baseten deployment serialization or cloud capacity",
+        "Cost-fidelity qualification"
+      ]
+    },
+    "openvla_native_action_937500": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/openvla-smoke-937500.json",
+        "sha256": "sha256:ac066d68e51d3f2e744965a1e96e55f44d8ace352e0852480d4f619aec4f504a"
+      },
+      "model": {
+        "id": "openvla/openvla-7b",
+        "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+        "reviewed_remote_code_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+        "cluster_download_manifest_sha256": "sha256:f3e4cc9de54d61441983082978b0e2af984cf0492bcb22861fb751272d8250b9"
+      },
+      "runtime": {
+        "torch": "2.6.0+computecanada",
+        "transformers": "4.40.1",
+        "tokenizers": "0.19.1+computecanada",
+        "timm": "0.9.10",
+        "cluster_gpu": "NVIDIA H100 80GB HBM3"
+      },
+      "observed": {
+        "native_action_dimensions": 7,
+        "normalization": "bridge_orig",
+        "single_action_inference_wall_seconds": 0.8359023539815098,
+        "gpu_peak_memory_bytes": 15500827648
+      },
+      "not_established": [
+        "Native image-feedback rollout or executed-prefix fidelity",
+        "Baseten policy image/container or deployment configuration",
+        "Named-policy Gate B qualification"
+      ]
+    },
+    "irasim_original_one_step_937666": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/irasim-one-step-937666.json",
+        "sha256": "sha256:9f09f8232e7406e19d060c42c733b54fd09f5f649b56917c486f4fca6c27b9af"
+      },
+      "model": {
+        "source_revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+        "safe_checkpoint": "frame_ada_0300000.safetensors",
+        "safe_checkpoint_sha256": "sha256:d0ea8e8bec50818e414a278fe58fb8d187f577cfe8b260cadc880cfa6107778d"
+      },
+      "runtime": {
+        "torch": "2.6.0+computecanada",
+        "transformers": "4.40.1",
+        "diffusers": "0.24.0",
+        "accelerate": "0.24.1",
+        "cluster_gpu": "NVIDIA H100 80GB HBM3"
+      },
+      "request": {
+        "native_action_dimensions": 7,
+        "native_action_scaling": [20, 20, 20, 20, 20, 20, 1],
+        "returned_frame_count": 2,
+        "qualification": "experimental_unqualified_not_gate_b"
+      },
+      "observed": {
+        "model_load_seconds": 23.11404774908442,
+        "inference_wall_seconds": 2.546707167988643,
+        "gpu_peak_memory_bytes": 3516738560
+      },
+      "not_established": [
+        "Qualified action/frame alignment or physical fidelity",
+        "Baseten world image/container and deployed serializer",
+        "Cloud capacity, pricing, or cost-fidelity"
+      ]
+    },
+    "irasim_action_probe_937739": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/irasim-probe-937739/suite.json",
+        "sha256": "sha256:e8ca69e23cf11dc7f4fe99e95468b6395f68fc75147f30d862fc43d1073b8eb9"
+      },
+      "observed": {
+        "completed_cases": 18,
+        "seeds": [0, 1],
+        "controls_per_seed": 9,
+        "reported_scope": "same-start/same-seed one-step action-sensitivity diagnostic"
+      },
+      "not_established": [
+        "Physical directionality, Gate B, or reference-comparison parity",
+        "Any Baseten deployment property"
+      ]
+    },
+    "qwen_judge_diagnostic_12238810": {
+      "status": "completed_unqualified",
+      "report": {
+        "path": "data/cluster-evidence/closed-loop-937704/qwen-closed-loop-937704-12238810.json",
+        "sha256": "sha256:96c9f8ce49d1b6b5623b2d1202ce9c8ef197a616c72c930dbc81f99b5bcba4e6"
+      },
+      "model": {
+        "id": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "processor_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+        "cluster_download_manifest_sha256": "sha256:9cdeb4185f7e6f19aae41bb8fc58c561c4e9daf247491e88b80876da1e21970a"
+      },
+      "runtime": {
+        "torch": "2.6.0+computecanada",
+        "transformers": "5.17.0+computecanada",
+        "tokenizers": "0.23.2",
+        "cluster_gpu": "NVIDIA A100 80GB"
+      },
+      "observed": {
+        "judge_call_seconds": 29.291511047631502,
+        "total_seconds": 29.57846959028393,
+        "raw_report_gpu_peak_memory_bytes": 16948912640,
+        "raw_sample_count": 5,
+        "raw_judge_status": "unknown",
+        "raw_missing_reason": "judge_insufficient_quorum"
+      },
+      "not_established": [
+        "Blinded human calibration, held-out accuracy, or Gate D",
+        "Baseten judge image/container or deployment configuration",
+        "Any scored rollout label"
+      ]
+    }
+  },
+  "failed_diagnostic_record": {
+    "report": {
+      "path": "data/cluster-evidence/irasim-state-replay-937748/report.json",
+      "sha256": "sha256:15357d236874ffdd5f13a49385e2337b33f875619f87482dc27de32b7104545c"
+    },
+    "status": "failed",
+    "reason": "The preserved release failed before a usable replay result; it contributes no deployment or qualification evidence."
+  }
+}

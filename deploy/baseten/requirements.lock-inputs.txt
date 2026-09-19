@@ -1,0 +1,11 @@
+# Intentionally not an installable requirements lock.
+#
+# Fill this only after a compatibility profile has immutable, reviewed inputs:
+#   - exact package versions plus hashes (or an immutable uv.lock),
+#   - CUDA/container digest,
+#   - source and model revisions, asset hashes, and applicable notices,
+#   - policy/world/judge-specific separation where dependencies conflict.
+#
+# Do not add convenient floating versions or pretend that model packages are
+# pinned. chain.py intentionally does not reference this file until that review
+# is complete, and it does not trigger model downloads during image build.
