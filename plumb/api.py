@@ -298,7 +298,13 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
     return backend, missing
 
 
-def create_app(data_dir: Optional[Path] = None, *, baseten_client: Optional[BasetenChainClient] = None) -> FastAPI:
+def create_app(
+    data_dir: Optional[Path] = None,
+    *,
+    baseten_client: Optional[BasetenChainClient] = None,
+    development_review_root: Optional[Path] = None,
+    development_review_private_root: Optional[Path] = None,
+) -> FastAPI:
     root = (data_dir or Path(os.environ.get("PLUMB_DATA_DIR", "data"))).resolve()
     root.mkdir(parents=True, exist_ok=True)
     repo_root = Path(__file__).resolve().parents[1]
@@ -338,6 +344,25 @@ def create_app(data_dir: Optional[Path] = None, *, baseten_client: Optional[Base
     app.state.protocol = document
     app.state.baseten = baseten_backend
     app.state.baseten_outbox = outbox
+    # Development review is intentionally isolated from the annotation/Gate D
+    # routes. Its SQLite database is private data, never an artifact endpoint.
+    from plumb.development_review import DevelopmentReviewStore, register_development_review_routes
+
+    review_root = development_review_root or (root / "review")
+    private_root = development_review_private_root or root.parent / (root.name + "-development-review-private")
+    try:
+        review_session_ttl = int(os.environ.get("PLUMB_DEVELOPMENT_REVIEW_SESSION_TTL_SECONDS", str(8 * 60 * 60)))
+    except ValueError as error:
+        raise ValueError("PLUMB_DEVELOPMENT_REVIEW_SESSION_TTL_SECONDS must be an integer") from error
+    development_review = DevelopmentReviewStore(
+        repo_root=repo_root,
+        review_root=review_root,
+        served_root=root,
+        private_root=private_root,
+        session_ttl_seconds=review_session_ttl,
+    )
+    app.state.development_review = development_review
+    register_development_review_routes(app, development_review)
 
     # ------------------------------------------------------------------ helpers
 
@@ -1095,6 +1120,13 @@ def create_app(data_dir: Optional[Path] = None, *, baseten_client: Optional[Base
 
     frontend = repo_root / "web" / "dist"
     if frontend.is_dir():
+        @app.get("/review", include_in_schema=False)
+        def development_review_page():
+            index = frontend / "index.html"
+            if not index.is_file():
+                raise HTTPException(404, "Development review UI is not built")
+            return FileResponse(index, media_type="text/html", headers={"X-Content-Type-Options": "nosniff"})
+
         app.mount("/", StaticFiles(directory=str(frontend), html=True), name="dashboard")
     else:
 

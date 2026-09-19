@@ -1,4 +1,5 @@
 """API contract and qualification boundaries, not real-model performance tests."""
+import json
 import time
 
 from fastapi.testclient import TestClient
@@ -82,6 +83,56 @@ def test_artifacts_cannot_escape_data_directory(tmp_path):
         (tmp_path / "private.json").write_text('{"private": true}')
         (root / "escape.json").symlink_to(tmp_path / "private.json")
         assert client.get("/api/artifacts/escape.json").status_code == 404
+
+
+def test_development_review_page_uses_the_built_frontend_without_exposing_private_drafts(tmp_path):
+    root = tmp_path / "data"
+    with TestClient(create_app(root)) as client:
+        page = client.get("/review")
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+        # The private SQLite location is neither an artifact extension nor an API
+        # route; no reviewer draft is served by the artifact handler.
+        assert client.get("/api/artifacts/private/development-review.sqlite3").status_code == 404
+
+
+def test_custom_data_root_uses_its_review_directory_by_default(tmp_path):
+    root = tmp_path / "data"
+    worksheet = root / "review" / "pilot-review-v1" / "blank-worksheets.jsonl"
+    worksheet.parent.mkdir(parents=True)
+    worksheet.write_text(
+        json.dumps(
+            {
+                "schema": "plumb-development-review-packets-v1",
+                "purpose": "development_review_only",
+                "gate_d_eligible": False,
+                "clip_id": "review-clip-api",
+                "task": "close_drawer",
+                "task_instruction": "Close the drawer",
+                "task_rubric": "Visible end state only",
+                "review_guidance": {
+                    "integrity": {"intact": "Intact", "artifact": "Artifact", "uncertain": "Uncertain"},
+                    "collision": {"none_visible": "None", "visible": "Visible", "uncertain": "Uncertain"},
+                    "completion": "Visible evidence only",
+                },
+                "raw_video_url": "http://127.0.0.1:8787/api/artifacts/review/pilot/clip.mp4",
+                "sampled_frames": [
+                    {
+                        "index": index,
+                        "timestamp": index * 0.5,
+                        "url": "http://127.0.0.1:8787/api/artifacts/review/pilot/frame-%02d.png" % index,
+                    }
+                    for index in range(16)
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with TestClient(create_app(root)) as client:
+        assert client.get("/api/development-review/sets").json()["sets"] == [
+            {"set_id": "pilot-review-v1", "title": "pilot-review-v1", "clip_count": 1, "status": "development_review_only"}
+        ]
 
 
 def test_freeplay_refuses_to_fabricate_a_frame(tmp_path):

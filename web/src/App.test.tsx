@@ -221,6 +221,7 @@ async function renderConsole() {
 describe("PLUMB console", () => {
   it("renders every demo beat", async () => {
     await renderConsole();
+    expect(screen.getByRole("link", { name: "Development review" })).toHaveAttribute("href", "/review");
     expect(screen.getByRole("heading", { name: /Real or generated\?/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /The called shot/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Rollout viewport/i })).toBeInTheDocument();

@@ -88,12 +88,16 @@ def _replica_notes(report_path: Path, summary: dict) -> list:
 
 def experiments_payload(root: Path) -> Dict[str, Any]:
     root = root.resolve()
-    evidence = root / "cluster-evidence"
     reports = []
     # A report is either at the evidence root or in a named diagnostic bundle.
     # Do not recursively traverse large frame/state trees or symlinked imports.
-    paths = [] if evidence.is_symlink() else sorted([*evidence.glob("*.json"), *evidence.glob("*/*.json")])
-    for path in paths:
+    evidence_roots = (root / "cluster-evidence", root / "live-integrated" / "cluster-evidence")
+    paths = []
+    for evidence in evidence_roots:
+        if evidence.is_symlink() or not evidence.is_dir():
+            continue
+        paths.extend((evidence, path) for path in sorted([*evidence.glob("*.json"), *evidence.glob("*/*.json")]))
+    for evidence, path in paths:
         try:
             if path.is_symlink() or root not in path.resolve().parents or evidence.resolve() not in path.resolve().parents or path.stat().st_size > 4 * 1024 * 1024:
                 continue
@@ -233,6 +237,41 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                                    "Original teacher disagreement/unknown outcome remains unchanged."])
                 if report.get("status") not in ("completed_unqualified_preflight",):
                     item["notes"][0] = "Framework preflight did not complete: " + str(report.get("reason", "inspect raw report"))
+            elif kind == "plumb_judge_json_structure_only_pilot":
+                config = _mapping(report.get("config"))
+                item.update(
+                    model="Qwen2.5-VL-7B JSON-format structure-only pilot",
+                    stage="judge_format_structure_pilot",
+                    timing_scope="training_and_development_syntax_validation_only",
+                    optimizer_steps=_number(report.get("optimizer_steps")),
+                    development_syntax_loss_before=_number(report.get("dev_syntax_loss_before")),
+                    development_syntax_loss_after=_number(report.get("dev_syntax_loss_after")),
+                    direct_semantic_supervision_tokens=0,
+                    notes=[
+                        "Structure-only experimental fine-tune: JSON syntax tokens only; direct semantic supervision is forbidden.",
+                        "Syntax loss is not human accuracy, semantic calibration, or a judge-quality improvement claim.",
+                        "No deployment, production scoring, Gate D, or Gate E use is authorized from this pilot.",
+                    ],
+                )
+                if config.get("semantic_supervision") != "forbidden":
+                    item["notes"][0] = "Structure-only supervision audit is incomplete; inspect the raw report."
+            elif kind == "plumb_judge_format_compare_v1":
+                bare = _mapping(report.get("bare_json_counts"))
+                item.update(
+                    model="Qwen2.5-VL-7B base versus JSON-format adapter",
+                    stage="judge_format_structure_comparison",
+                    total_seconds=_number(report.get("wall_seconds")),
+                    timing_scope="paired_greedy_generation_excludes_load",
+                    base_bare_json_count=_number(bare.get("base")),
+                    format_adapter_bare_json_count=_number(bare.get("format_adapter")),
+                    semantic_comparable_count=_number(report.get("semantic_comparable_count")),
+                    semantic_drift_count=_number(report.get("semantic_drift_count")),
+                    notes=[
+                        "Four development inputs changed from 0/4 bare JSON (base) to 4/4 bare JSON (format adapter).",
+                        "All four semantically comparable decisions drifted; this is not an accuracy or semantic-preservation improvement.",
+                        "Structure-only experimental comparison; do not deploy for scoring or claim human accuracy, calibration, or qualification.",
+                    ],
+                )
             elif kind == "plumb_local_policy_smoke" and report.get("command") == "judge":
                 timing = {"wall_seconds": _mapping(report.get("timing")).get("judge_call_seconds")}
                 raw_outcome = _mapping(report.get("outcome"))

@@ -265,6 +265,7 @@ export default function App() {
           <span>PLUMB</span>
         </a>
         <nav aria-label="Console sections">
+          <a href="/review">Development review</a>
           <a href="#sixclip">Clips</a>
           <a href="#calledshot">Called shot</a>
           <a href="#rollouts">Wall</a>

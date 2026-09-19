@@ -133,6 +133,48 @@ def test_actual_unqualified_pilot_exposes_steps_not_scientific_score(tmp_path):
     assert "not human accuracy" in " ".join(row["notes"])
 
 
+def test_live_integrated_judge_format_reports_expose_only_structure_metrics_and_limitations(tmp_path):
+    evidence = tmp_path / "live-integrated" / "cluster-evidence"
+    write(evidence / "pilot" / "report.json", {
+        "kind": "plumb_judge_json_structure_only_pilot",
+        "status": "completed_unqualified_structure_only_pilot",
+        "purpose": "judge_json_structure_only_pilot",
+        "qualified": False,
+        "optimizer_steps": 24,
+        "dev_syntax_loss_before": 1.71370849,
+        "dev_syntax_loss_after": 0.02586903,
+        "config": {"semantic_supervision": "forbidden"},
+        "teacher_outputs": {"must_not": "escape"},
+    })
+    write(evidence / "compare" / "report.json", {
+        "kind": "plumb_judge_format_compare_v1",
+        "status": "completed_unqualified_format_adapter_comparison",
+        "purpose": "judge_json_structure_only_pilot",
+        "qualified": False,
+        "wall_seconds": 17.2,
+        "bare_json_counts": {"base": 0, "format_adapter": 4},
+        "semantic_comparable_count": 4,
+        "semantic_drift_count": 4,
+        "rows": [{"raw_output": "must_not_escape"}],
+    })
+    rows = experiments_payload(tmp_path)["experiments"]
+    pilot = next(row for row in rows if row["stage"] == "judge_format_structure_pilot")
+    compare = next(row for row in rows if row["stage"] == "judge_format_structure_comparison")
+    assert (pilot["optimizer_steps"], pilot["development_syntax_loss_before"], pilot["development_syntax_loss_after"]) == (
+        24.0,
+        1.71370849,
+        0.02586903,
+    )
+    assert pilot["qualified"] is False and pilot["direct_semantic_supervision_tokens"] == 0
+    assert (compare["base_bare_json_count"], compare["format_adapter_bare_json_count"], compare["semantic_drift_count"]) == (
+        0.0,
+        4.0,
+        4.0,
+    )
+    assert compare["qualified"] is False and "do not deploy" in " ".join(compare["notes"]).lower()
+    assert "teacher" not in json.dumps(rows) and "raw_output" not in json.dumps(rows)
+
+
 def test_replica_summary_requires_digest_bound_complete_raw_reports(tmp_path):
     summary = tmp_path / "cluster-evidence" / "replicas" / "summary.json"
     worker = summary.parent / "reports" / "worker.json"
