@@ -64,6 +64,21 @@ type Chunk = {
  * The generating wait is real and is shown, not hidden: it is the interesting
  * part. Nothing pre-recorded answers a keypress.
  */
+/**
+ * The frames' measured size, never the size that was requested.
+ *
+ * The server reports `requested_resolution` and the frames' own dimensions
+ * separately, because they can differ -- a 64px rehearsal frame answering a
+ * 480p request is exactly the case that must not be captioned "480p". When the
+ * Chain reports no dimensions this returns undefined and the panel says so.
+ */
+function measuredResolution(response: Record<string, unknown>): string | undefined {
+  const height = pickNumber(response.frame_height);
+  const width = pickNumber(response.frame_width);
+  if (height === undefined || width === undefined) return undefined;
+  return `${width}x${height}`;
+}
+
 export function FreeplayDialog({
   open,
   onOpenChange,
@@ -129,7 +144,7 @@ export function FreeplayDialog({
         latencyMs: pickNumber(response.latency_ms),
         clientElapsedMs: Date.now() - startedAt,
         backend: pickString(response.backend),
-        resolution: pickString(response.resolution),
+        resolution: measuredResolution(response),
         reason: pickString(response.reason),
         actionClamp: pickNumber(response.action_clamp),
         chunkSize: pickNumber(response.chunk_size),

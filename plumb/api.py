@@ -27,6 +27,7 @@ import logging
 import os
 import threading
 import time
+import zlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -938,10 +939,35 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
                     "commanded_chunk": {"rows": len(chunk), "direction": body.direction},
                 },
             )
+        # Free-play is unscored, but the Chain still requires a protocol hash on
+        # the envelope, and an unscored frame should record which world
+        # configuration produced it. Refuse with a named blocker rather than
+        # letting the Chain answer with a bare 400.
+        protocol_hash = document.sha256 if (document is not None and document.frozen) else None
+        if not protocol_hash:
+            raise HTTPException(
+                503,
+                {
+                    "reason": (
+                        "Free-play needs a frozen protocol. The world model is configured by it, so an "
+                        "unscored frame still has to record which configuration produced it."
+                    ),
+                    "missing": [protocol_reason or "no frozen protocol.json is loaded"],
+                    "commanded_chunk": {"rows": len(chunk), "direction": body.direction},
+                },
+            )
         started = time.perf_counter()
         try:
             outcome = baseten_backend.freeplay_step(
-                session_id=session_id, task=body.task, actions=chunk, resolution=480
+                session_id=session_id,
+                task=body.task,
+                actions=chunk,
+                protocol_hash=protocol_hash,
+                # Derived from the session and step so a free-play frame is
+                # reproducible, and so holding a key does not redraw the same
+                # noise every chunk. Not a protocol seed: nothing here is scored.
+                seed=zlib.crc32(("%s:%d" % (session_id, session["steps"])).encode("utf-8")),
+                resolution=480,
             )
         except Exception as exc:
             raise HTTPException(502, {"reason": "world-model generation failed", "detail": str(exc)})
@@ -956,8 +982,14 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
             "frame_count": int(outcome.get("frame_count") or 0),
             "commanded_rows": len(chunk),
             "latency_ms": (time.perf_counter() - started) * 1000.0,
-            "resolution": 480,
+            # What was asked for, and separately what the frames measurably are.
+            # Reporting the request as though it were the result is how a 64px
+            # rehearsal frame would end up captioned "480p" on stage.
+            "requested_resolution": outcome.get("requested_resolution"),
+            "frame_height": outcome.get("frame_height"),
+            "frame_width": outcome.get("frame_width"),
             "backend": "baseten",
+            "protocol_hash": protocol_hash,
             "qualified": False,
             "scored": False,
             "reason": "Unscored free-play. No policy, no language model, no validity gate, no judge.",

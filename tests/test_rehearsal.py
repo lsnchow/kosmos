@@ -340,3 +340,120 @@ def test_rehearsal_is_opt_in_by_environment():
     assert rehearsal_enabled({"PLUMB_REHEARSAL_CHAIN": "1"}) is True
     profile = build_rehearsal_profile({"PLUMB_REHEARSAL_MAX_REPLICAS": "30", "PLUMB_REHEARSAL_SCORED": "0"})
     assert profile.max_replicas == 30 and profile.scored is False
+
+
+# --- free play -------------------------------------------------------------
+#
+# Free-play skips the policy, the validity gate and the judge, so it is the one
+# path whose envelope the scored contract does not describe.  It reached the
+# browser returning HTTP 400 from the Chain, because the entrypoint required a
+# protocol hash it was never given and an EpisodeControlPayload it never built.
+# These lock both halves down.
+
+
+def _freeplay_envelope(**overrides):
+    import hashlib
+
+    from plumb.starts import _solid_png
+
+    png = _solid_png(64, 64, 10, 20, 30)
+    frame = {
+        "encoding": "png_base64",
+        "data": base64.b64encode(png).decode("ascii"),
+        "png_sha256": hashlib.sha256(png).hexdigest(),
+        "height": 64,
+        "width": 64,
+    }
+    protocol_hash = "sha256:" + "a" * 64
+    ref = {"episode_id": "freeplay-s1", "protocol_hash": protocol_hash, "payload": {}}
+    envelope = {
+        "run_id": "freeplay",
+        "episode_id": "freeplay-s1",
+        "protocol_hash": protocol_hash,
+        "policy": ref,
+        "world": ref,
+        "validity": ref,
+        "judge": ref,
+        "freeplay": {
+            "task_id": "close_drawer",
+            "prompt": "close the drawer",
+            "compatibility_profile_id": "op-1",
+            "domain": "bridge_orig_lerobot",
+            "seed": 7,
+            "conditioning_image": frame,
+            "actions": [[0.03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]] * 16,
+        },
+    }
+    envelope["freeplay"].update(overrides)
+    return envelope
+
+
+def test_the_chain_accepts_a_freeplay_envelope():
+    """The scored contract does not describe free-play, so it needs its own branch."""
+
+    from plumb.rehearsal import _validate_against_chain_contract
+
+    assert _validate_against_chain_contract(_freeplay_envelope()) is None
+
+
+def test_a_freeplay_envelope_still_needs_a_protocol_hash():
+    """An unscored frame still records which world configuration produced it."""
+
+    from plumb.rehearsal import _validate_against_chain_contract
+
+    envelope = _freeplay_envelope()
+    envelope["protocol_hash"] = ""
+    violation = _validate_against_chain_contract(envelope)
+    assert violation is not None and "protocol_hash" in violation
+
+
+def test_a_scored_envelope_is_still_held_to_the_scored_contract():
+    """The free-play branch must not become a way to skip validation."""
+
+    from plumb.rehearsal import _validate_against_chain_contract
+
+    envelope = _freeplay_envelope()
+    del envelope["freeplay"]
+    violation = _validate_against_chain_contract(envelope)
+    assert violation is not None, "without freeplay set, the policy payload must still be checked"
+    assert "EpisodeControlPayload" in violation
+
+
+def test_a_simulated_freeplay_result_scores_nothing(tmp_path):
+    """No policy, no validity gate and no judge ran, so none may report a value."""
+
+    transport = RehearsalChainTransport(webhook_secret="s", artifacts_dir=tmp_path)
+    envelope = _freeplay_envelope()
+    result = transport._build_freeplay_result("freeplay", "freeplay-s1", envelope["freeplay"])
+
+    assert result["status"] == "completed"
+    assert len(result["freeplay_frames"]) == 16, "one frame per commanded action row"
+    assert result["validity"] is None, "no validity gate ran"
+    assert result["binary_success"] is None, "no judge ran"
+    assert result["judge_status"] is None
+    assert result["qualified"] is False
+    assert result["transport"] == SIMULATED_TRANSPORT
+
+
+def test_freeplay_frames_that_fail_their_own_hash_are_dropped(tmp_path):
+    """The point of the beat is that the pixels are what the world model produced."""
+
+    import hashlib
+
+    from plumb.starts import _solid_png
+
+    png = _solid_png(8, 8, 1, 2, 3)
+    encoded = base64.b64encode(png).decode("ascii")
+    good = {"encoding": "png_base64", "data": encoded, "png_sha256": hashlib.sha256(png).hexdigest()}
+    tampered = {"encoding": "png_base64", "data": encoded, "png_sha256": "0" * 64}
+
+    backend = BasetenChainBackend(
+        settings=BasetenBackendSettings(
+            webhook_endpoint="https://example.invalid/api/callbacks",
+            operating_point_id="op-1",
+        ),
+        data_dir=tmp_path,
+        transport_kind="simulated",
+    )
+    urls = backend._persist_freeplay_frames("s", {"freeplay_frames": [good, tampered, good]})
+    assert len(urls) == 2, "the frame whose bytes disagree with its declared hash is not shown"
