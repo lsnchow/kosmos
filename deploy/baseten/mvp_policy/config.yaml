@@ -1,0 +1,17 @@
+model_name: plumb-susie-ll-gcbc-static-goal-mvp
+python_version: py310
+system_packages:
+  - git
+requirements_file: requirements.txt
+build_commands:
+  - git clone https://github.com/rail-berkeley/soar.git /app/source-soar-gcbc
+  - git -C /app/source-soar-gcbc checkout --detach eabd5f16a856e484884a22e257a941bb358cea08
+  - git -C /app/source-soar-gcbc diff --quiet
+  - pip install --no-deps /app/source-soar-gcbc/model_training
+resources:
+  accelerator: H100
+  use_gpu: true
+  cpu: 4
+  memory: 16Gi
+runtime:
+  predict_concurrency: 1
