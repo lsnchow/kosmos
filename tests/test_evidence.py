@@ -110,6 +110,17 @@ def test_production_octo_profile_is_separate_unqualified_diagnostic(tmp_path):
     assert row["frame_count"] is None and row["video_url"] is None
 
 
+def test_judge_gradient_check_is_not_a_trained_adapter_or_task_score(tmp_path):
+    write(tmp_path / "cluster-evidence" / "judge-preflight.json", {
+        "kind": "plumb_judge_lora_framework_preflight", "status": "completed_unqualified_preflight",
+        "qualified": False, "loss": 0.7, "wall_seconds": 12, "gpu_peak_memory_bytes": 1024})
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["stage"] == "judge_training_preflight"
+    assert row["qualified"] is False and row["outcome"] == "unknown"
+    assert "No optimizer step" in " ".join(row["notes"])
+    assert row["latency_seconds"] == 12 and row["video_url"] is None
+
+
 def test_replica_summary_requires_digest_bound_complete_raw_reports(tmp_path):
     summary = tmp_path / "cluster-evidence" / "replicas" / "summary.json"
     worker = summary.parent / "reports" / "worker.json"

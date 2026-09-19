@@ -263,6 +263,7 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
 
     from plumb.backends.baseten import BackendNotConfigured, BasetenChainBackend
     from plumb.rehearsal import rehearsal_enabled
+    from plumb.result_store import ResultStoreConfigurationError, S3ResultStore
 
     if rehearsal_enabled():
         return _register_rehearsal_backend(root)
@@ -272,12 +273,22 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
         return None, ["PLUMB_WEBHOOK_ENDPOINT is not set"]
     from plumb.starts import ScenarioStartResolver, StartResolutionError
 
+    result_store = None
+    result_store_reason: Optional[str] = None
+    try:
+        # Construction only validates explicit configuration. It does not make
+        # an S3 call; preflight is an operator-invoked action below.
+        result_store = S3ResultStore.from_env()
+    except ResultStoreConfigurationError as exc:
+        result_store_reason = str(exc)
     try:
         settings = _backend_settings(webhook)
-        backend = BasetenChainBackend.from_env(settings, root)
+        backend = BasetenChainBackend.from_env(settings, root, result_store=result_store)
     except (BackendNotConfigured, ValueError) as exc:
         return None, [str(exc)]
     missing = list(backend.configuration_status()["missing"])
+    if result_store_reason is not None:
+        missing.append(result_store_reason)
     # A real submission needs real starts. There is no synthetic fallback on this
     # path: a rehearsal start must never reach a production run.
     try:

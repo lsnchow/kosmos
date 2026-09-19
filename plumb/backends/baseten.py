@@ -41,6 +41,7 @@ import sqlite3
 import tempfile
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
@@ -57,6 +58,7 @@ from ..platform import (
     VerifiedPriceBasis,
 )
 from ..records import canonical_json, file_digest, json_digest, utc_now
+from ..result_store import ResultStoreBinding, S3ResultStore, request_payload_digest
 from ..starts import StartResolutionError, StartResolver
 
 
@@ -107,7 +109,7 @@ class RemoteChainExecutionError(RuntimeError):
 class ChainResultStore(Protocol):
     """A verified result lookup, deliberately separate from queue status."""
 
-    def get_result(self, request_id: str) -> Optional[Mapping[str, Any]]:
+    def get_result(self, binding: ResultStoreBinding) -> Optional[Mapping[str, Any]]:
         """Return one completed request result, or ``None`` while unavailable."""
 
 
@@ -188,6 +190,7 @@ class SubmissionOutbox:
                   protocol_hash TEXT,
                   state TEXT NOT NULL,
                   request_id TEXT,
+                  result_key TEXT,
                   attempt_count INTEGER NOT NULL DEFAULT 0,
                   request_payload_sha256 TEXT NOT NULL,
                   submitted_at TEXT,
@@ -221,8 +224,19 @@ class SubmissionOutbox:
             # backwards-compatible, exactly as plumb/ledger.py does.
             for table, column, definition in (
                 ("callbacks", "associated", "INTEGER NOT NULL DEFAULT 0"),
+                ("outbox", "result_key", "TEXT"),
             ):
                 self._ensure_column(connection, table, column, definition)
+            # Legacy outbox rows were written before result-store bindings
+            # existed. Give each a secret-free opaque key during migration so a
+            # recovery can bind it without changing its logical identity.
+            rows = connection.execute("SELECT logical_key FROM outbox WHERE result_key IS NULL OR result_key = ''").fetchall()
+            for row in rows:
+                connection.execute(
+                    "UPDATE outbox SET result_key = ? WHERE logical_key = ?",
+                    (uuid.uuid4().hex, row["logical_key"]),
+                )
+            connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_outbox_result_key ON outbox(result_key)")
 
     @staticmethod
     def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -251,16 +265,20 @@ class SubmissionOutbox:
         episode: Mapping[str, Any],
         variant: str,
         protocol_hash: Optional[str],
-        payload_sha256: str,
+        payload_sha256: Optional[str],
     ) -> Dict[str, Any]:
         """Create or fetch the logical row.  Never creates a second row for one cell."""
 
         now = utc_now()
+        requested_digest = payload_sha256 or "pending_result_store_binding"
         with self._lock, self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
             if existing is not None:
-                if existing["request_payload_sha256"] != payload_sha256:
+                if payload_sha256 is not None and existing["request_payload_sha256"] not in (
+                    payload_sha256,
+                    "pending_result_store_binding",
+                ):
                     connection.rollback()
                     raise ValueError(
                         "logical episode %s already exists with a different request payload; "
@@ -271,8 +289,8 @@ class SubmissionOutbox:
             connection.execute(
                 """INSERT INTO outbox(
                      logical_key, run_id, episode_id, policy_variant, task, start_id, world_seed,
-                     protocol_hash, state, request_payload_sha256, created_at, updated_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?)""",
+                     protocol_hash, state, result_key, request_payload_sha256, created_at, updated_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?)""",
                 (
                     key,
                     str(episode.get("run_id")),
@@ -282,7 +300,8 @@ class SubmissionOutbox:
                     str(episode.get("start_id")),
                     int(episode.get("world_seed") or 0),
                     protocol_hash,
-                    payload_sha256,
+                    uuid.uuid4().hex,
+                    requested_digest,
                     now,
                     now,
                 ),
@@ -290,6 +309,51 @@ class SubmissionOutbox:
             connection.commit()
             row = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
             return dict(row)
+
+    def bind_request_payload(self, key: str, payload_sha256: str) -> Dict[str, Any]:
+        """Bind the key to the final request digest before the POST boundary."""
+
+        if not isinstance(payload_sha256, str) or not payload_sha256.startswith("sha256:"):
+            raise ValueError("request payload digest must be a SHA-256 digest")
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
+            if row is None:
+                connection.rollback()
+                raise KeyError("outbox record not found: %s" % key)
+            existing = str(row["request_payload_sha256"])
+            if existing not in ("pending_result_store_binding", payload_sha256):
+                connection.rollback()
+                raise ValueError("logical episode already exists with a different request payload")
+            if row["state"] != "planned":
+                if existing == "pending_result_store_binding":
+                    connection.commit()
+                    return dict(row)
+                if existing != payload_sha256:
+                    connection.rollback()
+                    raise ValueError("result-store request binding must precede the POST boundary")
+                connection.commit()
+                return dict(row)
+            connection.execute(
+                "UPDATE outbox SET request_payload_sha256 = ?, updated_at = ? WHERE logical_key = ?",
+                (payload_sha256, utc_now(), key),
+            )
+            bound = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
+            connection.commit()
+            return dict(bound)
+
+    def result_binding(self, key: str) -> ResultStoreBinding:
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
+        if row is None:
+            raise KeyError("outbox record not found: %s" % key)
+        return ResultStoreBinding(
+            result_key=str(row["result_key"]),
+            run_id=str(row["run_id"]),
+            episode_id=str(row["episode_id"]),
+            protocol_hash=str(row["protocol_hash"]),
+            request_payload_sha256=str(row["request_payload_sha256"]),
+        )
 
     def begin_submission(self, key: str) -> bool:
         """Commit the irreversible-POST boundary before bytes leave the process.
@@ -614,6 +678,13 @@ class BasetenChainBackend:
         missing: List[str] = []
         if self.client is None:
             missing.append("BASETEN_API_KEY and BASETEN_CHAIN_ASYNC_URL")
+        if self.transport_kind == "network" and self.result_store is None:
+            missing.append(
+                "a configured immutable S3-compatible PLUMB result store "
+                "(bucket, region, HTTPS endpoint, prefix, evidence, and deployment secrets)"
+            )
+        if self.transport_kind == "network" and isinstance(self.result_store, S3ResultStore) and not self.result_store.sdk_available():
+            missing.append("boto3 result-store optional dependency is not installed")
         if self._config is not None and not self._config.webhook_secret:
             missing.append("BASETEN_WEBHOOK_SECRET (callback authentication unavailable)")
         if self._queue_route is None:
@@ -622,10 +693,12 @@ class BasetenChainBackend:
             missing.append("a VerifiedPriceBasis (USD unavailable)")
         return {
             "backend": self.name,
-            "configured": self.client is not None,
+            "configured": self.client is not None and (
+                self.transport_kind == "simulated" or self.result_store is not None
+            ),
             "transport_kind": self.transport_kind,
             "simulated": self.transport_kind == "simulated",
-            "chain_async_url": self.client.chain_async_url if self.client is not None else None,
+            "chain_async_url": getattr(self.client, "chain_async_url", None) if self.client is not None else None,
             "operating_point": self.settings.to_mapping(),
             "missing": missing,
             "rehearsal_warning": (
@@ -646,7 +719,7 @@ class BasetenChainBackend:
         a deadline is a failed lifecycle, never a guessed score or a retry.
         """
 
-        if self.client is None:
+        if self.client is None or (self.transport_kind == "network" and self.result_store is None):
             raise BackendNotConfigured(
                 "Baseten backend is not configured: %s" % ", ".join(self.configuration_status()["missing"])
             )
@@ -654,14 +727,27 @@ class BasetenChainBackend:
         variant = str(episode.get("policy_variant") or episode.get("policy"))
         protocol_hash = episode.get("protocol_hash") or config.get("protocol_hash")
         try:
-            entrypoint_input = self._build_entrypoint_input(episode, config, variant, protocol_hash)
+            unsigned_input = self._build_entrypoint_input(episode, config, variant, protocol_hash)
         except StartResolutionError as exc:
             # An unresolvable start is a known, named gap (Gate C), not a service
             # failure and not a scored outcome.
             return self._unevaluable(episode, "start_unresolved", str(exc))
-        payload_sha = json_digest(entrypoint_input)
         key = self.outbox.logical_key(episode, protocol_hash, variant)
-        row = self.outbox.reserve(key, episode, variant, protocol_hash, payload_sha)
+        # Persist an opaque object key before it becomes part of the request.
+        # The digest binds the entire unsigned request; the binding itself is
+        # excluded from that digest to avoid a circular hash definition.
+        row = self.outbox.reserve(key, episode, variant, protocol_hash, None)
+        binding = ResultStoreBinding(
+            result_key=str(row["result_key"]),
+            run_id=str(episode["run_id"]),
+            episode_id=str(episode["episode_id"]),
+            protocol_hash=str(protocol_hash or ""),
+            request_payload_sha256=request_payload_digest(unsigned_input),
+        )
+        entrypoint_input = self._build_entrypoint_input(
+            episode, config, variant, protocol_hash, result_store=binding.as_mapping()
+        )
+        row = self.outbox.bind_request_payload(key, json_digest(entrypoint_input))
 
         if row["state"] == "completed" and row["result_json"]:
             # Idempotent replay of an already-settled logical episode.
@@ -807,6 +893,7 @@ class BasetenChainBackend:
         config: Mapping[str, Any],
         variant: str,
         protocol_hash: Optional[str],
+        result_store: Optional[Mapping[str, str]] = None,
     ) -> Dict[str, Any]:
         """Build the ``RolloutRequest`` the Chain entrypoint actually accepts.
 
@@ -872,7 +959,7 @@ class BasetenChainBackend:
             "judge_seeds": [int(value) for value in (seeds.get("judge_samples") or [])],
         }
 
-        return {
+        request = {
             "run_id": str(episode.get("run_id")),
             "episode_id": episode_id,
             "protocol_hash": str(protocol_hash or ""),
@@ -881,6 +968,9 @@ class BasetenChainBackend:
             "validity": {**stage_ref, "payload": scoring_payload},
             "judge": {**stage_ref, "payload": scoring_payload},
         }
+        if result_store is not None:
+            request["result_store"] = dict(result_store)
+        return request
 
     def _await_result(self, key: str, request_id: str) -> Optional[Dict[str, Any]]:
         """Wait for the Chain's own persisted result, notified by callback.
@@ -906,7 +996,7 @@ class BasetenChainBackend:
                 # verified. It is especially important for rehearsal: a
                 # deliberately dropped webhook must not turn completed remote
                 # work into a made-up timeout failure.
-                result = self.result_store.get_result(request_id)
+                result = self.result_store.get_result(self.outbox.result_binding(key))
                 if isinstance(result, Mapping):
                     return dict(result)
             time.sleep(self.settings.poll_interval_seconds)
@@ -1397,23 +1487,27 @@ class BasetenChainBackend:
                     )
                     resolved.append(row["logical_key"])
                     continue
-                if self.result_store is not None:
-                    result = self.result_store.get_result(str(request_id))
-                    if isinstance(result, Mapping):
-                        terminal_state = "completed" if result.get("status") == "completed" else "failed"
-                        self.outbox.settle(
-                            row["logical_key"],
-                            terminal_state,
-                            result,
-                            None
-                            if terminal_state == "completed"
-                            else {
-                                "reason": "remote_chain_terminal_%s" % str(result.get("status") or "unknown"),
-                                "request_id": request_id,
-                            },
-                        )
-                        resolved.append(row["logical_key"])
-                        continue
+            # The opaque key is committed before the POST, so it can recover a
+            # result even when the process never durably learned Baseten's
+            # request ID. This is the only permitted ambiguous-POST recovery;
+            # it never submits a second request.
+            if self.result_store is not None:
+                result = self.result_store.get_result(self.outbox.result_binding(str(row["logical_key"])))
+                if isinstance(result, Mapping):
+                    terminal_state = "completed" if result.get("status") == "completed" else "failed"
+                    self.outbox.settle(
+                        row["logical_key"],
+                        terminal_state,
+                        result,
+                        None
+                        if terminal_state == "completed"
+                        else {
+                            "reason": "remote_chain_terminal_%s" % str(result.get("status") or "unknown"),
+                            "request_id": request_id,
+                        },
+                    )
+                    resolved.append(row["logical_key"])
+                    continue
             still_unknown.append(
                 {
                     "logical_key": row["logical_key"],

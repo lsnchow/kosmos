@@ -13,6 +13,7 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "numpy>=1.24,<3"]
 test = ["pytest>=8,<9", "httpx>=0.27,<1", "pillow>=10,<13", "pyflakes>=3.2,<4"]
 analytics = ["scipy>=1.10,<2"]
 media = ["pillow>=10,<13", "imageio>=2.34,<3", "imageio-ffmpeg>=0.5,<1"]
+result-store = ["boto3==1.43.98"]
 
 [project.scripts]
 plumb = "plumb.cli:main"

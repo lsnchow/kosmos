@@ -59,6 +59,13 @@ OCTO_PRODUCTION_SOURCE_COMMIT = "241fb3514b7c40957a86d869fecb7c7fc353f540"
 OCTO_PRODUCTION_SOURCE = "https://github.com/octo-models/octo/tree/" + OCTO_PRODUCTION_SOURCE_COMMIT
 OCTO_PRODUCTION_MODEL_SOURCE = "https://github.com/octo-models/octo/blob/" + OCTO_PRODUCTION_SOURCE_COMMIT + "/octo/model/octo_model.py"
 OCTO_ENSEMBLE_SOURCE = "https://github.com/octo-models/octo/blob/" + OCTO_PRODUCTION_SOURCE_COMMIT + "/octo/utils/gym_wrappers.py"
+OCTO_AUTOEVAL_SOURCE_COMMIT = "3ea3ff44c6950433cfbcb4294a3deaa616533745"
+OCTO_AUTOEVAL_OCTO_POLICY_SOURCE = (
+    "https://github.com/zhouzypaul/auto_eval/blob/"
+    + OCTO_AUTOEVAL_SOURCE_COMMIT
+    + "/auto_eval/robot/policy.py#L134-L164"
+)
+OCTO_AUTOEVAL_STATIC_RNG_SEED = 0
 
 # octo's released ``TemporalEnsembleWrapper`` defaults to ``exp_weight=0``,
 # which is a uniform mean over the overlapping predictions.  AutoEval's value
@@ -364,6 +371,8 @@ class _OctoAdapterBase(NativePolicyAdapter):
         self._model_factory = model_factory
         self._runtime: Optional[_OctoRuntime] = None
         self._model: Any = None
+        self._task: Any = None
+        self._task_instruction: Optional[str] = None
 
     # -- capability -------------------------------------------------------------
 
@@ -392,6 +401,8 @@ class _OctoAdapterBase(NativePolicyAdapter):
             "octo_release": "v1.0",
             "checkpoint_revision": self.profile.checkpoint_revision,
             "source_revision": self.profile.source_revision,
+            "autoeval_wrapper_revision": OCTO_AUTOEVAL_SOURCE_COMMIT,
+            "autoeval_sampler_rng_seed": OCTO_AUTOEVAL_STATIC_RNG_SEED,
             "checkpoint_step": int(self.profile.checkpoint_step),
             "checkpoint_relative_path": self.profile.checkpoint_relative_path,
             "forbidden_model_ids": list(OCTO_FORBIDDEN_MODEL_IDS),
@@ -416,15 +427,32 @@ class _OctoAdapterBase(NativePolicyAdapter):
 
     def _reset_native(self, seed: int) -> None:
         self.ensembler.reset()
+        self._task = None
+        self._task_instruction = None
 
     def _snapshot_extra(self) -> Dict[str, Any]:
-        return {"ensembler": self.ensembler.snapshot()}
+        return {
+            "ensembler": self.ensembler.snapshot(),
+            # The encoded task pytree is runtime-specific and cannot be safely
+            # serialized as JSON. Bind its exact source instruction instead;
+            # the pinned model recreates it lazily after restore.
+            "task_instruction": self._task_instruction,
+        }
 
     def _restore_extra(self, payload: Mapping[str, Any]) -> None:
         ensembler = payload.get("ensembler")
         if ensembler is None:
             raise PolicyContractError("Octo snapshot must carry its temporal-ensembling state.")
         self.ensembler.restore(ensembler)
+        instruction = payload.get("task_instruction")
+        if instruction is not None and (not isinstance(instruction, str) or not instruction.strip()):
+            raise PolicyContractError("Octo snapshot task_instruction must be a nonempty string or null.")
+        if self._step > 0 and instruction is None:
+            raise PolicyContractError(
+                "Octo snapshot after a native call must bind task_instruction so a restored AutoEval task cannot change silently."
+            )
+        self._task = None
+        self._task_instruction = instruction
 
     # -- runtime ----------------------------------------------------------------
 
@@ -508,9 +536,25 @@ class _OctoAdapterBase(NativePolicyAdapter):
     def _episode_rng(self, runtime: _OctoRuntime) -> Any:
         if self._seed is None:
             raise PolicyContractError(
-                "Octo requires reset(seed) before a native call so its JAX RNG stream is pinned and restorable."
+                "Octo requires reset(seed) before a native call so its wrapper history is reset and restorable."
             )
-        return runtime.fold_in(runtime.prng_key(int(self._seed)), int(self._step))
+        # The pinned AutoEval OctoPolicy invokes PRNGKey(0) on every policy
+        # call.  Preserve that source behavior; the controller reset seed
+        # governs PLUMB-owned history state, not the upstream sampler key.
+        return runtime.prng_key(OCTO_AUTOEVAL_STATIC_RNG_SEED)
+
+    def _task_for_instruction(self, model: Any, instruction: str) -> Any:
+        """Mirror AutoEval's one-language-task cache for a rollout/reset span."""
+
+        if self._task_instruction is None:
+            self._task_instruction = instruction
+        elif instruction != self._task_instruction:
+            raise PolicyContractError(
+                "Octo AutoEval source binds the language task on its first call; call reset(seed) before changing instructions."
+            )
+        if self._task is None:
+            self._task = model.create_tasks(texts=[instruction])
+        return self._task
 
     def _native_proposal(self, observation: PolicyObservation, identity: FrameIdentity) -> NativeProposal:
         runtime = self._load_runtime()
@@ -521,7 +565,7 @@ class _OctoAdapterBase(NativePolicyAdapter):
             keys.image_key: runtime.array_factory([list(observation.image_history)], "uint8"),
             keys.pad_mask_key: runtime.array_factory([list(pad_mask)], "bool"),
         }
-        task = model.create_tasks(texts=[observation.prompt])
+        task = self._task_for_instruction(model, observation.prompt)
         rng = self._episode_rng(runtime)
         started = time.perf_counter()
         # ``unnormalization_statistics=None`` asks the released sampler for
@@ -561,6 +605,8 @@ class _OctoAdapterBase(NativePolicyAdapter):
                 "ensemble_config_revision": self.ensembler.config.config_revision,
                 "observation_keys_revision": keys.keys_revision,
                 "denormalization_boundary": "plumb_policy_action_normalizer",
+                "sampler_rng": "autoeval_static_prngkey_0",
+                "controller_reset_seed": self._seed,
             },
         )
 

@@ -1,5 +1,53 @@
 # PLUMB execution handoff — implementation in progress
 
+## Judge fine-tuning priority — 2026-09-19 afternoon
+
+User explicitly requested judge fine-tuning ASAP. **Actual optimizer training
+has NOT started; no adapter is saved.** One-H100 Trillium preflight939218
+COMPLETED0:0 with real Qwen forward/backward,20,185,088 trainable LoRA parameters,
+finite loss0.6149674654,56 nonzero-gradient tensors and31,381,548,544B peak CUDA
+allocation. This is not teacher calibration or a trained-judge claim.
+See the new first section of `docs/DISTILLATION_RUNBOOK.md` for source release,
+runtime lock, exact module/env/model paths, timing scope and fixture limitations.
+
+Next meaningful choice: user was asked asynchronously whether to start an
+explicitly unqualified development pilot using newly teacher-labelled clips,
+or wait for calibrated training data. No answer yet. Do not fabricate a Gate-D
+pass, formal preregistration, human labels, training splits, or qualified base
+judge to start formal training. The existing single diagnostic has no quorum;
+it is framework-preflight-only. Preserve this explicit boundary.
+
+Final verification this continuation: **1,191 passed,6skipped**. Live API8787
+was restarted in LOCAL tmux `plumb-live` (PID95884 at restart), still using
+`data/live-integrated`; no active run was interrupted. It exposes15 diagnostic
+cards, including the new preflight report, whose HTTP link returns200.
+Real submission stays disabled and qualified=false. Trillium `squeue` is empty;
+939218 is complete and no training/monitor process is left running.
+Video-curation safeguards bound the reconstructed pixels and retained original
+raw media/reports; no generated human labels or substituted goal images.
+
+Other implemented work this continuation:
+
+- Real opt-in S3-compatible result persistence/readback for the Chain, conditional
+  immutable writes, secret-free pre-POST result keys, deployment-context secrets,
+  request/result identity/digest checks and bounded reads. Ambiguous POSTs can
+  recover by result key without a request ID. No store was provisioned or called;
+  no Baseten deployment/spend occurred. Missing config blocks before GPU work.
+  Actual SDK structure validates. A fresh60-episode simulated rehearsal passed:
+ 59completed/1injectedfailure/2droppedcallbacks, zero unresolved, gates NOT_RUN;
+  `data/rehearsal-run-aakd64k1`, run `run-e070853a3ebf465fa5ac9d8bcc4fb266`.
+- Source audit corrected production Octo to AutoEval's static PRNGKey(0) and
+  cached task with safe reset/restore. New RNG0v2 profile is distinct from the
+  earlier GPU smoke; no v2 GPU result is claimed. Raw LeRobot proprio is not
+  silently substituted for the source wrapper's converted history.
+- Rehashed staged Cosmos, OpenVLA, Octo and Bridge metadata on the cluster:
+ 4core staged-integrity passes,0fully-verified deployment profiles. See
+  `docs/STAGED-ASSET-AUDIT.md`; no weights copied to laptop.
+- Acquired only6MB Bridge metadata, audited53,192 source episodes and exact
+  instruction coverage. No basket/sink exact matches; no study starts selected.
+  Source gripper extrema0.046–1.112 conflict with the provisional0–0.39 profile;
+  no guessed rescaling. See `docs/GATE_C_RUNBOOK.md`.
+
 ## Integrated continuation — 2026-09-19 late morning
 
 This section supersedes the branch, process, test and allocation snapshots below.

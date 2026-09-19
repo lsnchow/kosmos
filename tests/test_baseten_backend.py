@@ -137,10 +137,7 @@ def test_crashed_pre_post_boundary_is_ambiguous_and_never_reposted(tmp_path):
     backend, client = _executing_backend(tmp_path, outcome)
     episode = _episode(start_lineage_id="lineage-000")
     key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
-    request = backend._build_entrypoint_input(episode, {}, "OpenVLA", episode["protocol_hash"])
-    from plumb.records import json_digest
-
-    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], json_digest(request))
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], None)
     assert backend.outbox.begin_submission(key)
 
     result = backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0001")
@@ -325,9 +322,11 @@ def test_reconcile_resolves_a_late_callback_and_keeps_the_rest_unknown(tmp_path)
 class _AcceptedClient:
     def __init__(self) -> None:
         self.calls = 0
+        self.inputs = []
 
     async def submit_async(self, _entrypoint_input, _options):
         self.calls += 1
+        self.inputs.append(dict(_entrypoint_input))
         return SimpleNamespace(request_id="request-1", response={"request_id": "request-1"})
 
 
@@ -337,6 +336,7 @@ def _executing_backend(tmp_path, outcome):
         settings=_settings(),
         data_dir=tmp_path,
         client=client,
+        transport_kind="simulated",
         start_resolver=RehearsalStartResolver(256),
     )
     backend._await_result = lambda _key, _request_id: dict(outcome)  # type: ignore[method-assign]
@@ -421,6 +421,38 @@ def test_completed_but_unevaluable_chain_clip_remains_a_completed_unknown(tmp_pa
     )
 
 
+def test_network_backend_is_unavailable_without_an_explicit_result_store(tmp_path):
+    backend = BasetenChainBackend(
+        settings=_settings(),
+        data_dir=tmp_path,
+        client=_AcceptedClient(),
+        start_resolver=RehearsalStartResolver(256),
+    )
+    with pytest.raises(BackendNotConfigured, match="immutable S3-compatible"):
+        backend.execute(_episode(start_lineage_id="lineage-000"), {}, tmp_path / "attempt")
+
+
+def test_pre_post_outbox_persists_an_opaque_result_key_without_a_destination(tmp_path):
+    outcome = {
+        "status": "completed",
+        "validity": "unknown",
+        "binary_success": None,
+        "progress_score": None,
+        "missing_reason": "judge_no_quorum",
+        "horizon_actions": 70,
+        "executed_actions": 70,
+        "stages": {},
+    }
+    backend, client = _executing_backend(tmp_path, outcome)
+    episode = _episode(start_lineage_id="lineage-000")
+    backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000")
+    request = client.inputs[0]
+    binding = request["result_store"]
+    assert set(binding) == {"result_key", "run_id", "episode_id", "protocol_hash", "request_payload_sha256"}
+    assert len(binding["result_key"]) == 32
+    assert "bucket" not in binding and "endpoint" not in binding and "secret" not in binding
+
+
 def test_restarted_backend_waits_for_the_original_submitted_request_without_reposting(tmp_path):
     outcome = {
         "status": "completed",
@@ -435,10 +467,7 @@ def test_restarted_backend_waits_for_the_original_submitted_request_without_repo
     backend, client = _executing_backend(tmp_path, outcome)
     episode = _episode(start_lineage_id="lineage-000")
     key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
-    request = backend._build_entrypoint_input(episode, {}, "OpenVLA", episode["protocol_hash"])
-    from plumb.records import json_digest
-
-    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], json_digest(request))
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], None)
     backend.outbox.mark_submitted(key, "durable-request-id")
 
     result = backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0001")
@@ -449,8 +478,8 @@ def test_restarted_backend_waits_for_the_original_submitted_request_without_repo
 
 def test_reconcile_reads_an_injected_result_store_when_a_callback_never_arrives(tmp_path):
     class Store:
-        def get_result(self, request_id):
-            assert request_id == "store-request-id"
+        def get_result(self, binding):
+            assert binding.run_id == "run-1"
             return {
                 "status": "completed",
                 "validity": "unknown",
@@ -463,12 +492,43 @@ def test_reconcile_reads_an_injected_result_store_when_a_callback_never_arrives(
     backend = BasetenChainBackend(settings=_settings(), data_dir=tmp_path, result_store=Store())
     episode = _episode()
     key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
-    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], "sha256:request")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], "sha256:" + "a" * 64)
     backend.outbox.mark_submitted(key, "store-request-id")
 
     report = backend.reconcile("run-1")
     assert report["resolved"] == [key]
     assert backend.outbox.counts() == {"completed": 1}
+
+
+def test_ambiguous_post_recovers_by_precommitted_result_key_without_a_request_id_or_repost(tmp_path):
+    class Store:
+        def __init__(self):
+            self.bindings = []
+
+        def get_result(self, binding):
+            self.bindings.append(binding)
+            return {
+                "status": "completed",
+                "validity": "unknown",
+                "binary_success": None,
+                "progress_score": None,
+                "horizon_actions": 70,
+                "executed_actions": 70,
+            }
+
+    store = Store()
+    backend, client = _executing_backend(tmp_path, {})
+    backend.result_store = store
+    episode = _episode()
+    key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], "sha256:" + "a" * 64)
+    backend.outbox.mark_ambiguous(key, {"reason": "transport_lost_after_post"})
+
+    report = backend.reconcile("run-1")
+    assert report["resolved"] == [key]
+    assert backend.outbox.counts() == {"completed": 1}
+    assert store.bindings[0].result_key
+    assert client.calls == 0
 
 
 def test_an_invalid_episode_never_carries_a_score(tmp_path):

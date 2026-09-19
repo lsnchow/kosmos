@@ -1,5 +1,32 @@
 # PLUMB cluster operations — handoff for num2
 
+## Judge LoRA preflight — latest, 2026-09-19 afternoon
+
+Job939218 COMPLETED0:0 on one Trillium H100,57s Slurm elapsed. It checked
+Qwen LoRA forward/backward only: **no optimizer step, training run or adapter**.
+No jobs remained in `squeue` afterward. See docs/DISTILLATION_RUNBOOK.md's first
+section for actual metrics and pending user choice on an uncalibrated pilot.
+
+- Python: `/scratch/lchow432/plumb/venv-judge-lora-tf449/bin/python`.
+- Modules: `StdEnv/2023 python/3.11 arrow/19.0.1`; batch additionally loads
+  `cuda/12.2 cudnn/8.9.5.29`. Arrow module is required by Datasets/PyArrow.
+- Runtime lock: `evidence/judge-training-runtime-tf449-v1.json`.
+- Fixture: `fixtures/judge-lora-preflight-v1/row.json` with16 hash-bound PNGs
+  decoded from the original teacher MP4 and a separately bound scene reference.
+- Model view: `models/qwen-judge-training-view-cc594-v1`, a **hard-linked** view
+  of the existing Qwen files, excluding only downloader `.cache` metadata.
+  Every actual model/support file is independently hash-checked before load.
+  Do NOT edit weights in either view: their inodes are shared. No new weights
+  were downloaded. Only LoRA adapters may be saved to a fresh output directory.
+- Raw report/log: `evidence/judge-lora-preflight-939218.json` and
+  `logs/judge-lora-preflight-939218.log`; local copy is under
+  `data/live-integrated/cluster-evidence/judge-lora-preflight-939218/`.
+- Source release:82eb4ab6e401eea765857d7e568444d1dd9cc893ea774a35621d02f53c51fdf2.
+
+Do not relaunch this completed check unchanged. New training requires real
+dataset work and an explicit protocol/profile distinction; do not fabricate
+Gate D, preregistration or cohort proofs to satisfy the formal config parser.
+
 ## Latest integration operations — 2026-09-19 late morning
 
 Allocation937277 expired TIMEOUT at09:11 EDT; the older running/pending notes

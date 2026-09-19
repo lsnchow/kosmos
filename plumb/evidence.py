@@ -206,6 +206,16 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                 item.update(model="Octo-Small v1.0 worker consistency", stage="policy_reproducibility",
                             timing_scope="no_episode_or_burst_timing",
                             notes=_replica_notes(path, report))
+            elif kind == "plumb_judge_lora_framework_preflight":
+                timing = {"wall_seconds": report.get("wall_seconds"),
+                          "gpu_peak_memory_bytes": report.get("gpu_peak_memory_bytes")}
+                item.update(model="Qwen2.5-VL-7B LoRA framework preflight", stage="judge_training_preflight",
+                            timing_scope="framework_preflight_collation_forward_backward_excludes_model_setup",
+                            notes=["One real diagnostic input tested assistant-only loss and LoRA gradients.",
+                                   "No optimizer step or trained adapter; not a completed fine-tune or judge-quality result.",
+                                   "Original teacher disagreement/unknown outcome remains unchanged."])
+                if report.get("status") not in ("completed_unqualified_preflight",):
+                    item["notes"][0] = "Framework preflight did not complete: " + str(report.get("reason", "inspect raw report"))
             elif kind == "plumb_local_policy_smoke" and report.get("command") == "judge":
                 timing = {"wall_seconds": _mapping(report.get("timing")).get("judge_call_seconds")}
                 raw_outcome = _mapping(report.get("outcome"))

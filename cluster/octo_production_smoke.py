@@ -635,7 +635,7 @@ def run(args: argparse.Namespace) -> Tuple[int, Dict[str, Any]]:
         profile,
         normalizer=PolicyActionNormalizer(statistics),
         ensemble=OctoEnsembleConfig(
-            config_revision="octo-v1-temporal-ensemble-241fb-production-smoke",
+            config_revision="octo-v1-temporal-ensemble-241fb-autoeval-rng0-production-smoke-v2",
             exponential_weight=0.0,
             horizon=4,
         ),
@@ -703,7 +703,8 @@ def run(args: argparse.Namespace) -> Tuple[int, Dict[str, Any]]:
             "checkpoint_revision": profile.checkpoint_revision,
             "checkpoint_step": profile.checkpoint_step,
             "observation_keys_revision": profile.observation_keys.keys_revision,
-            "sampler": "sample_actions(observations, tasks, unnormalization_statistics=None, rng=fold_in(PRNGKey(seed), step))",
+            "sampler": "sample_actions(observations, tasks, unnormalization_statistics=None, rng=PRNGKey(0))",
+            "rng_profile": "autoeval_static_prngkey_0_v2",
             "normalization": "PLUMB source-bound normalizer applies bridge_dataset mean/std once after the 241fb sampler returns normalized rows.",
             "mask_source": mask_source,
             "execution_mode": adapter.execution_mode.value,
@@ -739,7 +740,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--input-manifest", required=True)
     parser.add_argument("--task-id", required=True, choices=("close_drawer", "open_drawer", "to_basket", "to_sink", "fold_cloth"))
     parser.add_argument("--report", required=True)
-    parser.add_argument("--profile-id", default="octo-small-v1-production-241fb-unqualified")
+    parser.add_argument("--profile-id", default="octo-small-v1-production-241fb-autoeval-rng0-v2-unqualified")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
     report_path = Path(args.report).resolve()

@@ -234,7 +234,18 @@ class RehearsalChainTransport:
             self.stats.submitted += 1
             self._in_flight += 1
             self.stats.peak_in_flight = max(self.stats.peak_in_flight, self._in_flight)
-            self._requests[request_id] = {"model_input": dict(model_input), "webhook": str(webhook), "result": None}
+            binding = model_input.get("result_store")
+            result_key = (
+                str(binding.get("result_key"))
+                if isinstance(binding, Mapping) and isinstance(binding.get("result_key"), str)
+                else request_id
+            )
+            self._requests[request_id] = {
+                "model_input": dict(model_input),
+                "webhook": str(webhook),
+                "result": None,
+                "result_key": result_key,
+            }
 
         # Schedule the callback the way the platform would: out of band, after
         # the work notionally completes.
@@ -331,6 +342,12 @@ class RehearsalChainTransport:
     def _complete_now(self, request_id: str, model_input: Mapping[str, Any], webhook: str) -> None:
         run_id = str(model_input.get("run_id"))
         episode_id = str(model_input.get("episode_id"))
+        result_binding = model_input.get("result_store")
+        result_key = (
+            str(result_binding.get("result_key"))
+            if isinstance(result_binding, Mapping) and isinstance(result_binding.get("result_key"), str)
+            else request_id
+        )
         policy = model_input.get("policy") or {}
         policy_payload = policy.get("payload") if isinstance(policy, Mapping) else {}
         policy_payload = policy_payload if isinstance(policy_payload, Mapping) else {}
@@ -352,7 +369,7 @@ class RehearsalChainTransport:
         result = self._build_result(run_id, episode_id, chunks, timings, payload)
         # A webhook is only a notification. Publish the result before trying
         # delivery so an intentionally dropped webhook remains recoverable.
-        self._persist_result(request_id, result)
+        self._persist_result(result_key, result)
         with self._lock:
             self._in_flight = max(0, self._in_flight - 1)
             if result["status"] == "completed":
@@ -421,18 +438,26 @@ class RehearsalChainTransport:
             if record is not None:
                 record["result"] = dict(result)
 
-    def get_result(self, request_id: str) -> Optional[Dict[str, Any]]:
+    def get_result(self, binding_or_key: Any) -> Optional[Dict[str, Any]]:
         """Read a durable simulated Chain result without relying on a webhook.
 
         This rehearsal-only injected seam does not assert that production has a
         matching Chain result endpoint.
         """
 
+        result_key = getattr(binding_or_key, "result_key", binding_or_key)
+        if not isinstance(result_key, str):
+            return None
         with self._lock:
-            record = self._requests.get(request_id)
+            record = self._requests.get(result_key)
             if record is not None and isinstance(record.get("result"), Mapping):
                 return dict(record["result"])
-        path = self._result_path(request_id)
+            for record in self._requests.values():
+                if isinstance(record.get("result_key"), str) and record["result_key"] == result_key:
+                    result = record.get("result")
+                    if isinstance(result, Mapping):
+                        return dict(result)
+        path = self._result_path(result_key)
         if not path.is_file():
             return None
         try:

@@ -27,6 +27,9 @@
 pydantic==2.11.7
 pillow==11.1.0
 numpy==1.26.4
+# Imported lazily by plumb.result_store only when an explicitly configured
+# immutable result store is used. It is not contacted at import/startup.
+boto3==1.43.98
 
 # `pillow` and `numpy` are here only to decode/encode the PNG frame payloads that
 # cross Chainlet RPC boundaries and to hash pixels for the segment ledger.  They
@@ -40,6 +43,8 @@ numpy==1.26.4
 #   * No queue client.  Only the Chain entrypoint is invoked through the external
 #     async queue (/async_run_remote); internal Chainlet calls are awaited RPCs
 #     and must never re-enter the queue (AGENT-BUILD-SPEC.md §7).
-#   * No database/object-store client.  The durable run ledger, outbox, artifact
-#     writes, retry-attempt records, and callback reconciliation belong to the
-#     application control plane, not to this stateless worker.
+#   * No database client. The durable run ledger, outbox, retry-attempt records,
+#     and callback reconciliation remain application-control-plane concerns.
+#   * The optional S3-compatible terminal-result writer is fail-closed and uses
+#     only an opaque key from the request plus bucket/credential deployment
+#     context. It never accepts a payload-selected URL or credential.

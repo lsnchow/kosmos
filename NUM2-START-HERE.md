@@ -1,5 +1,12 @@
 # Start message for a new chat named num2
 
+NEW PRIORITY: judge fine-tuning. Read HANDOFF.md's **Judge fine-tuning priority**
+section and the first section of docs/DISTILLATION_RUNBOOK.md. H100939218 passed
+real LoRA forward/backward compatibility, but no optimizer training or adapter
+exists. User approval for an explicitly unqualified development pilot is pending;
+formal calibrated data/teacher remain absent. Keep all raw reports and do not
+promote a diagnostic vote into a human/qualified target.
+
 NEWEST ENTRYPOINT (2026-09-19 late morning): read the new first section of
 HANDOFF.md before the historical instructions below. Merge3832de3 is delivered
 to origin/main and the normal workspace is on main. The separate integration
