@@ -1,5 +1,25 @@
 # PLUMB cluster operations — handoff for num2
 
+## NEW Baseten access — LOCAL tmux `b10`
+
+Baseten API-key profile `plumb-api` is configured and verified. Use it explicitly
+outside `b10` (`--profile plumb-api`); the shell in `b10` has
+`BASETEN_PROFILE=plumb-api`. Global OAuth/default configuration is unchanged.
+The parent workspace is Hack the North, but use **team 33 / `q8grpdw`** for
+resources: `--team q8grpdw`. The default team named Hack the North has no H100
+capacity. Last verified Team 33 training allowance: **4 H100s, 0 in use**;
+recheck with `baseten train capacity describe --profile plumb-api`.
+
+`baseten ssh setup --profile plumb-api` completed and installed its managed
+SSH configuration. A future owned RUNNING SSH-enabled training job connects as
+`ssh training-job-JOB_ID-0.ssh.baseten.co`; replace JOB_ID with the actual job ID.
+No job was created and no live SSH session tested in the side conversation.
+Workspace SSH enablement and billing/product entitlement still need checking.
+Do not confuse Baseten setup with restored Trillium authentication below.
+Do not inspect/print credentials, change shared team limits, interrupt another
+pane's running work, or treat closing SSH as stopping billable compute.
+See HANDOFF.md's new first section and docs/BASETEN-TEAM33-MVP-TODO.md.
+
 Final authentication recheck: Trillium BatchMode returned permission denied
 after job940190 completed and its evidence was mirrored. The last successful
 scheduler check was empty; no later job was submitted. No Duo retry was sent.

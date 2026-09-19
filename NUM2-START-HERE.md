@@ -1,5 +1,20 @@
 # PLUMB continuation — current entrypoint
 
+## New priority: run the MVP on Baseten, Team 33
+
+Lucas supplied working Baseten access and requested the full MVP running there.
+Configuration is ready in LOCAL tmux `b10`; read the NEW first section of
+HANDOFF.md and `docs/BASETEN-TEAM33-MVP-TODO.md` before deployment work.
+Use CLI profile **`plumb-api`** and team **`33` / `q8grpdw`**. The parent
+workspace is Hack the North; its default team is NOT the GPU-owning team.
+Last verified Team 33 allowance: **4 H100s, 0 in use** (capacity, not credits).
+Pass `--profile plumb-api` outside `b10`, and `--team q8grpdw` explicitly when
+creating team-owned resources. Do not use the default zero-GPU team.
+The credential is already configured locally; do not request/reprint it.
+SSH setup is installed, but no Baseten GPU job, live SSH session, or deployment
+was created in the side conversation. Verify product access/billing and start
+with a bounded MVP deployment, not the entire multi-GPU Chain unchanged.
+
 Continue in `/Users/lucas/Desktop/tax_stuff/htn26`, branch `main`.
 Read the first sections of HANDOFF.md and CLUSTER-OPERATIONS.md, then the
 relevant runbooks below. Older handoff sections are historical snapshots, not

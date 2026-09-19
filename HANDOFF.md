@@ -1,5 +1,47 @@
 # PLUMB execution handoff — implementation in progress
 
+## NEW: Baseten Team 33 access configured — MVP deployment priority
+
+Lucas's side conversation explicitly requests getting the full MVP running on
+Baseten. This access update supersedes older "no Baseten credentials" notes;
+it does not change the existing scientific gates or make a deployment complete.
+
+- Baseten CLI **1.0.0** is installed. API-key profile **`plumb-api`** was
+  successfully authenticated. Its credential is stored by the CLI, never in
+  repository files. No new key is needed; do not print credential/config contents.
+- The authenticated parent workspace is **Hack the North**. The intended
+  resource-owning team is **`33`, ID `q8grpdw`**. The separate default team
+  named Hack the North (`wljp62q`) has zero H100 quota. This was the apparent
+  workspace-lock problem: use the correct team, not another API key.
+- Last verified training capacity: Team 33 **H100 limit 4, baseline 4, in use 0**.
+  Recheck before launch. Capacity is not billing credit or inference entitlement;
+  neither cost coverage nor account-side SSH enablement has been confirmed.
+- LOCAL tmux **`b10`** is configured with `BASETEN_PROFILE=plumb-api`.
+  Informational shell variables `PLUMB_BASETEN_TEAM_ID=q8grpdw` and
+  `PLUMB_BASETEN_TEAM_NAME=33` do NOT automatically select a Baseten team.
+  Explicitly use **`--team q8grpdw`** on project/workstation creation.
+  Outside that shell, explicitly use **`--profile plumb-api`**; the previous
+  global OAuth/default profile was intentionally retained.
+- `baseten ssh setup --profile plumb-api` generated the Baseten SSH keypair and
+  managed config block, pinned to this profile. Other SSH routes were preserved.
+  No Baseten GPU job/deployment was created and no live SSH connection verified.
+  Inspect the `b10` pane before sending commands; do not interrupt user commands.
+
+Start with read-only `baseten whoami --profile plumb-api`,
+`baseten org team describe --profile plumb-api --team-id q8grpdw`, and
+`baseten train capacity describe --profile plumb-api`. Confirm existing
+Team 33 resources and product/credit limits before creating anything; do not
+modify shared quotas or unrelated teams' jobs.
+
+Then follow `docs/BASETEN-TEAM33-MVP-TODO.md` and
+`deploy/baseten/DEPLOY.md`: adapt the existing cloud scaffold into a bounded
+MVP deployment, establish a real model request, durable results, and dashboard
+integration. A GPU shell alone is not the requested deliverable. Start small;
+the reported capacity does not justify pushing every GPU Chainlet at once.
+Revalidate the cloud runtime rather than copying Alliance wheel assumptions.
+Keep the biased judge adapters disabled and label diagnostic/world-fidelity
+limitations honestly. Do not wait for more weak-label training to wire the MVP.
+
 Final access note: after successful job940190 and an empty scheduler check,
 the final Trillium BatchMode check returned permission denied. Authentication
 has expired again; no new job was submitted afterward. Do not retry Duo while
