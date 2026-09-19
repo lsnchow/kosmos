@@ -1,5 +1,94 @@
 # PLUMB cluster operations — handoff for num2
 
+## Latest integration operations — 2026-09-19 late morning
+
+Allocation937277 expired TIMEOUT at09:11 EDT; the older running/pending notes
+are historical. Trillium BatchMode SSH works. One-H100 debug job938918 tested
+the newer production241fb Octo harness and FAILED before inference on a missing
+harness runtime field. Preserve its raw report/log. Retry938946 COMPLETED0:0
+with three actual production241fb native calls and exact reset/repeat. The new
+release and report locations are in HANDOFF.md. Do not repeat this successful
+check or mutate either release; neither check is a qualified policy evaluation.
+
+Production241fb source and environment are separate from the old tested37951
+ones: `/scratch/lchow432/plumb/source-octo-autoeval241fb` and
+`/scratch/lchow432/plumb/venv-octo-autoeval241fb`. Runtime lock is
+`evidence/octo-runtime-autoeval241fb-v1.json` (SHA in HANDOFF.md). All weights and
+canonical input PNGs are reused, not re-downloaded. Its dlimp pinned dependency
+needs TF2.15.0 but the runtime uses reviewed2.15.1+computecanada; pip-check output
+and this explicit exception are in the lock. Do not call the environment exact
+upstream-equivalent or silently amend old runtime locks.
+
+Submit `cluster/octo_production_smoke.sbatch` from login with the immutable
+release directory, frame-00.png, frame-01.png, manifest.json, close_drawer.
+It requests one H100,24CPUs,15minutes, no explicit --mem. Imports/package locking
+on login use CUDA_VISIBLE_DEVICES=""; all actual inference runs in the job.
+Root exclusively owns cluster operations; coding agents must not SSH/tmux/srun.
+
+## Continuation update — 2026-09-19 morning
+
+This section supersedes the older capacity/allocation snapshot below.
+
+- All five SSH routes were successfully rechecked. Keep using the existing
+  multiplex connections; never delete sockets to recover an apparent error.
+- **937277 started at05:11 EDT**, with trig0010/trig0030 and eight H100s. Its
+  scheduled end is09:11 EDT. The new bounded Octo checks have completed; no
+  model step is still running. Root asked asynchronously whether to release
+  the now-idle parent allocation, because cancellation was previously withheld.
+  Without an explicit reply it remains intact; recheck `squeue` before acting.
+- Remote `drac:0.0` now contains the allocated compute shell on trig0010,
+  rather than a pending SALLOC request. The site rejects `srun --jobid=937277`
+  from a login node. Root launched steps from the **inspected idle compute
+  prompt** in that pane. Never send keys while a step or allocation wait is
+  active, and give cluster-control ownership to only one worker at a time.
+- Completed steps:937277.0 failed on the old Octo API keyword;937277.1 succeeded
+  with the corrected native-v0.1 API;937277.2 succeeded with eight workers.
+  Reports and logs are preserved. Source releases and artifact paths are in the
+  new first section of `HANDOFF.md`. These are policy diagnostics, not episodes.
+- Job937822 completed the new IRASim causal past-history replay on one H100.
+  It remains visibly distorted despite exact repeatability. Do not rerun it.
+- The LOCAL app now runs in tmux `plumb-api` on127.0.0.1:8787. This is unrelated
+  to all SSH/tmux allocation sessions; inspect its actual listener before restart.
+
+### Octo environment (do not mix with the older Python3.11 stacks)
+
+Use `/scratch/lchow432/plumb/venv-octo/bin/python` with
+`StdEnv/2023 python/3.10 cuda/12.2 cudnn/8.9.5.29`. It uses Alliance
+JAX/JAXlib0.4.20, Flax0.7.5, Orbax0.4.3, TF2.15.1 and exact TFP0.23.
+TF2.15.1 is a disclosed compatibility variation, not a source-equivalence claim.
+Runtime lockv2 and an inline package inventory live under `evidence/`; its SHA
+is `5c10b8881e8ab97830ee84f565aeebe1cb689f1d161359a64a2ca450a62e74b9`.
+
+`HF_HOME` must be `/scratch/lchow432/plumb/models/.hf-octo`, with both offline
+flags set. T5 config/tokenizer support is present; full T5 model weights were
+not needed. TensorFlow GPU visibility is disabled before model imports so JAX
+owns the allocated device. Preserve module `PYTHONPATH` when adding a release.
+
+`cluster/octo_smoke.sbatch` accepts a frozen source directory, two canonical
+PNG paths, their manifest, and a task ID. Reports now include job/step/rank to
+avoid overwriting a failure during retries inside the same allocation. Current
+verified RGB inputs are under
+`fixtures/octo-small-bridge-cv2-linear-rgb-256-v3/`: files `frame-00.png`,
+`frame-01.png`, and `manifest.json`, sourced from original frame indices0/2.
+Do not substitute the earlier0/1 fixture or the original480p MP4 silently.
+
+For a future *new hypothesis*, after checking an idle allocated shell:
+
+```bash
+srun --jobid=937277 --overlap --nodes=1 --ntasks=1 --gpus-per-node=1 \
+  --cpus-per-task=24 --time=00:15:00 \
+  --output=/scratch/lchow432/plumb/logs/octo-new-%J.log \
+  bash "$PLUMB_RELEASE/cluster/octo_smoke.sbatch" "$PLUMB_RELEASE" \
+  "$OCTO_INPUTS/frame-00.png" "$OCTO_INPUTS/frame-01.png" \
+  "$OCTO_INPUTS/manifest.json" close_drawer
+```
+
+Set those variables to inspected exact paths in that compute shell. If937277
+has expired, submit a bounded one-H100 batch job from login instead. Do not
+resubmit the completed conformance checks merely to reproduce their success.
+
+---
+
 Read with HANDOFF.md. Last capacity/auth check: 2026-09-19 at about04:11 EDT.
 Capacity is a snapshot: recheck before submitting. All five SSH connections worked.
 

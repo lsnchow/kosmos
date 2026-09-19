@@ -66,3 +66,63 @@ def test_native_horizon_reference_does_not_imply_causal_feedback(tmp_path):
     assert row["total_seconds"] == 34.5 and row["latency_seconds"] is None
     assert row["qualified"] is False and row["outcome"] == "unknown"
     assert "14 future action" in " ".join(row["notes"])
+
+
+def test_causal_history_video_keeps_replay_and_training_limitations(tmp_path):
+    report = tmp_path / "cluster-evidence" / "history-job" / "report.json"
+    write(report, {"kind": "plumb_irasim_causal_history_replay_diagnostic", "status": "completed",
+                   "outcome": {"frame_count": 17, "rows": [{}] * 16,
+                               "video": {"path": "/remote/history/history.mp4",
+                                         "sha256": hashlib.sha256(b"history").hexdigest()}},
+                   "total_seconds": 100})
+    video = report.parent / "history" / "history.mp4"
+    video.parent.mkdir()
+    video.write_bytes(b"history")
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["video_url"].endswith("/history/history.mp4")
+    assert row["ticks_completed"] == 16 and row["qualified"] is False
+    assert "policy was not queried" in " ".join(row["notes"])
+    video.write_bytes(b"tampered")
+    assert experiments_payload(tmp_path)["experiments"][0]["video_url"] is None
+
+
+def test_octo_native_proposals_are_not_world_frames_or_success(tmp_path):
+    write(tmp_path / "cluster-evidence" / "octo.json", {
+        "kind": "plumb_octo_small_native_two_observation_diagnostic", "status": "completed_unqualified",
+        "native_calls": {"first": {"action": [0.0] * 7, "wall_seconds": 1.2}},
+        "total_seconds": 10, "runtime": {"gpu_peak_memory_bytes": 1234}})
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["action_dimensions"] == 7 and row["stage"] == "policy"
+    assert row["frame_count"] is None and row["video_url"] is None
+    assert row["outcome"] == "unknown" and row["qualified"] is False
+
+
+def test_production_octo_profile_is_separate_unqualified_diagnostic(tmp_path):
+    write(tmp_path / "cluster-evidence" / "production-octo.json", {
+        "kind": "plumb_octo_small_production_241fb_two_observation_smoke",
+        "status": "completed_unqualified", "qualified": False,
+        "native_calls": {"first": {"actions": [[0.0] * 7] * 4, "wall_seconds": 2}},
+        "runtime": {"after_native_calls": {"gpu_peak_memory_bytes": 1234}}})
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert "241fb" in row["model"]
+    assert row["action_dimensions"] == 7 and row["latency_seconds"] == 2
+    assert row["qualified"] is False and row["outcome"] == "unknown"
+    assert row["frame_count"] is None and row["video_url"] is None
+
+
+def test_replica_summary_requires_digest_bound_complete_raw_reports(tmp_path):
+    summary = tmp_path / "cluster-evidence" / "replicas" / "summary.json"
+    worker = summary.parent / "reports" / "worker.json"
+    action = {"action": [0.0] * 7, "proposal": [[0.0] * 7] * 4}
+    write(worker, {"kind": "plumb_octo_small_native_two_observation_diagnostic",
+                   "status": "completed_unqualified", "source_release": "release", "slurm_process_id": "0",
+                   "slurm_node": "node", "native_calls": {"backend_calls": 3, "first": action,
+                   "second": action, "after_reset_first": action}})
+    write(summary, {"kind": "plumb_octo_worker_reproducibility_diagnostic", "status": "completed_unqualified",
+                    "source_release": "release", "reports": [{"relative_path": "reports/worker.json",
+                    "sha256": "sha256:" + hashlib.sha256(worker.read_bytes()).hexdigest()}]})
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["stage"] == "policy_reproducibility" and row["qualified"] is False
+    assert "every reset/repeat matches: True" in " ".join(row["notes"])
+    worker.write_text("{}")
+    assert experiments_payload(tmp_path)["experiments"] == []

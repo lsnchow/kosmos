@@ -17,6 +17,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from plumb.calibration import (
+    AnnotatorOwnership,
     DEVELOPMENT_SPLIT,
     HELDOUT_SPLIT,
     FrozenGateDProtocol,
@@ -407,6 +408,20 @@ def fresh_calibration_inputs():
         "protocol": protocol,
         "tolerances": GateDTolerances(50, 1.0, 0.9, 0.9, 0.9, 0.9, 0.1),
         "base_judge": base_judge(),
+        "annotator_ownership": {
+            ANNOTATORS[0]: AnnotatorOwnership(
+                annotator_id=ANNOTATORS[0],
+                owner_id="human-owner-alex",
+                independent_attestation=True,
+                attested_at=PREREGISTERED_AT,
+            ),
+            ANNOTATORS[1]: AnnotatorOwnership(
+                annotator_id=ANNOTATORS[1],
+                owner_id="human-owner-blair",
+                independent_attestation=True,
+                attested_at=PREREGISTERED_AT,
+            ),
+        },
     }
 
 
@@ -642,6 +657,14 @@ class FreshHeldOutPanelTests(unittest.TestCase):
         )
         self.assertEqual(1.0, report["gate_d"]["metrics"]["sensitivity"])
         self.assertEqual(50, report["gate_d"]["metrics"]["heldout_overlap"])
+
+    def test_fresh_calibration_requires_declared_independent_human_owners(self):
+        inputs = fresh_calibration_inputs()
+        inputs.pop("annotator_ownership")
+        result, report = run_fresh_heldout_calibration(**inputs)
+        self.assertFalse(result.passed)
+        self.assertIn("independent_annotator_ownership_missing", result.reason_codes)
+        self.assertEqual("missing", report["annotator_ownership"]["status"])
 
     def test_the_original_judges_inputs_are_never_mutated(self):
         inputs = fresh_calibration_inputs()

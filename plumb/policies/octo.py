@@ -7,6 +7,12 @@ means the wrapper consumes a *fresh* prediction at every tick and therefore
 executes exactly one ensembled action per call.  This adapter implements that
 shape and refuses to execute the un-ensembled tail rows of a proposal.
 
+The production sampler profile is bound to Octo source commit
+``241fb3514b7c40957a86d869fecb7c7fc353f540``.  Its
+``sample_actions`` implementation reads ``timestep_pad_mask`` from the
+observation when no explicit keyword is supplied.  It is intentionally
+different from the separately named 37951 native-v0.1 diagnostic profile.
+
 Nothing here claims Gate-B qualification, and nothing produces an action until
 a golden action fixture certifies the executed prefix.
 """
@@ -49,7 +55,10 @@ OCTO_SMALL_CHECKPOINT_STEP = 270000
 OCTO_BASE_CHECKPOINT_STEP = 300000
 OCTO_JAX_VERSION = "0.4.20"
 OCTO_DEFAULT_DATASET_KEY = "bridge_dataset"
-OCTO_ENSEMBLE_SOURCE = OCTO_SOURCE + "/blob/main/octo/utils/gym_wrappers.py"
+OCTO_PRODUCTION_SOURCE_COMMIT = "241fb3514b7c40957a86d869fecb7c7fc353f540"
+OCTO_PRODUCTION_SOURCE = "https://github.com/octo-models/octo/tree/" + OCTO_PRODUCTION_SOURCE_COMMIT
+OCTO_PRODUCTION_MODEL_SOURCE = "https://github.com/octo-models/octo/blob/" + OCTO_PRODUCTION_SOURCE_COMMIT + "/octo/model/octo_model.py"
+OCTO_ENSEMBLE_SOURCE = "https://github.com/octo-models/octo/blob/" + OCTO_PRODUCTION_SOURCE_COMMIT + "/octo/utils/gym_wrappers.py"
 
 # octo's released ``TemporalEnsembleWrapper`` defaults to ``exp_weight=0``,
 # which is a uniform mean over the overlapping predictions.  AutoEval's value
@@ -84,10 +93,10 @@ class OctoObservationKeys:
 
 
 OCTO_V1_0_OBSERVATION_KEYS = OctoObservationKeys(
-    keys_revision="octo-v1.0-image_primary-pad_mask",
+    keys_revision="octo-v1.0-image_primary-timestep_pad_mask-241fb",
     image_key="image_primary",
-    pad_mask_key="pad_mask",
-    source_uri=OCTO_SOURCE + "/blob/main/octo/model/octo_model.py",
+    pad_mask_key="timestep_pad_mask",
+    source_uri=OCTO_PRODUCTION_MODEL_SOURCE,
 )
 
 
@@ -202,6 +211,7 @@ class OctoPolicyProfile:
     model_id: str
     checkpoint_revision: str
     checkpoint_step: int
+    source_revision: str = OCTO_PRODUCTION_SOURCE_COMMIT
     observation_keys: OctoObservationKeys = OCTO_V1_0_OBSERVATION_KEYS
     dataset_statistics_key: str = OCTO_DEFAULT_DATASET_KEY
     jax_version: str = OCTO_JAX_VERSION
@@ -239,6 +249,8 @@ class OctoPolicyProfile:
             return "%s pins checkpoint step %d, not %r" % (self.model_id, expected_step, self.checkpoint_step)
         if not immutable_revision(self.checkpoint_revision):
             return "checkpoint_revision must be an immutable 40-character hexadecimal revision"
+        if self.source_revision != OCTO_PRODUCTION_SOURCE_COMMIT:
+            return "source_revision must equal the pinned production Octo source commit"
         if not self.local_files_only:
             return "Octo loader is local-only; network retrieval is not permitted"
         if self.native_unnormalizes:
@@ -316,7 +328,7 @@ def load_octo_action_statistics(
 class _OctoAdapterBase(NativePolicyAdapter):
     """Shared Octo v1.0 loader; subclasses bind one declared contract."""
 
-    source_urls = (OCTO_SOURCE, AUTOEVAL_POLICY_SOURCE, OCTO_ENSEMBLE_SOURCE)
+    source_urls = (OCTO_PRODUCTION_SOURCE, AUTOEVAL_POLICY_SOURCE, OCTO_ENSEMBLE_SOURCE)
 
     def __init__(
         self,
@@ -379,6 +391,7 @@ class _OctoAdapterBase(NativePolicyAdapter):
             "model_id": self.profile.model_id,
             "octo_release": "v1.0",
             "checkpoint_revision": self.profile.checkpoint_revision,
+            "source_revision": self.profile.source_revision,
             "checkpoint_step": int(self.profile.checkpoint_step),
             "checkpoint_relative_path": self.profile.checkpoint_relative_path,
             "forbidden_model_ids": list(OCTO_FORBIDDEN_MODEL_IDS),
@@ -540,6 +553,7 @@ class _OctoAdapterBase(NativePolicyAdapter):
             normalizer_counters=self.normalizer.counters(),
             metadata={
                 "model_id": self.profile.model_id,
+                "source_revision": self.profile.source_revision,
                 "checkpoint_step": int(self.profile.checkpoint_step),
                 "timestep_pad_mask": list(pad_mask),
                 "ensemble_depth": self.ensembler.depth,

@@ -233,6 +233,14 @@ def passing_report(registry):
             "sha256:protocol", "sha256:rubric", "sha256:sampling", evidence_manifest=frozen
         ),
         tolerances=GateDTolerances(50, 1.0, 1.0, 1.0, 0.9, 0.9, 0.1),
+        annotator_ownership={
+            annotator_id: {
+                "owner_id": "test-owner-" + str(index),
+                "independent_attestation": True,
+                "attested_at": "2026-09-19T00:00:00Z",
+            }
+            for index, annotator_id in enumerate(registry.annotator_ids)
+        },
     )
 
 

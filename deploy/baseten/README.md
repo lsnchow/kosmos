@@ -168,6 +168,73 @@ account-tested exact route is supplied, exposes active replicas from chain
 deployment management, and keeps prices, currency, and hourly rates unavailable
 until the account billing unit and currency are evidenced.
 
+## Durable application delivery
+
+`plumb.outbox.BasetenOutbox` and the SQLite `baseten_outbox`,
+`baseten_callbacks`, and `baseten_outbox_events` tables now provide the local
+control-plane side of Chain delivery. A complete, identity-bound
+`request: RolloutRequest` payload is committed against one planned logical
+episode before the one allowed `/async_run_remote` POST. The payload's run ID,
+episode ID, protocol hash, and all stage identities must equal the authoritative
+ledger row and frozen run configuration.
+
+The persisted state machine records the pre-POST boundary, returned request ID,
+immutable request-attempt lineage, signed raw callback bytes plus their digest,
+and callback finalization leases. It handles all of the following without
+creating another logical episode or incrementing a terminal counter twice:
+
+- a process crash after the durable pre-POST record becomes `ambiguous` on
+  recovery and is never POSTed again;
+- a callback that arrives before the POST response is committed is retained
+  unassociated and atomically joined when the request ID is saved;
+- an identical webhook is idempotent; changed signed bytes for the same request
+  ID are a conflict and stop processing;
+- an accepted callback is only terminalized after an artifact writer commits a
+  final artifact reference, using a callback CAS lease;
+- cancellation is recorded before any remote cancellation attempt. A late
+  callback remains durable and must still be artifact-finalized, including work
+  already allocated by the platform.
+
+The artifact writer must supply named references containing `uri`, full
+`sha256`, and `media_type`, after verifying and committing those bytes in its
+storage system. Completed normalized results must bind `run_id`, `episode_id`,
+and `protocol_hash`, preserve the planned `horizon_actions`, report that exact
+`executed_actions` count, and use consistent boolean/null outcomes and integer
+progress. Strings such as `"false"`, shortened horizons, and conflicting callback
+identities are rejected before any terminal counter changes. The receiving API
+does not infer this normalization or artifact verification from a signed callback.
+
+Only a proved HTTP rejection can be manually requeued on the same outbox record
+with an operator reason. Transport failures, timeouts, 5xx responses,
+unreadable 2xx responses, interrupted client calls, and uncertain remote DELETE
+outcomes remain reconciliation records; they are not automatic retries.
+
+The local API can be configured for signed callback ingress with
+`PLUMB_ENABLE_BASETEN_CALLBACKS=1`, `BASETEN_API_KEY`,
+`BASETEN_CHAIN_ASYNC_URL`, and `BASETEN_WEBHOOK_SECRET`. It accepts at most one
+MiB of raw bytes and stores no callback content in its read-only outbox response.
+This switch only enables receiving and recovering records; it does not enable
+deployment, submission, artifact scoring, or spend.
+
+The durable SQLite state machine, raw-callback preservation, and offline fault
+tests are implemented. The remaining deployment prerequisites are still
+unresolved: an actual Chain object-storage writer and immutable artifact
+manifest, account-tested Chain request status/cancel route, credentials,
+deployment profile, capacity, pricing basis, and all scientific gates. No
+Baseten POST, remote cancellation, deployment, or billable request has been
+made by this repository.
+
+The reconciler can recover expired local dispatch/finalization/cancellation
+leases with no network traffic. A remote lifecycle/cancel controller is injected
+only after the account has tested and recorded the exact Chain request-management
+route. Current official docs show a model-ID status/cancel route, while the
+Chain invocation docs establish only Chain submission routes, so this repository
+does not infer a Chain status or cancellation URL. Lifecycle status is never
+treated as output: Baseten documents that status endpoints do not return model
+output and failed webhook delivery can lose it. The deployed Chain must persist
+the result independently in object storage, and its artifact manifest is what
+the callback finalizer records.
+
 Source contracts: [Chain invocation](https://docs.baseten.co/development/chain/invocation),
 [async inference and webhook signatures](https://docs.baseten.co/inference/async),
 [Chains SDK reference](https://docs.baseten.co/reference/sdk/chains),

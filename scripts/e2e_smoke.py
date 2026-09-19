@@ -291,10 +291,10 @@ def check_protocol_and_preregistration(require: bool) -> Tuple[str, str, Optiona
         )
     record = document.preregistration_status(repo_root=REPO_ROOT)
     data = {"protocol_hash": document.sha256, "preregistration": record.to_mapping()}
-    if record.status == "unregistered":
+    if record.status == "unregistered" or record.blocking_reasons():
         return (
             PENDING,
-            "protocol frozen but not externally timestamped",
+            "protocol frozen but preregistration is not verified: %s" % "; ".join(record.blocking_reasons()),
             "git tag -s %s and push it; a local hash is not preregistration"
             % document.preregistration_tag,
             data,
@@ -744,7 +744,8 @@ def check_chain_deployable() -> Tuple[str, str, Optional[str], Dict[str, Any]]:
                 [
                     str(deploy_python),
                     "-c",
-                    "import truss, truss_chains; print(truss.__version__)",
+                    "import truss; import deploy.baseten.chain; from truss_chains import framework; "
+                    "framework.raise_validation_errors(); print(truss.__version__)",
                 ],
                 cwd=str(REPO_ROOT),
                 capture_output=True,
@@ -755,22 +756,28 @@ def check_chain_deployable() -> Tuple[str, str, Optional[str], Dict[str, Any]]:
                 version = (probe.stdout or "").strip().splitlines()[-1:] or ["unknown"]
                 data["truss_version"] = version[0]
                 data["truss_venv"] = str(deploy_python.parent.parent)
-                # The SDK's own validator was run against this chain during
-                # development and reported zero errors across all nine chainlets.
                 return (
                     PASS,
-                    "truss %s present in .venv-deploy; chain is one `truss chains push` away"
+                    "chain definition passed the truss %s SDK validator; deployment/runtime remain unverified"
                     % version[0],
                     None,
                     data,
                 )
+            return FAIL, "Chain SDK validation failed", None, {
+                **data, "validator_output": (probe.stdout + probe.stderr)[-4000:],
+            }
         return (
             PENDING,
             "chain template imports; truss_chains is not installed",
             "python -m venv .venv-deploy && .venv-deploy/bin/pip install truss==0.18.30",
             data,
         )
-    return PASS, "chain template imports with the Chains SDK present", None, data
+    try:
+        from truss_chains import framework
+        framework.raise_validation_errors()
+    except Exception as error:
+        return FAIL, "Chain SDK validation failed", None, {**data, "error": str(error)}
+    return PASS, "chain definition passed SDK validation; deployment/runtime remain unverified", None, data
 
 
 def check_chain_contract() -> Tuple[str, str, Optional[str], Dict[str, Any]]:

@@ -346,16 +346,20 @@ class WorldActionProfile:
 class QualificationEvidence:
     """Small injected evidence boundary for a controller invocation.
 
-    Gate records remain owned by :mod:`plumb.gates`; this value makes a caller
-    explicitly supply the result of that review instead of inferring it from a
-    successful adapter call.
+    Gate records remain owned by :mod:`plumb.gates`. The caller supplies the
+    complete frozen inputs for revalidation; a tuple of gate names, a URI, or
+    a successful adapter call is never a qualification receipt.
     """
 
     passed_gates: Tuple[str, ...]
     protocol_hash: Optional[str] = None
     evidence_uris: Tuple[str, ...] = ()
+    gate_ledger: Optional[Any] = None
+    scenario_manifest: Optional[Mapping[str, Any]] = None
+    protocol: Optional[Mapping[str, Any]] = None
+    asset_lock: Optional[Any] = None
 
-    def errors(self) -> Tuple[str, ...]:
+    def errors(self, *, task: Optional[str] = None, feedback_mode: FeedbackMode = FeedbackMode.NATIVE_FEEDBACK) -> Tuple[str, ...]:
         missing = tuple(gate for gate in ("A", "B", "C", "D") if gate not in set(self.passed_gates))
         errors: List[str] = []
         if missing:
@@ -364,6 +368,24 @@ class QualificationEvidence:
             errors.append("qualification requires a frozen protocol hash")
         if not self.evidence_uris:
             errors.append("qualification requires evidence URIs")
+        if self.gate_ledger is None or self.scenario_manifest is None or self.protocol is None or self.asset_lock is None:
+            errors.append("qualification requires complete gate records, scenario/protocol manifests and an asset lock; gate names alone are not evidence")
+            return tuple(errors)
+        if task not in TASK_HORIZONS:
+            errors.append("qualification requires the exact benchmark task")
+            return tuple(errors)
+        if self.protocol.get("sha256") != self.protocol_hash:
+            errors.append("qualification evidence protocol hash does not match its supplied manifest")
+        from .gates import GateLedger, QualificationValidator
+        try:
+            ledger = self.gate_ledger if isinstance(self.gate_ledger, GateLedger) else GateLedger.from_mapping(self.gate_ledger)
+            decision = QualificationValidator.validate(
+                ledger, self.scenario_manifest, self.protocol, task=task,
+                feedback_mode=feedback_mode, require_primary_panel=True, asset_lock=self.asset_lock,
+            )
+            errors.extend(decision.errors)
+        except (TypeError, ValueError, KeyError, AttributeError) as error:
+            errors.append("qualification evidence cannot be validated: %s" % error)
         return tuple(errors)
 
 
@@ -542,7 +564,7 @@ class RolloutController:
 
         store = self._coerce_store(artifact_store)
         profile = self._world_profile(world)
-        self._check_qualification(profile)
+        self._check_qualification(profile, task=scenario.task)
         padding_prefixes = self._check_horizon_representable(scenario.horizon_actions, profile)
         rollout_id = rollout_id or ("rollout-" + uuid.uuid4().hex)
         prefix = "rollouts/%s" % rollout_id
@@ -859,7 +881,7 @@ class RolloutController:
             terminal_padding_certificate=padding,
         )
 
-    def _check_qualification(self, profile: WorldActionProfile) -> None:
+    def _check_qualification(self, profile: WorldActionProfile, *, task: str) -> None:
         if self.mode != "qualification":
             return
         if self.feedback_mode is not FeedbackMode.NATIVE_FEEDBACK:
@@ -868,9 +890,6 @@ class RolloutController:
             )
         if self.qualification_evidence is None:
             raise RolloutConfigurationError("qualification mode requires explicit passed gate evidence")
-        errors = self.qualification_evidence.errors()
-        if errors:
-            raise RolloutConfigurationError("qualification blocked: " + "; ".join(errors))
         if not profile.supported_action_lengths:
             raise RolloutConfigurationError("qualification requires an explicitly supported action-length profile")
         if profile.certification_class != GATE_A_CERTIFIED_CLASS:
@@ -879,6 +898,9 @@ class RolloutController:
                 "supported lengths %s are an uncertified default rather than probed evidence"
                 % (profile.profile_id, profile.certification_class, profile.supported_action_lengths)
             )
+        errors = self.qualification_evidence.errors(task=task, feedback_mode=self.feedback_mode)
+        if errors:
+            raise RolloutConfigurationError("qualification blocked: " + "; ".join(errors))
 
     @staticmethod
     def _check_horizon_representable(horizon: int, profile: WorldActionProfile) -> Tuple[int, ...]:

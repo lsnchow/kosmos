@@ -425,7 +425,7 @@ def test_qualification_requires_explicit_passed_evidence_and_native_feedback(tmp
         RolloutController(mode="qualification", feedback_mode=FeedbackMode.NATIVE_FEEDBACK).execute(
             scenario(), FakePolicy(), certified, FakeCompiler(), None, FileArtifactStore(tmp_path)
         )
-    with pytest.raises(ValueError, match="refuses compiler feedback_mode=forecast_state"):
+    with pytest.raises(ValueError, match="gate names alone are not evidence"):
         RolloutController(
             mode="qualification",
             feedback_mode=FeedbackMode.NATIVE_FEEDBACK,

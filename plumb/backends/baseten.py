@@ -13,10 +13,11 @@ application, because spec section 7 assigns them here:
 platform request ID is persisted against it.  Transport retries create attempts,
 never new statistical episodes.
 
-**A result store independent of callback delivery.**  Baseten documents that
-failed webhook delivery can lose outputs, so the Chain persists its own result
-and the callback is only a notification.  A reconciler sweeps rows whose
-callback never arrived.
+**An explicitly verified result store, where available.** A callback is a
+notification, not an output store. The rehearsal supplies a durable result
+store so dropped callbacks can be recovered. Production does not infer a
+result URL from the async submission URL: an account-tested result-store adapter
+must be injected before it is used.
 
 **Ambiguous submissions are never re-POSTed.**  ``SubmissionRetryPolicy``
 refuses a nonzero retry count until a durable server-side entrypoint
@@ -24,9 +25,11 @@ compare-and-set is deployed, and ``AmbiguousSubmissionError`` routes the row to
 reconciliation instead.  This backend honours that: an ambiguous POST becomes an
 ``awaiting_reconciliation`` row, not a second episode.
 
-The backend never fabricates a frame, a score, a GPU-second or a dollar.  A
-``blocked`` stage from the Chain becomes an explicit unevaluable outcome with the
-stage named.
+The backend never fabricates a frame, a score, a GPU-second or a dollar. A
+completed Chain result can be legitimately unevaluable (for example, a clip
+whose judge did not reach quorum). A terminal Chain failure or block is instead
+an execution failure: it did not complete the requested control horizon and
+must remain visible in the intent-to-evaluate denominator.
 """
 
 from __future__ import annotations
@@ -40,7 +43,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
 from ..platform import (
     AmbiguousSubmissionError,
@@ -70,6 +73,42 @@ OUTBOX_TERMINAL = ("completed", "failed", "cancelled")
 
 class BackendNotConfigured(RuntimeError):
     """The backend cannot run because its external configuration is absent."""
+
+
+class RemoteChainExecutionError(RuntimeError):
+    """A terminal Chain result that cannot be recorded as a completed episode.
+
+    ``artifact_refs`` points at the immutable received-result record.  The
+    engine deliberately carries those references into its failed terminal
+    record, so the raw failure evidence is not lost when it catches this typed
+    exception and records the logical failure.
+    """
+
+    def __init__(
+        self,
+        error: Mapping[str, Any],
+        artifact_refs: Mapping[str, Any],
+        ledger_projection: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        self.error = dict(error)
+        self.artifact_refs = dict(artifact_refs)
+        self.ledger_projection = dict(ledger_projection or {})
+        super().__init__(
+            canonical_json(
+                {
+                    "chain_error": self.error,
+                    "artifact_refs": self.artifact_refs,
+                    "ledger_projection": self.ledger_projection,
+                }
+            )
+        )
+
+
+class ChainResultStore(Protocol):
+    """A verified result lookup, deliberately separate from queue status."""
+
+    def get_result(self, request_id: str) -> Optional[Mapping[str, Any]]:
+        """Return one completed request result, or ``None`` while unavailable."""
 
 
 @dataclass(frozen=True)
@@ -118,7 +157,7 @@ class BasetenBackendSettings:
 
 
 class SubmissionOutbox:
-    """Durable submission and result store, independent of callback delivery."""
+    """Durable submission state and callback receipt store for the adapter."""
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -252,11 +291,28 @@ class SubmissionOutbox:
             row = connection.execute("SELECT * FROM outbox WHERE logical_key = ?", (key,)).fetchone()
             return dict(row)
 
+    def begin_submission(self, key: str) -> bool:
+        """Commit the irreversible-POST boundary before bytes leave the process.
+
+        A restart that finds ``dispatching`` cannot know whether the process
+        died just before or just after the HTTP send, so it must turn the row
+        ambiguous rather than retry it.
+        """
+
+        with self._lock, self._connect() as connection:
+            changed = connection.execute(
+                """UPDATE outbox SET state = 'dispatching', attempt_count = attempt_count + 1,
+                   updated_at = ? WHERE logical_key = ? AND state = 'planned'""",
+                (utc_now(), key),
+            )
+            return changed.rowcount == 1
+
     def mark_submitted(self, key: str, request_id: str) -> None:
         with self._lock, self._connect() as connection:
             connection.execute(
                 """UPDATE outbox SET state = 'submitted', request_id = ?, submitted_at = ?,
-                   attempt_count = attempt_count + 1, updated_at = ? WHERE logical_key = ?""",
+                   attempt_count = attempt_count + CASE WHEN state = 'planned' THEN 1 ELSE 0 END,
+                   updated_at = ? WHERE logical_key = ? AND state IN ('planned', 'dispatching')""",
                 (request_id, utc_now(), utc_now(), key),
             )
 
@@ -266,7 +322,8 @@ class SubmissionOutbox:
         with self._lock, self._connect() as connection:
             connection.execute(
                 """UPDATE outbox SET state = 'awaiting_reconciliation', error_json = ?,
-                   attempt_count = attempt_count + 1, updated_at = ? WHERE logical_key = ?""",
+                   attempt_count = attempt_count + CASE WHEN state = 'planned' THEN 1 ELSE 0 END,
+                   updated_at = ? WHERE logical_key = ? AND state IN ('planned', 'dispatching')""",
                 (canonical_json(dict(error)), utc_now(), key),
             )
 
@@ -499,6 +556,7 @@ class BasetenChainBackend:
         transport: Optional[Any] = None,
         transport_kind: str = "network",
         start_resolver: Optional[StartResolver] = None,
+        result_store: Optional[ChainResultStore] = None,
     ) -> None:
         if transport_kind not in ("network", "simulated"):
             raise ValueError("transport_kind must be 'network' or 'simulated'")
@@ -509,6 +567,11 @@ class BasetenChainBackend:
         self.settings = settings
         self.data_dir = Path(data_dir)
         self.outbox = SubmissionOutbox(self.data_dir / "baseten-outbox.sqlite3")
+        # Never manufacture a Chain result URL. The rehearsal transport exposes
+        # this narrow interface directly; a production deployment must inject a
+        # separately verified adapter.
+        inferred_store = transport if callable(getattr(transport, "get_result", None)) else None
+        self.result_store: Optional[ChainResultStore] = result_store or inferred_store
         self.allocations = AllocationLedger(price_basis=price_basis)
         self._clock = clock
         self._queue_route = queue_route
@@ -580,7 +643,7 @@ class BasetenChainBackend:
 
         Synchronous by contract because ``plumb.engine`` runs episodes on a
         worker pool.  The waiting is bounded by ``request_deadline_seconds``; a
-        deadline is an explicit unevaluable outcome, never a guessed score.
+        a deadline is a failed lifecycle, never a guessed score or a retry.
         """
 
         if self.client is None:
@@ -600,62 +663,128 @@ class BasetenChainBackend:
         key = self.outbox.logical_key(episode, protocol_hash, variant)
         row = self.outbox.reserve(key, episode, variant, protocol_hash, payload_sha)
 
-        if row["state"] in OUTBOX_TERMINAL and row["result_json"]:
+        if row["state"] == "completed" and row["result_json"]:
             # Idempotent replay of an already-settled logical episode.
-            return self._result_from_chain(json.loads(row["result_json"]), episode, artifact_dir, replayed=True)
+            saved_result = json.loads(row["result_json"])
+            failure = self._terminal_execution_failure(saved_result, episode)
+            if failure is not None:
+                refs = self._persist_terminal_failure(episode, artifact_dir, failure, saved_result, None)
+                raise RemoteChainExecutionError(failure, refs)
+            return self._result_from_chain(saved_result, episode, artifact_dir, replayed=True)
+        if row["state"] == "failed":
+            # A terminal remote failure is evidence, not permission to submit
+            # the same logical episode again.  The engine will already have
+            # terminalized its row, but this also protects a direct retry of the
+            # adapter from becoming a second request.
+            saved_error = json.loads(row["error_json"]) if row.get("error_json") else {
+                "reason": "previous_terminal_chain_failure"
+            }
+            saved_result = json.loads(row["result_json"]) if row.get("result_json") else None
+            refs = self._persist_terminal_failure(episode, artifact_dir, saved_error, saved_result, None)
+            saved_request_id = row.get("request_id")
+            projection = self._failure_ledger_projection(
+                [str(saved_request_id)] if saved_request_id else (), saved_error, saved_result
+            )
+            raise RemoteChainExecutionError(saved_error, refs, projection)
         if row["state"] == "awaiting_reconciliation":
             return self._unevaluable(
                 episode,
                 "awaiting_reconciliation",
                 "a prior submission outcome was ambiguous; the reconciler owns this row",
             )
-
-        started = self._clock()
-        options = AsyncChainRequestOptions(
-            webhook_endpoint=self._webhook_for_run(str(episode.get("run_id"))),
-            priority=self.settings.priority,
-            max_time_in_queue_seconds=self.settings.max_time_in_queue_seconds,
-        )
-        try:
-            receipt = _run_async(self.client.submit_async(entrypoint_input, options))
-        except AmbiguousSubmissionError as exc:
+        if row["state"] == "dispatching":
+            # The old process may have sent bytes after committing this state.
+            # There is no safe retry without a server-side idempotency CAS.
             self.outbox.mark_ambiguous(
                 key,
-                {
-                    "reason": "ambiguous_submission",
-                    "detail": str(exc),
-                    "attempts": len(getattr(exc, "attempts", ()) or ()),
-                },
+                {"reason": "crash_after_pre_post_boundary", "detail": "request ID was not durably recorded"},
             )
-            self.allocations.allocate("controller_cpu", started, self._clock(), note="ambiguous submission")
             return self._unevaluable(
                 episode,
-                "ambiguous_submission",
-                "the POST outcome was unresolved; it is never re-sent as a second episode",
+                "awaiting_reconciliation",
+                "a prior process crossed the pre-POST boundary; this episode is never re-sent",
             )
-        except PlatformError as exc:
-            self.outbox.settle(key, "failed", None, {"reason": "submission_failed", "detail": str(exc)})
-            self.allocations.allocate("controller_cpu", started, self._clock(), note="failed submission")
-            raise
 
-        self.outbox.mark_submitted(key, receipt.request_id)
-        outcome = self._await_result(key, receipt.request_id)
-        self.allocations.allocate("controller_cpu", started, self._clock(), note="episode controller")
+        request_id = row.get("request_id")
+        if row["state"] == "submitted" and isinstance(request_id, str) and request_id:
+            # The POST was already durably acknowledged. A new process must
+            # observe that request's callback/result-store entry, never issue a
+            # second POST for the same logical cell.
+            outcome = self._await_result(key, request_id)
+        else:
+            started = self._clock()
+            if not self.outbox.begin_submission(key):
+                return self._unevaluable(
+                    episode,
+                    "awaiting_reconciliation",
+                    "the durable submission state changed before this process could send",
+                )
+            options = AsyncChainRequestOptions(
+                webhook_endpoint=self._webhook_for_run(str(episode.get("run_id"))),
+                priority=self.settings.priority,
+                max_time_in_queue_seconds=self.settings.max_time_in_queue_seconds,
+            )
+            try:
+                receipt = _run_async(self.client.submit_async(entrypoint_input, options))
+            except AmbiguousSubmissionError as exc:
+                self.outbox.mark_ambiguous(
+                    key,
+                    {
+                        "reason": "ambiguous_submission",
+                        "detail": str(exc),
+                        "attempts": len(getattr(exc, "attempts", ()) or ()),
+                    },
+                )
+                self.allocations.allocate("controller_cpu", started, self._clock(), note="ambiguous submission")
+                return self._unevaluable(
+                    episode,
+                    "ambiguous_submission",
+                    "the POST outcome was unresolved; it is never re-sent as a second episode",
+                )
+            except PlatformError as exc:
+                self.outbox.settle(key, "failed", None, {"reason": "submission_failed", "detail": str(exc)})
+                self.allocations.allocate("controller_cpu", started, self._clock(), note="failed submission")
+                raise
+
+            request_id = receipt.request_id
+            self.outbox.mark_submitted(key, request_id)
+            outcome = self._await_result(key, request_id)
+            self.allocations.allocate("controller_cpu", started, self._clock(), note="episode controller")
 
         if outcome is None:
-            self.outbox.settle(
-                key, "failed", None, {"reason": "deadline_exceeded", "seconds": self.settings.request_deadline_seconds}
+            error = {
+                "reason": "deadline_exceeded",
+                "seconds": self.settings.request_deadline_seconds,
+                "request_id": request_id,
+            }
+            refs = self._persist_terminal_failure(
+                episode, artifact_dir, error, None, [str(request_id)]
             )
-            return self._unevaluable(
-                episode,
-                "deadline_exceeded",
-                "no result within the frozen per-episode deadline",
-                request_ids=[receipt.request_id],
+            error["failure_artifact"] = refs["chain_terminal_failure"]
+            self.outbox.settle(key, "failed", None, error)
+            raise RemoteChainExecutionError(
+                error,
+                refs,
+                self._failure_ledger_projection([str(request_id)], error),
+            )
+
+        failure = self._terminal_execution_failure(outcome, episode)
+        if failure is not None:
+            failure["request_id"] = request_id
+            refs = self._persist_terminal_failure(
+                episode, artifact_dir, failure, outcome, [str(request_id)]
+            )
+            failure["failure_artifact"] = refs["chain_terminal_failure"]
+            self.outbox.settle(key, "failed", None, failure)
+            raise RemoteChainExecutionError(
+                failure,
+                refs,
+                self._failure_ledger_projection([str(request_id)], failure, outcome),
             )
 
         self.outbox.settle(key, "completed", outcome, None)
         return self._result_from_chain(
-            outcome, episode, artifact_dir, request_ids=[receipt.request_id]
+            outcome, episode, artifact_dir, request_ids=[str(request_id)]
         )
 
     def _webhook_for_run(self, run_id: str) -> str:
@@ -772,6 +901,14 @@ class BasetenChainBackend:
                 if isinstance(data, Mapping):
                     return dict(data)
                 return {"status": "failed", "missing_reason": "callback_carried_no_result"}
+            if self.result_store is not None:
+                # The store is injected only after its route/evidence was
+                # verified. It is especially important for rehearsal: a
+                # deliberately dropped webhook must not turn completed remote
+                # work into a made-up timeout failure.
+                result = self.result_store.get_result(request_id)
+                if isinstance(result, Mapping):
+                    return dict(result)
             time.sleep(self.settings.poll_interval_seconds)
         return None
 
@@ -787,10 +924,10 @@ class BasetenChainBackend:
     ) -> Dict[str, Any]:
         """Translate a ``RolloutResult`` into the engine's result shape.
 
-        A ``blocked`` stage is an unevaluable outcome naming the stage.  A
-        ``completed`` chain result still only produces a score when the validity
-        stage said ``valid`` and the judge reached quorum; otherwise the score
-        fields stay null, because ``plumb.records`` rejects a partial score.
+        ``execute`` guards this method with :meth:`_terminal_execution_failure`.
+        Thus it translates only completed Chain results; the completed result
+        may still be unevaluable when a real clip was generated but the validity
+        or judge stages could not support a score.
         """
 
         status = str(chain_result.get("status") or "unknown")
@@ -799,24 +936,7 @@ class BasetenChainBackend:
             stages = {}
 
         if status != "completed":
-            blocked_stage = None
-            for stage in CHAIN_STAGES:
-                entry = stages.get(stage)
-                if isinstance(entry, Mapping) and entry.get("status") in ("blocked", "failed"):
-                    blocked_stage = stage
-                    break
-            reason = str(
-                chain_result.get("missing_reason")
-                or ("stage_%s_%s" % (blocked_stage or "unknown", status))
-            )
-            return self._unevaluable(
-                episode,
-                reason,
-                chain_result.get("reason"),
-                request_ids=request_ids,
-                chain_result=chain_result,
-                artifact_dir=artifact_dir,
-            )
+            raise ValueError("_result_from_chain only accepts completed Chain results")
 
         validity = str(chain_result.get("validity") or "unknown")
         if validity not in ("valid", "invalid", "unknown"):
@@ -888,6 +1008,100 @@ class BasetenChainBackend:
             },
         }
         return result
+
+    def _failure_ledger_projection(
+        self,
+        request_ids: Sequence[str],
+        error: Mapping[str, Any],
+        chain_result: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Return failure facts that belong on the logical ledger row.
+
+        The artifact retains the complete remote payload, but operators and
+        study checks need enough durable row-level provenance to distinguish a
+        simulated transport failure from an unlabelled local exception without
+        opening every artifact.
+        """
+
+        remote = dict(chain_result or {})
+        world_identity = dict(remote.get("world_identity") or {})
+        world_identity.update(
+            {
+                "transport": self.transport_kind,
+                "simulated_transport": self.transport_kind == "simulated",
+                "operating_point_id": self.settings.operating_point_id,
+            }
+        )
+        remote_missing = remote.get("missing_reason", error.get("missing_reason", error.get("reason")))
+        return {
+            "world_identity": world_identity,
+            "platform_request_ids": [str(request_id) for request_id in request_ids if request_id],
+            "feedback_mode": (
+                "unqualified"
+                if self.transport_kind == "simulated"
+                else str(remote.get("feedback_mode") or self.settings.feedback_mode)
+            ),
+            "parity_status": (
+                "unqualified"
+                if self.transport_kind == "simulated"
+                else str(remote.get("parity_status") or self.settings.parity_status)
+            ),
+            # ``missing_reason`` remains the stable lifecycle value
+            # ``service_failure``. The remote reason is an exclusion fact, so
+            # it remains queryable without relabelling a failed execution as a
+            # completed-but-unevaluable episode.
+            "exclusion_reason": None if remote_missing is None else str(remote_missing),
+        }
+
+    @staticmethod
+    def _terminal_execution_failure(
+        chain_result: Mapping[str, Any], episode: Mapping[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Return a classified error for a Chain result that did not execute.
+
+        A completed result with ``validity`` unknown is still a completed
+        episode: the clip exists and its missing score belongs in analysis
+        missingness. By contrast, a non-completed lifecycle or a result that
+        does not declare exactly the planned horizon means no complete control
+        trajectory was generated and is a service failure.
+        """
+
+        status = str(chain_result.get("status") or "unknown")
+        stages = chain_result.get("stages")
+        if status != "completed":
+            blocked_stage = None
+            if isinstance(stages, Mapping):
+                for stage in CHAIN_STAGES:
+                    entry = stages.get(stage)
+                    if isinstance(entry, Mapping) and entry.get("status") in ("blocked", "failed"):
+                        blocked_stage = stage
+                        break
+            return {
+                "reason": "remote_chain_terminal_%s" % status,
+                "chain_status": status,
+                "missing_reason": chain_result.get("missing_reason"),
+                "detail": chain_result.get("reason"),
+                "failed_stage": blocked_stage,
+            }
+
+        planned = episode.get("horizon_actions")
+        reported = chain_result.get("horizon_actions")
+        executed = chain_result.get("executed_actions")
+        if isinstance(planned, bool) or not isinstance(planned, int) or planned < 1:
+            return {"reason": "invalid_planned_horizon", "planned_horizon_actions": planned}
+        if isinstance(reported, bool) or not isinstance(reported, int) or reported != planned:
+            return {
+                "reason": "remote_chain_horizon_mismatch",
+                "planned_horizon_actions": planned,
+                "reported_horizon_actions": reported,
+            }
+        if isinstance(executed, bool) or not isinstance(executed, int) or executed != planned:
+            return {
+                "reason": "remote_chain_incomplete_horizon",
+                "planned_horizon_actions": planned,
+                "executed_actions": executed,
+            }
+        return None
 
     def _unevaluable(
         self,
@@ -993,6 +1207,66 @@ class BasetenChainBackend:
                 "sha256": file_digest(path),
                 "media_type": "application/json",
                 "label": manifest["label"],
+            }
+        }
+
+    def _persist_terminal_failure(
+        self,
+        episode: Mapping[str, Any],
+        artifact_dir: Path,
+        error: Mapping[str, Any],
+        chain_result: Optional[Mapping[str, Any]],
+        request_ids: Optional[Sequence[str]],
+    ) -> Dict[str, Dict[str, str]]:
+        """Persist an immutable, typed record before raising a Chain failure.
+
+        This keeps the exact received terminal result and its classification
+        beside the engine's later failed terminal record. The latter references
+        this artifact through :class:`RemoteChainExecutionError`, so an error
+        lifecycle cannot erase the only evidence of what the remote service
+        returned.
+        """
+
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": 1,
+            "kind": "plumb_baseten_terminal_failure",
+            "label": (
+                "rehearsal transport; simulated Chain; not a learned-model result; unqualified"
+                if self.transport_kind == "simulated"
+                else "real-model Baseten Chain terminal execution failure; unqualified"
+            ),
+            "created_at": utc_now(),
+            "run_id": episode.get("run_id"),
+            "episode_id": episode.get("episode_id"),
+            "policy": episode.get("policy"),
+            "policy_variant": episode.get("policy_variant"),
+            "task": episode.get("task"),
+            "start_id": episode.get("start_id"),
+            "world_seed": episode.get("world_seed"),
+            "protocol_hash": episode.get("protocol_hash"),
+            "transport": self.transport_kind,
+            "simulated_transport": self.transport_kind == "simulated",
+            "platform_request_ids": list(request_ids or []),
+            "failure": dict(error),
+            # Keep the received terminal object verbatim in the durable
+            # artifact. It is evidence of a failed execution, not an inferred
+            # score or a replacement result.
+            "chain_result": None if chain_result is None else dict(chain_result),
+        }
+        path = artifact_dir / "baseten_terminal_failure.json"
+        _atomic_json(path, payload)
+        data_root = artifact_dir.resolve().parents[3]
+        relative = path.resolve().relative_to(data_root).as_posix()
+        return {
+            "chain_terminal_failure": {
+                "uri": "artifact://%s" % relative,
+                "relative_path": relative,
+                "artifact_path": relative,
+                "url": "/api/artifacts/%s" % relative,
+                "sha256": file_digest(path),
+                "media_type": "application/json",
+                "label": payload["label"],
             }
         }
 
@@ -1123,6 +1397,23 @@ class BasetenChainBackend:
                     )
                     resolved.append(row["logical_key"])
                     continue
+                if self.result_store is not None:
+                    result = self.result_store.get_result(str(request_id))
+                    if isinstance(result, Mapping):
+                        terminal_state = "completed" if result.get("status") == "completed" else "failed"
+                        self.outbox.settle(
+                            row["logical_key"],
+                            terminal_state,
+                            result,
+                            None
+                            if terminal_state == "completed"
+                            else {
+                                "reason": "remote_chain_terminal_%s" % str(result.get("status") or "unknown"),
+                                "request_id": request_id,
+                            },
+                        )
+                        resolved.append(row["logical_key"])
+                        continue
             still_unknown.append(
                 {
                     "logical_key": row["logical_key"],
@@ -1319,7 +1610,9 @@ __all__ = [
     "BackendNotConfigured",
     "BasetenBackendSettings",
     "BasetenChainBackend",
+    "ChainResultStore",
     "CHAIN_STAGES",
     "OUTBOX_SCHEMA_VERSION",
+    "RemoteChainExecutionError",
     "SubmissionOutbox",
 ]

@@ -16,7 +16,7 @@ def main():
     paths = [project / "pyproject.toml"]
     for directory in ("plumb", "cluster", "deploy", "tests"):
         paths.extend(p for p in (project / directory).rglob("*")
-                     if p.is_file() and "__pycache__" not in p.parts
+                     if p.is_file() and "__pycache__" not in p.parts and "_chain_packages" not in p.parts
                      and p.suffix in {".py", ".sh", ".sbatch", ".json", ".txt", ".md"})
     contents = {p.relative_to(project).as_posix(): p.read_bytes() for p in sorted(paths)}
     records = [{"path": path, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}

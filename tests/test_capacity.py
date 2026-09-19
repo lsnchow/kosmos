@@ -82,15 +82,18 @@ def test_the_slowest_task_sets_the_floor_not_the_average():
     assert plan.episode_latency_seconds == pytest.approx(7 * (0.25 + 0.30))
 
 
-def test_batch_size_is_capped_by_measured_memory_and_says_so():
-    """A recorded 36.5 GB peak means a batch of 16 does not fit in 80 GB."""
+def test_single_call_memory_only_rules_out_a_batch_it_never_certifies_one():
+    """A 36.5 GB one-call peak rules out 16, but cannot prove batch 2 fits."""
 
     lat = _lat(world_peak_memory_bytes=int(36.52 * 1024**3))
     plan = plan_capacity(
         lat, DeploymentCapacity(max_replicas=10, world_batch_size=16), chunked_prefix(16)
     )
     assert plan.memory_batch_ceiling == 2
-    assert any("exceeds the 2" in w for w in plan.warnings)
+    assert plan.measured_batch_size == 1
+    assert plan.batch_measurement_status == "unmeasured"
+    assert any("linear 2-item projection" in w and "neither an upper bound" in w for w in plan.warnings)
+    assert any("planning with batch 1" in w for w in plan.warnings)
 
 
 def test_an_unmeasured_gpu_peak_makes_the_batch_unchecked_and_warns():
@@ -101,11 +104,26 @@ def test_an_unmeasured_gpu_peak_makes_the_batch_unchecked_and_warns():
     assert any("unchecked against memory" in w for w in plan.warnings)
 
 
-def test_batched_throughput_assumption_is_disclosed():
+def test_unmeasured_batched_throughput_is_disclosed_and_not_used():
     plan = plan_capacity(
         _lat(), DeploymentCapacity(max_replicas=10, world_batch_size=4), chunked_prefix(16)
     )
-    assert any("fused forward" in w for w in plan.warnings)
+    assert plan.measured_batch_size == 1
+    assert any("fused-forward latency curve" in w for w in plan.warnings)
+
+
+def test_only_an_exact_measured_batch_profile_changes_capacity_arithmetic():
+    plan = plan_capacity(
+        _lat(),
+        DeploymentCapacity(
+            max_replicas=10,
+            world_batch_size=4,
+            measured_batch_peak_bytes={2: 70 * 1024**3},
+        ),
+        chunked_prefix(16),
+    )
+    assert plan.measured_batch_size == 2
+    assert plan.batch_measurement_status == "measured"
 
 
 def test_the_binding_limit_is_named():
@@ -164,6 +182,20 @@ def test_capacity_rejects_impossible_configurations():
         DeploymentCapacity(max_replicas=0)
     with pytest.raises(CapacityError, match="world_batch_size"):
         DeploymentCapacity(max_replicas=1, world_batch_size=0)
+    with pytest.raises(CapacityError, match="max_concurrent_episodes"):
+        DeploymentCapacity(max_replicas=1, max_concurrent_episodes=0)
+
+
+def test_controller_concurrency_is_a_real_capacity_limit_not_metadata():
+    plan = plan_capacity(
+        _lat(),
+        DeploymentCapacity(max_replicas=10_000, max_concurrent_episodes=1),
+        chunked_prefix(16),
+    )
+    assert plan.binding_limit == "controller_concurrency"
+    assert plan.controller_concurrency_seconds > TARGET_SECONDS
+    assert plan.replicas_needed_for_target() is None
+    assert plan.episodes_achievable_in_target() < 1500
 
 
 def test_plan_serialises_json_safely_and_names_its_assumptions():
@@ -222,3 +254,13 @@ def test_the_burst_caption_is_derived_not_typed():
         assert str(burst.achievable_episodes) in burst.headline
         if burst.is_subset:
             assert str(burst.requested_episodes) in burst.headline
+
+
+def test_a_shorter_planning_run_cannot_claim_the_1500_episode_target():
+    plan = plan_capacity(_lat(), DeploymentCapacity(max_replicas=100), chunked_prefix(16), episodes=1499)
+    burst = plan_burst(plan)
+    assert plan.meets_target is False
+    assert burst.meets_target is False
+    assert burst.is_subset is True
+    assert "planning subset" in burst.headline
+    assert burst.to_mapping()["target_scope_complete"] is False

@@ -146,6 +146,29 @@ def _git(args: Sequence[str], cwd: Optional[Path] = None) -> Optional[str]:
     return completed.stdout.strip() or None
 
 
+def _git_verify_tag(tag: str, cwd: Optional[Path] = None) -> bool:
+    """Return whether Git cryptographically verifies this annotated tag.
+
+    Looking for ``PGP SIGNATURE`` text in a tag body is not verification: text
+    can be pasted into an unsigned annotation.  ``git verify-tag`` asks the
+    configured OpenPGP backend to verify the tag object itself and returns a
+    non-zero exit status for both unsigned and unverifiable tags.
+    """
+
+    try:
+        completed = subprocess.run(
+            ["git", "verify-tag", "--raw", tag],
+            cwd=str(cwd) if cwd is not None else None,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
+
 # ---------------------------------------------------------------------------
 # Tolerances
 # ---------------------------------------------------------------------------
@@ -325,7 +348,15 @@ class PreregistrationRecord:
     kind: str = "signed_git_tag"
     tag: Optional[str] = None
     commit: Optional[str] = None
+    #: The immutable object ID of the local annotated tag and the exact object
+    #: advertised by origin.  The commit a tag points at is insufficient: a
+    #: different tag object can carry a different protocol message/signature.
+    tag_object_id: Optional[str] = None
+    remote_tag_object_id: Optional[str] = None
     signed: bool = False
+    #: Set only after ``git verify-tag`` succeeds locally *and* the remote
+    #: advertises the same annotated-tag object ID.
+    remote_tag_verified: bool = False
     external_timestamp: Optional[str] = None
     verified_at: Optional[str] = None
     notes: Tuple[str, ...] = ()
@@ -343,10 +374,10 @@ class PreregistrationRecord:
 
     @property
     def status(self) -> str:
-        """``registered`` only when remote, externally timestamped evidence exists."""
+        """``registered`` only for a verified signed tag witnessed remotely."""
 
-        if self.uri and self.external_timestamp and self.commit:
-            return "registered" if self.signed else "registered_unsigned"
+        if self.uri and self.external_timestamp and self.commit and self.signed and self.remote_tag_verified:
+            return "registered"
         return "unregistered"
 
     def blocking_reasons(self) -> Tuple[str, ...]:
@@ -358,7 +389,9 @@ class PreregistrationRecord:
         if not self.external_timestamp:
             reasons.append("no externally auditable timestamp")
         if not self.signed:
-            reasons.append("preregistration artifact is not signed")
+            reasons.append("preregistration tag signature was not cryptographically verified")
+        if not self.remote_tag_verified:
+            reasons.append("remote tag object was not verified to match the local signed tag")
         return tuple(reasons)
 
     def to_mapping(self) -> Dict[str, Any]:
@@ -368,7 +401,10 @@ class PreregistrationRecord:
             "kind": self.kind,
             "tag": self.tag,
             "commit": self.commit,
+            "tag_object_id": self.tag_object_id,
+            "remote_tag_object_id": self.remote_tag_object_id,
             "signed": self.signed,
+            "remote_tag_verified": self.remote_tag_verified,
             "external_timestamp": self.external_timestamp,
             "verified_at": self.verified_at,
             "status": self.status,
@@ -384,7 +420,10 @@ class PreregistrationRecord:
             kind=str(payload.get("kind", "signed_git_tag")),
             tag=payload.get("tag"),
             commit=payload.get("commit"),
+            tag_object_id=payload.get("tag_object_id"),
+            remote_tag_object_id=payload.get("remote_tag_object_id"),
             signed=bool(payload.get("signed", False)),
+            remote_tag_verified=bool(payload.get("remote_tag_verified", False)),
             external_timestamp=payload.get("external_timestamp"),
             verified_at=payload.get("verified_at"),
             notes=tuple(str(item) for item in payload.get("notes", ())),
@@ -402,9 +441,11 @@ def discover_preregistration(
 ) -> PreregistrationRecord:
     """Read a signed annotated tag as preregistration evidence.
 
-    The tag must (a) exist, (b) contain the protocol hash in its message, and
-    (c) be present on a remote.  A tag that exists only locally is *not*
-    preregistration, because nothing outside this machine witnessed its time.
+    The tag must (a) be an annotated tag, (b) contain the protocol hash in its
+    message, (c) pass ``git verify-tag`` cryptographically, and (d) be
+    advertised by ``origin`` at the *same tag-object OID*.  A remote reference
+    to the same commit is not enough: it could be a different annotation with
+    a different hash or signature.
     """
 
     root = repo_root or Path(__file__).resolve().parents[1]
@@ -420,20 +461,41 @@ def discover_preregistration(
             protocol_sha256, "tag %s does not contain the current protocol hash" % tag
         )
 
-    commit = _git(["rev-list", "-n", "1", tag], cwd=root)
-    signature = _git(["tag", "-l", tag, "--format=%(contents:signature)"], cwd=root)
-    signed = bool(signature and "PGP SIGNATURE" in signature)
-    if not signed:
-        notes.append("tag exists but carries no PGP signature")
+    tag_ref = "refs/tags/" + tag
+    tag_object_id = _git(["rev-parse", tag_ref], cwd=root)
+    tag_type = _git(["cat-file", "-t", tag_ref], cwd=root)
+    if not tag_object_id or tag_type != "tag":
+        return PreregistrationRecord(
+            protocol_sha256=protocol_sha256,
+            tag=tag,
+            tag_object_id=tag_object_id,
+            notes=("tag is lightweight or malformed; preregistration requires an annotated signed tag",),
+        )
 
-    remote_listing = _git(["ls-remote", "--tags", "origin", "refs/tags/" + tag], cwd=root)
+    commit = _git(["rev-list", "-n", "1", tag], cwd=root)
+    signed = _git_verify_tag(tag, cwd=root)
+    if not signed:
+        return PreregistrationRecord(
+            protocol_sha256=protocol_sha256,
+            tag=tag,
+            commit=commit,
+            tag_object_id=tag_object_id,
+            signed=False,
+            notes=(
+                "git verify-tag did not cryptographically verify this tag; an embedded signature-looking "
+                "string is not accepted as evidence",
+            ),
+        )
+
+    remote_listing = _git(["ls-remote", "--tags", "origin", tag_ref], cwd=root)
     if not remote_listing:
         return PreregistrationRecord(
             protocol_sha256=protocol_sha256,
             tag=tag,
             commit=commit,
+            tag_object_id=tag_object_id,
             signed=signed,
-            notes=tuple(notes + ["tag is not present on the origin remote; no external witness"]),
+            notes=("tag is not present on the origin remote; no external witness",),
         )
 
     remote_url = _git(["remote", "get-url", "origin"], cwd=root)
@@ -441,19 +503,56 @@ def discover_preregistration(
     if remote_url and remote_url.startswith(("https://", "ssh://", "git@")):
         uri = "%s#refs/tags/%s" % (remote_url, tag)
 
+    remote_tag_object_id = None
+    for line in remote_listing.splitlines():
+        fields = line.split("\t", 1)
+        if len(fields) == 2 and fields[1].strip() == tag_ref:
+            candidate = fields[0].strip()
+            if candidate:
+                remote_tag_object_id = candidate
+                break
+    if remote_tag_object_id is None:
+        return PreregistrationRecord(
+            protocol_sha256=protocol_sha256,
+            uri=uri,
+            tag=tag,
+            commit=commit,
+            tag_object_id=tag_object_id,
+            signed=True,
+            notes=("origin did not advertise the exact tag reference %s" % tag_ref,),
+        )
+    if remote_tag_object_id != tag_object_id:
+        return PreregistrationRecord(
+            protocol_sha256=protocol_sha256,
+            uri=uri,
+            tag=tag,
+            commit=commit,
+            tag_object_id=tag_object_id,
+            remote_tag_object_id=remote_tag_object_id,
+            signed=True,
+            notes=(
+                "origin tag object OID %s does not match locally verified tag object OID %s"
+                % (remote_tag_object_id, tag_object_id),
+            ),
+        )
+
     # ``%(taggerdate:iso-strict)`` carries an explicit offset.  It is the
-    # tagger's clock rather than the remote's receipt time; record it as the
-    # best available external anchor and say so.
+    # tagger's clock rather than the remote's receipt time.  The signed tag
+    # object fixes that date, while origin witnesses the exact object; record
+    # both facts rather than pretending origin supplied a receipt timestamp.
     tagger_date = _git(["tag", "-l", tag, "--format=%(taggerdate:iso-strict)"], cwd=root)
     if tagger_date:
-        notes.append("external_timestamp is the annotated tag date as published to origin")
+        notes.append("external_timestamp is the signed annotated tagger date; origin witnesses the matching object")
 
     return PreregistrationRecord(
         protocol_sha256=protocol_sha256,
         uri=uri,
         tag=tag,
         commit=commit,
+        tag_object_id=tag_object_id,
+        remote_tag_object_id=remote_tag_object_id,
         signed=signed,
+        remote_tag_verified=True,
         external_timestamp=tagger_date,
         verified_at=datetime.now(timezone.utc).isoformat(),
         notes=tuple(notes),
@@ -519,6 +618,38 @@ class AssetRecord:
             missing.append("sha256_malformed")
         return tuple(missing)
 
+    def qualification_unresolved_fields(self) -> Tuple[str, ...]:
+        """Return fields that keep an asset out of a qualification route.
+
+        ``verified`` establishes that the bytes were retrieved under a resolved
+        license.  Qualification additionally needs the executable identity for
+        a model/code asset.  A model-card revision, a configuration boolean, or
+        a historical size must never stand in for the code/container that
+        actually produced the recorded GPU result.
+
+        This is deliberately stricter than :attr:`verified`; callers that only
+        need an acquisition inventory can still use the latter without being
+        told a non-runtime data asset has a missing container digest.
+        """
+
+        missing = list(self.unresolved_fields())
+        if self.repo_type in {"model", "source", "git"}:
+            for name in ("loader_revision", "container_digest"):
+                value = getattr(self, name)
+                if value in (None, ""):
+                    missing.append(name)
+            if self.container_digest and not _SHA256_RE.match(str(self.container_digest)):
+                missing.append("container_digest_malformed")
+        if self.compatibility_profile_id is not None and not str(self.compatibility_profile_id).strip():
+            missing.append("compatibility_profile_id")
+        return tuple(dict.fromkeys(missing))
+
+    @property
+    def qualification_verified(self) -> bool:
+        """Whether this row can bind executable qualification evidence."""
+
+        return not self.qualification_unresolved_fields()
+
     def to_mapping(self) -> Dict[str, Any]:
         return {
             "asset_id": self.asset_id,
@@ -541,6 +672,8 @@ class AssetRecord:
             "role": self.role,
             "verified": self.verified,
             "unresolved_fields": list(self.unresolved_fields()),
+            "qualification_verified": self.qualification_verified,
+            "qualification_unresolved_fields": list(self.qualification_unresolved_fields()),
         }
 
     @classmethod
@@ -584,6 +717,34 @@ class AssetLock:
     @property
     def unresolved_asset_ids(self) -> Tuple[str, ...]:
         return tuple(sorted(key for key, value in self.assets.items() if not value.verified))
+
+    def qualification_errors(self, required_asset_ids: Sequence[str]) -> Tuple[str, ...]:
+        """Check the exact assets a frozen qualification route binds.
+
+        The caller supplies the protocol's explicit asset set.  We do not
+        silently substitute similarly named assets or infer a runtime profile
+        from the lock summary.  The summary is derived display data; each row
+        is recomputed here so hand-editing ``summary.status`` cannot pass.
+        """
+
+        errors: List[str] = []
+        required = tuple(str(asset_id) for asset_id in required_asset_ids)
+        if not required:
+            return ("qualification requires at least one explicitly bound asset",)
+        if len(set(required)) != len(required):
+            errors.append("qualification asset IDs contain duplicates")
+        for asset_id in required:
+            record = self.assets.get(asset_id)
+            if record is None:
+                errors.append("qualification asset %s is absent from the supplied lock" % asset_id)
+                continue
+            missing = record.qualification_unresolved_fields()
+            if missing:
+                errors.append(
+                    "qualification asset %s is not execution-verified: %s"
+                    % (asset_id, ", ".join(missing))
+                )
+        return tuple(errors)
 
     def to_mapping(self) -> Dict[str, Any]:
         body = {

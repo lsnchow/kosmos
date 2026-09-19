@@ -1,6 +1,19 @@
 # Start message for a new chat named num2
 
+NEWEST ENTRYPOINT (2026-09-19 late morning): read the new first section of
+HANDOFF.md before the historical instructions below. The active integration
+worktree is `/Users/lucas/Desktop/tax_stuff/htn26-integration`, branch
+`integrate-num2-runtime`, merging main634a796 and num2dd8a12f. It has passed the
+combined tests (1,149passed/6skipped) and corrected full1,500 simulated transport
+rehearsal. Production241fb Octo GPU smoke938946 also completed successfully,
+unqualified; failed harness938918 remains preserved. Merge delivery is next.
+Allocation937277 EXPIRED; never treat the old running/cancellation text below as
+live state. Preserve original API/data and all failed diagnostic reports.
+
 Continue implementing PLUMB in /Users/lucas/Desktop/tax_stuff/htn26.
+Current tested branch: num2-verified-continuation. Kevin concurrently advanced
+origin/main to6625b17; do NOT force-push or blindly select one side of conflicts.
+Read INTEGRATION-HANDOFF.md before integrating the parallel implementations.
 Read HANDOFF.md and CLUSTER-OPERATIONS.md completely, then AGENT-BUILD-SPEC.md,
 PASS-OFF.md and README.md. The full project is NOT done.
 
@@ -25,7 +38,31 @@ integration, calibration tooling and full-study infrastructure. Missing human
 labels, task panels and credentials must not be fabricated. Keep the complete
 six-policy/five-task/1500-episode scope and measurement/demo requirements.
 
-Private repo: https://github.com/lsnchow/htn26, main. kevinvalenciaa has ACTIVE
+Private repo: https://github.com/lsnchow/htn26. kevinvalenciaa has ACTIVE
 write access. Source is pushed; models/local data deliberately are not.
-Latest tests:141 passed,5 optional tensor tests skipped locally; frontend builds.
+The num2 continuation implemented durable cloud delivery, scenario/calibration
+workflows, full-study planning/validation, distillation preparation, and new
+source-backed policy adapter paths. Read the NEW first section of HANDOFF.md;
+older sections are preserved historical snapshots.
+
+Latest root verification:212 passed,5 optional tensor tests skipped locally;
+frontend build and type checks pass. A fresh full1,500-row synthetic integration
+run exported all1,500 rows and returned30 API analysis cells; never relabel it.
+Local API is now in LOCAL tmux session plumb-api at127.0.0.1:8787, with12 real
+diagnostic cards and5 digest-checked clips. No cloud submission is enabled.
+
+New GPU job937822 (causal past-latent history replay) completed and was mirrored.
+All16 pixel+latent outputs repeat exactly, but substantial blur/gripper/object
+distortion remains. It is saved-action replay, not policy evaluation. Do not
+repeat it. Octo-Small now has actual native-v0.1 GPU diagnostics:937277.1 ran
+three calls with exact reset/repeat;937277.2 ran eight workers across two nodes,
+all24 calls complete with matching fixed-input outputs. This profile differs
+from the unverified newer AutoEval API; it is not a policy evaluation. The first
+API-mismatch failure is preserved. Runtime, input and source locks are in HANDOFF.md.
+
+Allocation937277 is RUNNING (started05:11, scheduled end09:11 EDT), not pending.
+All bounded model steps are done. Root requested cancellation approval after
+checks; without a reply the parent allocation remains intact. Never start a
+duplicate. Follow the new first section of CLUSTER-OPERATIONS.md for the site's
+compute-shell-only srun rule and report names with job/step/rank.
 Recheck actual live state before reusing PIDs, jobs, capacity estimates or panes.

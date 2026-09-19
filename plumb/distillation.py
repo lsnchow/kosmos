@@ -1618,6 +1618,7 @@ def run_fresh_heldout_calibration(
     protocol: FrozenGateDProtocol,
     tolerances: GateDTolerances,
     base_judge: BaseJudgeRevision,
+    annotator_ownership: Optional[Mapping[str, Any]] = None,
     require_full_plan: bool = True,
     report_ref: Optional[str] = None,
 ) -> Tuple[FreshHeldOutResult, Dict[str, Any]]:
@@ -1654,6 +1655,7 @@ def run_fresh_heldout_calibration(
         judge_reports=distilled_judge_reports,
         protocol=protocol,
         tolerances=tolerances,
+        annotator_ownership=annotator_ownership,
     )
     gate_d = dict(report.get("gate_d") or {})
     passed = bool(gate_d.get("passed"))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 import unittest
@@ -7,8 +8,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from plumb.engine import RunService
+from plumb.backends.baseten import RemoteChainExecutionError
 from plumb.ledger import LeaseActiveError
-from plumb.records import ConfigurationError, normalise_backend_result
+from plumb.records import ConfigurationError, file_digest, normalise_backend_result
 
 
 def small_config(**changes):
@@ -83,6 +85,27 @@ class ExternalUrlBackend:
             "artifact_refs": {"frame_url": "/api/artifacts/cluster-evidence/real-looking.mp4"},
             "timing": {},
         }
+
+
+class ArtifactBearingRemoteFailureBackend:
+    """Models the typed failure emitted after a Chain's terminal result."""
+
+    def execute(self, episode, config, artifact_dir):
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        path = artifact_dir / "baseten_terminal_failure.json"
+        path.write_text(json.dumps({"received_status": "failed", "run_id": episode["run_id"]}), encoding="utf-8")
+        relative = path.relative_to(artifact_dir.parents[3]).as_posix()
+        ref = {
+            "uri": "artifact://%s" % relative,
+            "relative_path": relative,
+            "artifact_path": relative,
+            "url": "/api/artifacts/%s" % relative,
+            "sha256": file_digest(path),
+            "media_type": "application/json",
+        }
+        raise RemoteChainExecutionError(
+            {"reason": "remote_chain_terminal_failed"}, {"chain_terminal_failure": ref}
+        )
 
 
 class RunServiceTests(unittest.TestCase):
@@ -268,6 +291,18 @@ class RunServiceTests(unittest.TestCase):
         failed = service.list_episodes(run["id"])[0]
         self.assertEqual("failed", failed["status"])
         self.assertEqual("service_failure", failed["missing_reason"])
+
+    def test_typed_remote_failure_keeps_its_raw_artifact_through_engine_terminalization(self):
+        service = RunService(self.data_dir, backend=ArtifactBearingRemoteFailureBackend())
+        run = service.create_run(small_config(starts_per_task=1, max_workers=1))
+        service.execute_run(run["id"])
+
+        episode = service.list_episodes(run["id"])[0]
+        self.assertEqual((episode["status"], episode["missing_reason"]), ("failed", "service_failure"))
+        self.assertIn("chain_terminal_failure", episode["artifact_refs"])
+        terminal = self.data_dir / episode["artifact_refs"]["terminal_record"]["relative_path"]
+        terminal_record = json.loads(terminal.read_text())
+        self.assertIn("chain_terminal_failure", terminal_record["error"]["backend_failure_artifacts"])
 
 
 if __name__ == "__main__":

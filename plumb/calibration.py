@@ -20,6 +20,8 @@ import csv
 import hashlib
 import json
 import math
+import os
+import stat
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -27,6 +29,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 SCHEMA_VERSION = 1
+CALIBRATION_FREEZE_KIND = "plumb_calibration_selection"
 TASKS = (
     "open_drawer",
     "close_drawer",
@@ -75,10 +78,35 @@ _FORBIDDEN_BLIND_FIELDS = {
     "backend",
     "cohort",
 }
+_BLIND_REFERENCE_MARKERS = (
+    "openvla", "openpizero", "octo", "minivla", "susie", "cosmos", "irasim",
+    "policy", "backend", "action", "condition", "world_seed", "model_label",
+)
 
 
 class CalibrationError(ValueError):
     """Raised for invalid calibration evidence, labels, or gate inputs."""
+
+
+@dataclass(frozen=True)
+class AnnotatorOwnership:
+    """A declared independent-owner attestation for one human annotator.
+
+    This preserves responsibility metadata for the project coordinator; it does
+    not expose it in a blinded packet or cryptographically establish identity.
+    """
+
+    annotator_id: str
+    owner_id: str
+    independent_attestation: bool
+    attested_at: str
+
+    def __post_init__(self) -> None:
+        _strict_string(self.annotator_id, "annotator ownership annotator_id")
+        _strict_string(self.owner_id, "annotator ownership owner_id")
+        if self.independent_attestation is not True:
+            raise CalibrationError("annotator ownership requires independent_attestation=true")
+        _strict_string(self.attested_at, "annotator ownership attested_at")
 
 
 @dataclass(frozen=True)
@@ -90,6 +118,9 @@ class ClipManifestRow:
     task: str
     split: str
     source_lineage_id: str
+    # Required when freezing selection; optional here preserves the ability to
+    # report older incomplete proposals without pretending that they are frozen.
+    media_hash: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -288,12 +319,15 @@ def validate_manifest(
         split = _normalise_split(clip.split)
         if not _nonempty_string(clip.source_lineage_id):
             raise CalibrationError("manifest source_lineage_id must be a non-empty string")
+        if clip.media_hash is not None:
+            _require_hash(clip.media_hash, "manifest media_hash")
         normalised = ClipManifestRow(
             clip_id=clip.clip_id,
             media_ref=clip.media_ref,
             task=clip.task,
             split=split,
             source_lineage_id=clip.source_lineage_id,
+            media_hash=clip.media_hash,
         )
         if normalised.clip_id in seen_clip_ids:
             raise CalibrationError("manifest clip_id values must be unique")
@@ -324,11 +358,260 @@ def calibration_manifest_hash(
             "task": clip.task,
             "split": clip.split,
             "source_lineage_id": clip.source_lineage_id,
+            "media_hash": clip.media_hash,
         }
         for clip in clips
     ]
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _self_hash(payload: Mapping[str, Any]) -> str:
+    value = dict(payload)
+    value.pop("sha256", None)
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def blinded_clip_id(clip: ClipManifestRow) -> str:
+    """Return an opaque packet identity, hiding split/source/policy-like IDs."""
+
+    material = "plumb-blinded-clip-v1\x1f{0}\x1f{1}".format(clip.clip_id, clip.media_hash or "")
+    return "annotation://id/" + hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def blinded_media_ref(clip: ClipManifestRow) -> str:
+    """Return an opaque, stable token rather than a source filename or URI."""
+
+    material = "plumb-blinded-media-v1\x1f{0}\x1f{1}\x1f{2}".format(
+        clip.clip_id, clip.media_hash or "", clip.media_ref
+    )
+    return "annotation://clip/" + hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def blinded_media_resolver(
+    manifest: Iterable[Union[ClipManifestRow, Mapping[str, Any]]]
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """Create the coordinator-only token resolver; never include it in packets.
+
+    A trusted local viewer/service uses this map to serve the clip addressed by
+    an opaque packet token.  Sending this mapping to annotators would undo the
+    filename/source blinding that :func:`blinded_annotation_rows` provides.
+    """
+
+    clips = validate_manifest(manifest)
+    return {
+        blinded_media_ref(clip): {"media_ref": clip.media_ref, "media_hash": clip.media_hash}
+        for clip in clips
+    }
+
+
+def export_blinded_media_resolver(
+    manifest: Iterable[Union[ClipManifestRow, Mapping[str, Any]]], output_path: Union[str, Path]
+) -> int:
+    """Write a coordinator-only opaque-token resolver with private permissions.
+
+    This file intentionally contains source media references and must never be
+    shared with annotators.  The annotation packet itself contains only opaque
+    token values.
+    """
+
+    resolver = blinded_media_resolver(manifest)
+    target = Path(output_path)
+    if target.suffix.lower() != ".json":
+        raise CalibrationError("private media resolver output must have a .json suffix")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(resolver, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+    try:
+        descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as error:
+        raise CalibrationError("refusing to overwrite an existing private media resolver") from error
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+    except BaseException:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise
+    return len(resolver)
+
+
+def validate_calibration_lineage_partition(
+    manifest: Iterable[Union[ClipManifestRow, Mapping[str, Any]]],
+    reserved_cohort_lineages: Mapping[str, Iterable[str]],
+) -> Dict[str, Any]:
+    """Prove calibration labels are disjoint from primary/cost source starts.
+
+    The calibration clip manifest alone cannot establish this.  Callers must
+    provide lineage IDs from the already-frozen primary and cost panels; missing
+    cohorts leave the freeze blocked instead of being treated as empty.
+    """
+
+    clips = validate_manifest(manifest)
+    if not isinstance(reserved_cohort_lineages, Mapping):
+        raise CalibrationError("reserved_cohort_lineages must be a mapping")
+    required = ("primary", "cost_confirmation")
+    missing = [name for name in required if name not in reserved_cohort_lineages]
+    if missing:
+        raise CalibrationError("reserved_cohort_lineages lacks " + ", ".join(missing))
+    normalised: Dict[str, set] = {}
+    for cohort, values in reserved_cohort_lineages.items():
+        if not _nonempty_string(cohort) or isinstance(values, (str, bytes)):
+            raise CalibrationError("reserved cohort names and lineage lists must be explicit")
+        try:
+            normalised[cohort] = {_strict_string(value, "reserved source_lineage_id") for value in values}
+        except TypeError as error:
+            raise CalibrationError("reserved cohort lineage values must be iterable") from error
+    external_conflicts = []
+    calibration_lineages = {clip.source_lineage_id for clip in clips}
+    for cohort, lineages in sorted(normalised.items()):
+        for lineage in sorted(calibration_lineages & lineages):
+            external_conflicts.append({"source_lineage_id": lineage, "cohorts": ["calibration", cohort]})
+    reserved_conflicts = []
+    names = sorted(normalised)
+    for index, first in enumerate(names):
+        for second in names[index + 1:]:
+            for lineage in sorted(normalised[first] & normalised[second]):
+                reserved_conflicts.append({"source_lineage_id": lineage, "cohorts": [first, second]})
+    return {
+        "status": "pass" if not external_conflicts and not reserved_conflicts else "fail",
+        "calibration_lineage_count": len(calibration_lineages),
+        "reserved_cohorts": {name: len(lineages) for name, lineages in sorted(normalised.items())},
+        "calibration_conflicts": external_conflicts,
+        "reserved_conflicts": reserved_conflicts,
+    }
+
+
+def validate_annotator_ownership(
+    annotator_ids: Sequence[str], ownership: Optional[Mapping[str, Any]]
+) -> Dict[str, Any]:
+    """Require two distinct declared human owners before annotation dispatch."""
+
+    annotators = _validate_annotators(annotator_ids)
+    if ownership is None:
+        return {"status": "missing", "reason": "independent annotator ownership was not supplied"}
+    if not isinstance(ownership, Mapping) or set(ownership) != set(annotators):
+        raise CalibrationError("annotator ownership must cover exactly the two assigned annotator IDs")
+    resolved: List[AnnotatorOwnership] = []
+    for annotator_id in annotators:
+        value = ownership[annotator_id]
+        if isinstance(value, AnnotatorOwnership):
+            attestation = value
+        elif isinstance(value, Mapping):
+            try:
+                attestation = AnnotatorOwnership(annotator_id=annotator_id, **dict(value))
+            except (TypeError, CalibrationError) as error:
+                raise CalibrationError("annotator ownership record is invalid") from error
+        else:
+            raise CalibrationError("annotator ownership records must be objects")
+        if attestation.annotator_id != annotator_id:
+            raise CalibrationError("annotator ownership record ID does not match its map key")
+        resolved.append(attestation)
+    owners = [item.owner_id for item in resolved]
+    if len(set(owners)) != len(owners):
+        raise CalibrationError("the two heldout annotators must have distinct declared owner_id values")
+    return {
+        "status": "declared_independent",
+        "attestation": "declared owner IDs and independent attestations; not identity verification",
+        "annotators": [
+            {"annotator_id": item.annotator_id, "owner_id": item.owner_id, "attested_at": item.attested_at}
+            for item in resolved
+        ],
+    }
+
+
+def freeze_calibration_selection(
+    manifest: Iterable[Union[ClipManifestRow, Mapping[str, Any]]],
+    output_path: Union[str, Path],
+    *,
+    reserved_cohort_lineages: Mapping[str, Iterable[str]],
+) -> Dict[str, Any]:
+    """Freeze the 100/50 selected clips exactly once with media hashes.
+
+    A supplied ``reserved_cohort_lineages`` map is mandatory so the selection
+    cannot claim split isolation without checking primary and cost panels.
+    """
+
+    clips = validate_manifest(manifest)
+    missing_hashes = [clip.clip_id for clip in clips if clip.media_hash is None]
+    if missing_hashes:
+        raise CalibrationError("calibration freeze needs immutable media_hash for every clip")
+    lineage_report = validate_calibration_lineage_partition(clips, reserved_cohort_lineages)
+    if lineage_report["status"] != "pass":
+        raise CalibrationError("calibration source lineages overlap frozen study cohorts")
+    payload: Dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": CALIBRATION_FREEZE_KIND,
+        "frozen": True,
+        "calibration_manifest_hash": calibration_manifest_hash(clips),
+        "lineage_partition": lineage_report,
+        "clips": [
+            {
+                "clip_id": clip.clip_id,
+                "media_ref": clip.media_ref,
+                "media_hash": clip.media_hash,
+                "task": clip.task,
+                "split": clip.split,
+                "source_lineage_id": clip.source_lineage_id,
+            }
+            for clip in clips
+        ],
+    }
+    payload["sha256"] = _self_hash(payload)
+    target = Path(output_path)
+    if target.suffix.lower() != ".json":
+        raise CalibrationError("calibration freeze output must have a .json suffix")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+    try:
+        descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+    except FileExistsError:
+        existing = load_frozen_calibration_selection(target)
+        if existing.get("sha256") != payload["sha256"]:
+            raise CalibrationError("refusing to overwrite a different frozen calibration selection")
+        return existing
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(target, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    except BaseException:
+        try:
+            target.unlink()
+        except OSError:
+            pass
+        raise
+    return payload
+
+
+def load_frozen_calibration_selection(path: Union[str, Path]) -> Dict[str, Any]:
+    """Read a selection freeze and verify its full content hash and 100/50 split."""
+
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CalibrationError("unable to read frozen calibration selection") from error
+    if not isinstance(payload, Mapping):
+        raise CalibrationError("frozen calibration selection must be an object")
+    if payload.get("schema_version") != SCHEMA_VERSION or payload.get("kind") != CALIBRATION_FREEZE_KIND:
+        raise CalibrationError("unrecognized frozen calibration selection schema")
+    if payload.get("frozen") is not True or not _hash_equal(payload.get("sha256"), _self_hash(payload)):
+        raise CalibrationError("frozen calibration selection SHA-256 does not match its content")
+    clips = validate_manifest(payload.get("clips", []))
+    if not _hash_equal(payload.get("calibration_manifest_hash"), calibration_manifest_hash(clips)):
+        raise CalibrationError("frozen calibration selection manifest hash does not match its clips")
+    if any(clip.media_hash is None for clip in clips):
+        raise CalibrationError("frozen calibration selection lacks clip media hashes")
+    lineage = payload.get("lineage_partition")
+    if not isinstance(lineage, Mapping) or lineage.get("status") != "pass":
+        raise CalibrationError("frozen calibration selection lacks a passing lineage partition report")
+    return dict(payload)
 
 
 def deterministic_annotation_assignments(
@@ -355,11 +638,15 @@ def blinded_annotation_rows(
     annotator_id: str,
     annotator_ids: Sequence[str],
     assignments: Optional[Mapping[str, Sequence[str]]] = None,
+    annotator_ownership: Optional[Mapping[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Return one annotator's blank packet without experimental metadata."""
 
     clips = validate_manifest(manifest)
     annotators = _validate_annotators(annotator_ids)
+    ownership = validate_annotator_ownership(annotators, annotator_ownership)
+    if ownership["status"] != "declared_independent":
+        raise CalibrationError("blinded annotation export requires independent annotator ownership input")
     if annotator_id not in annotators:
         raise CalibrationError("annotator_id is not one of the two planned annotators")
     resolved_assignments = (
@@ -367,6 +654,10 @@ def blinded_annotation_rows(
         if assignments is not None
         else deterministic_annotation_assignments(clips, annotators)
     )
+    # Validate every candidate before choosing one annotator's subset.  A
+    # malformed reference must not sit latent until the other packet is sent.
+    for clip in clips:
+        _validate_blind_reference(clip)
     packets: List[Dict[str, Any]] = []
     for clip in clips:
         if annotator_id not in resolved_assignments[clip.clip_id]:
@@ -377,8 +668,8 @@ def blinded_annotation_rows(
             {
                 "schema_version": SCHEMA_VERSION,
                 "annotator_id": annotator_id,
-                "clip_id": clip.clip_id,
-                "media_ref": clip.media_ref,
+                "clip_id": blinded_clip_id(clip),
+                "media_ref": blinded_media_ref(clip),
                 "task": clip.task,
                 "integrity": "",
                 "collision": "",
@@ -398,23 +689,34 @@ def export_annotation_packets(
     annotator_ids: Sequence[str],
     output_format: Optional[str] = None,
     assignments: Optional[Mapping[str, Sequence[str]]] = None,
+    overwrite: bool = False,
+    annotator_ownership: Optional[Mapping[str, Any]] = None,
 ) -> int:
     """Write a blinded JSONL or CSV packet and return its number of rows."""
 
-    rows = blinded_annotation_rows(manifest, annotator_id, annotator_ids, assignments)
+    rows = blinded_annotation_rows(
+        manifest, annotator_id, annotator_ids, assignments, annotator_ownership=annotator_ownership
+    )
     path = Path(output_path)
     fmt = _resolve_format(path, output_format)
     path.parent.mkdir(parents=True, exist_ok=True)
+    write_mode = "w" if overwrite else "x"
     if fmt == "jsonl":
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            for row in rows:
-                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False))
-                handle.write("\n")
+        try:
+            with path.open(write_mode, encoding="utf-8", newline="") as handle:
+                for row in rows:
+                    handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False))
+                    handle.write("\n")
+        except FileExistsError as error:
+            raise CalibrationError("refusing to overwrite an existing annotation packet") from error
     else:
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(BLINDED_EXPORT_FIELDS), extrasaction="raise")
-            writer.writeheader()
-            writer.writerows(rows)
+        try:
+            with path.open(write_mode, encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(BLINDED_EXPORT_FIELDS), extrasaction="raise")
+                writer.writeheader()
+                writer.writerows(rows)
+        except FileExistsError as error:
+            raise CalibrationError("refusing to overwrite an existing annotation packet") from error
     return len(rows)
 
 
@@ -448,7 +750,13 @@ def parse_annotations(
     """Parse labels without filling in a missing human judgement."""
 
     clips = validate_manifest(manifest)
-    clips_by_id = {clip.clip_id: clip for clip in clips}
+    clips_by_id = {blinded_clip_id(clip): clip for clip in clips}
+    # The interactive AnnotationStore predates immutable packet freezes and
+    # keeps clip IDs only inside its coordinator-controlled local store.  Keep
+    # that app API readable for incomplete/unfrozen proposals, while a frozen
+    # selection (which always has media hashes) accepts only opaque packet IDs.
+    if any(clip.media_hash is None for clip in clips):
+        clips_by_id.update({clip.clip_id: clip for clip in clips})
     resolved_assignments: Optional[Dict[str, Tuple[str, ...]]] = None
     if expected_assignment:
         if annotator_ids is None:
@@ -536,6 +844,7 @@ def build_calibration_report(
     judge_reports: Optional[Iterable[Any]] = None,
     protocol: Optional[Union[FrozenGateDProtocol, Mapping[str, Any]]] = None,
     tolerances: Optional[Union[GateDTolerances, Mapping[str, Any]]] = None,
+    annotator_ownership: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Summarize supplied calibration evidence and conservatively assess Gate D.
 
@@ -546,6 +855,7 @@ def build_calibration_report(
 
     clips = validate_manifest(manifest)
     annotators = _validate_annotators(annotator_ids)
+    ownership = validate_annotator_ownership(annotators, annotator_ownership)
     assignments = deterministic_annotation_assignments(clips, annotators)
     human_labels = _coerce_annotations(human_annotations, clips, assignments, annotators, True)
     human_coverage = validate_human_annotation_coverage(clips, human_labels, annotators, assignments)
@@ -592,6 +902,7 @@ def build_calibration_report(
         primary_judge_evidence=primary_judge_evidence,
         protocol=protocol_value,
         tolerances=tolerance_value,
+        independent_annotator_ownership=ownership["status"] == "declared_independent",
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -603,6 +914,7 @@ def build_calibration_report(
             "lineage_split_disjoint": True,
         },
         "human_annotation_coverage": human_coverage,
+        "annotator_ownership": ownership,
         "human_human_agreement": agreement,
         "heldout_consensus": consensus_summary,
         "judge_vs_human": judge_comparison,
@@ -619,6 +931,7 @@ def evaluate_gate_d(
     primary_judge_evidence: Mapping[str, Any],
     protocol: Optional[FrozenGateDProtocol],
     tolerances: Optional[GateDTolerances],
+    independent_annotator_ownership: bool = False,
 ) -> Dict[str, Any]:
     """Return ``pass`` only with all required evidence and frozen thresholds."""
 
@@ -647,6 +960,8 @@ def evaluate_gate_d(
     judge_comparison = primary_judge_evidence["judge_comparison"]
 
     reasons: List[str] = []
+    if not independent_annotator_ownership:
+        reasons.append("independent_annotator_ownership_missing")
     if heldout_overlap < tolerances.minimum_heldout_overlap:
         reasons.append("heldout_overlap_below_minimum")
     if human_annotation_coverage is None or human_annotation_coverage < tolerances.minimum_human_annotation_coverage:
@@ -696,12 +1011,16 @@ def _parse_manifest_row(raw: Mapping[str, Any], index: int) -> ClipManifestRow:
     missing = [field for field in required if field not in raw]
     if missing:
         raise CalibrationError("manifest row {0} is missing {1}".format(index, ", ".join(missing)))
+    media_hash = raw.get("media_hash", raw.get("media_sha256"))
+    if media_hash is not None:
+        _require_hash(media_hash, "manifest media_hash")
     return ClipManifestRow(
         clip_id=_strict_string(raw["clip_id"], "manifest clip_id"),
         media_ref=_strict_string(raw["media_ref"], "manifest media_ref"),
         task=_strict_string(raw["task"], "manifest task"),
         split=_strict_string(raw["split"], "manifest split"),
         source_lineage_id=_strict_string(raw["source_lineage_id"], "manifest source_lineage_id"),
+        media_hash=media_hash,
     )
 
 
@@ -769,6 +1088,17 @@ def _validate_assignments(
     return resolved
 
 
+def _validate_blind_reference(clip: ClipManifestRow) -> None:
+    """Reject obvious policy/backend leakage through supposedly opaque IDs."""
+
+    reference = (clip.clip_id + "\x1f" + clip.media_ref).lower()
+    leaked = [marker for marker in _BLIND_REFERENCE_MARKERS if marker in reference]
+    if leaked:
+        raise CalibrationError(
+            "clip_id/media_ref leaks blinded policy, backend, command, or condition context: " + ", ".join(leaked)
+        )
+
+
 def _parse_annotation_row(
     raw: Mapping[str, Any], clips_by_id: Mapping[str, ClipManifestRow], row_index: int
 ) -> Annotation:
@@ -789,13 +1119,13 @@ def _parse_annotation_row(
     missing = [field for field in required if field not in raw]
     if missing:
         raise CalibrationError("annotation row {0} is missing {1}".format(row_index, ", ".join(missing)))
-    clip_id = _strict_string(raw["clip_id"], "annotation clip_id")
-    if clip_id not in clips_by_id:
+    packet_clip_id = _strict_string(raw["clip_id"], "annotation clip_id")
+    if packet_clip_id not in clips_by_id:
         raise CalibrationError("annotation references a clip not in the manifest")
-    clip = clips_by_id[clip_id]
+    clip = clips_by_id[packet_clip_id]
     if "task" in raw and _strict_string(raw["task"], "annotation task") != clip.task:
         raise CalibrationError("annotation task does not match manifest")
-    if "media_ref" in raw and _strict_string(raw["media_ref"], "annotation media_ref") != clip.media_ref:
+    if "media_ref" in raw and _strict_string(raw["media_ref"], "annotation media_ref") != blinded_media_ref(clip):
         raise CalibrationError("annotation media_ref does not match manifest")
     integrity = _strict_enum(raw["integrity"], INTEGRITY_VALUES, "integrity")
     collision = _strict_enum(raw["collision"], COLLISION_VALUES, "collision")
@@ -806,7 +1136,7 @@ def _parse_annotation_row(
     if completion == "not_met" and progress > 4:
         raise CalibrationError("completion_evidence='not_met' requires progress from 0 through 4")
     return Annotation(
-        clip_id=clip_id,
+        clip_id=clip.clip_id,
         annotator_id=_strict_string(raw["annotator_id"], "annotation annotator_id"),
         integrity=integrity,
         collision=collision,
@@ -1652,6 +1982,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     export.add_argument("--annotators", required=True, nargs=2, metavar=("ANNOTATOR_A", "ANNOTATOR_B"))
     export.add_argument("--output", required=True)
     export.add_argument("--format", choices=("jsonl", "csv"))
+    export.add_argument("--overwrite", action="store_true")
+    export.add_argument("--ownership", required=True, help="JSON owner/independence attestations for both annotators")
+    export.add_argument("--private-media-resolver", help="coordinator-only JSON token resolver; never share with annotators")
+
+    freeze = subcommands.add_parser("freeze", help="write the selected 100/50 calibration clips exactly once")
+    freeze.add_argument("--manifest", required=True)
+    freeze.add_argument("--reserved-lineages", required=True)
+    freeze.add_argument("--output", required=True)
 
     report = subcommands.add_parser("report", help="summarize supplied calibration labels")
     report.add_argument("--manifest", required=True)
@@ -1661,6 +1999,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report.add_argument("--judge-reports", action="append")
     report.add_argument("--protocol")
     report.add_argument("--tolerances")
+    report.add_argument(
+        "--ownership",
+        help=(
+            "JSON owner/independence attestations for both annotators. Required by the "
+            "frozen offline workflow; legacy app reports retain their typed registry."
+        ),
+    )
     report.add_argument(
         "--annotator-registry",
         help="Annotator registry JSON declaring each annotator_type (human/model/external_label).",
@@ -1672,16 +2017,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     args = parser.parse_args(argv)
     try:
-        manifest = _load_manifest(args.manifest)
+        if args.command == "freeze":
+            manifest = _load_manifest(args.manifest)
+            reserved = _load_json_object(args.reserved_lineages, "reserved cohort lineages")
+            frozen = freeze_calibration_selection(manifest, args.output, reserved_cohort_lineages=reserved)
+            print(json.dumps({"output": str(args.output), "sha256": frozen["sha256"], "status": "frozen"}, sort_keys=True))
+            return 0
+        frozen_selection: Optional[Dict[str, Any]] = None
+        try:
+            frozen_selection = load_frozen_calibration_selection(args.manifest)
+            manifest = frozen_selection["clips"]
+        except CalibrationError:
+            # The app-owned annotated-session/report surface predates immutable
+            # selection files.  It may inspect a supplied proposal but cannot
+            # become the frozen offline workflow: packet export and any report
+            # with ownership attestations still require a verified freeze.
+            if args.command == "export" or getattr(args, "ownership", None):
+                raise
+            manifest = _load_manifest(args.manifest)
         if args.command == "export":
+            ownership = _load_json_object(args.ownership, "annotator ownership")
             count = export_annotation_packets(
                 manifest,
                 args.output,
                 args.annotator,
                 args.annotators,
                 output_format=args.format,
+                overwrite=args.overwrite,
+                annotator_ownership=ownership,
             )
-            print(json.dumps({"exported_annotations": count, "output": str(args.output)}, sort_keys=True))
+            resolver_count = None
+            if args.private_media_resolver:
+                resolver_count = export_blinded_media_resolver(manifest, args.private_media_resolver)
+            print(json.dumps({"exported_annotations": count, "output": str(args.output), "private_media_resolver_entries": resolver_count}, sort_keys=True))
             return 0
         assignments = deterministic_annotation_assignments(manifest, args.annotators)
         human_labels: List[Annotation] = []
@@ -1695,6 +2063,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             judge_reports.extend(_load_judge_reports(path))
         protocol = _load_json_object(args.protocol, "protocol") if args.protocol else None
         tolerances = _load_json_object(args.tolerances, "tolerances") if args.tolerances else None
+        ownership = _load_json_object(args.ownership, "annotator ownership") if args.ownership else None
+        if frozen_selection is not None and ownership is None:
+            raise CalibrationError("--ownership is required when reporting a frozen calibration selection")
         result = build_calibration_report(
             manifest,
             human_labels,
@@ -1703,6 +2074,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             judge_reports=judge_reports if args.judge_reports else None,
             protocol=protocol,
             tolerances=tolerances,
+            annotator_ownership=ownership,
         )
         if args.output:
             if not args.annotator_registry:
@@ -1745,7 +2117,9 @@ if __name__ == "__main__":
 
 __all__ = [
     "Annotation",
+    "AnnotatorOwnership",
     "BLINDED_EXPORT_FIELDS",
+    "CALIBRATION_FREEZE_KIND",
     "CalibrationError",
     "ClipManifestRow",
     "COMPLETION_VALUES",
@@ -1760,14 +2134,21 @@ __all__ = [
     "TASKS",
     "TrustedJudgeProducer",
     "blinded_annotation_rows",
+    "blinded_clip_id",
+    "blinded_media_ref",
+    "blinded_media_resolver",
     "build_calibration_report",
     "calibration_manifest_hash",
     "deterministic_annotation_assignments",
     "evaluate_gate_d",
     "export_annotation_packets",
+    "freeze_calibration_selection",
     "import_annotations",
     "main",
     "parse_annotations",
+    "load_frozen_calibration_selection",
+    "validate_calibration_lineage_partition",
+    "validate_annotator_ownership",
     "validate_human_annotation_coverage",
     "validate_manifest",
     "validate_primary_judge_evidence",

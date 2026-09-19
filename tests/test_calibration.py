@@ -17,19 +17,36 @@ from plumb.calibration import (
     GateDTolerances,
     HELDOUT_SPLIT,
     TrustedJudgeProducer,
+    blinded_clip_id,
+    blinded_media_ref,
     blinded_annotation_rows,
     build_calibration_report,
     calibration_manifest_hash,
     deterministic_annotation_assignments,
     export_annotation_packets,
+    freeze_calibration_selection,
     import_annotations,
+    load_frozen_calibration_selection,
     main,
     parse_annotations,
+    validate_calibration_lineage_partition,
     validate_manifest,
 )
 
 
 ANNOTATORS = ("annotator-alex", "annotator-blair")
+OWNERSHIP = {
+    "annotator-alex": {
+        "owner_id": "human-alex",
+        "independent_attestation": True,
+        "attested_at": "2026-09-19T00:00:00Z",
+    },
+    "annotator-blair": {
+        "owner_id": "human-blair",
+        "independent_attestation": True,
+        "attested_at": "2026-09-19T00:00:00Z",
+    },
+}
 
 
 def full_manifest():
@@ -58,9 +75,9 @@ def full_manifest():
 
 def annotation_row(clip, annotator_id, *, success=False, integrity="intact", collision="none_visible"):
     return {
-        "clip_id": clip.clip_id,
+        "clip_id": blinded_clip_id(clip),
         "annotator_id": annotator_id,
-        "media_ref": clip.media_ref,
+        "media_ref": blinded_media_ref(clip),
         "task": clip.task,
         "integrity": integrity,
         "collision": collision,
@@ -78,6 +95,13 @@ def complete_human_labels(manifest):
     for clip in clips:
         for annotator_id in assignments[clip.clip_id]:
             rows.append(annotation_row(clip, annotator_id))
+    return rows
+
+
+def frozen_manifest_rows():
+    rows = full_manifest()
+    for row in rows:
+        row["media_hash"] = sha256("media:" + row["clip_id"])
     return rows
 
 
@@ -200,7 +224,7 @@ class ManifestAndExportTests(unittest.TestCase):
 
     def test_blinded_export_drops_policy_action_and_condition_metadata(self):
         clips = validate_manifest(full_manifest())
-        rows = blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS)
+        rows = blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS, annotator_ownership=OWNERSHIP)
         self.assertGreaterEqual(len(rows), 50)  # every heldout clip is independently assigned
         forbidden = {"policy", "actions", "condition", "split", "source_lineage_id", "world_seed"}
         self.assertTrue(all(forbidden.isdisjoint(row) for row in rows))
@@ -208,23 +232,52 @@ class ManifestAndExportTests(unittest.TestCase):
             "schema_version", "annotator_id", "clip_id", "media_ref", "task", "integrity", "collision",
             "progress", "completion_evidence", "evidence_frame_indices", "observable_reason",
         } for row in rows))
+        self.assertTrue(all(row["media_ref"].startswith("annotation://clip/") for row in rows))
+        self.assertTrue(all("calibration" not in row["media_ref"] for row in rows))
+        self.assertTrue(all(row["clip_id"].startswith("annotation://id/") for row in rows))
+        self.assertTrue(all("dev" not in row["clip_id"] and "heldout" not in row["clip_id"] for row in rows))
+
+    def test_packet_export_requires_two_distinct_declared_human_owners(self):
+        clips = validate_manifest(full_manifest())
+        with self.assertRaises(CalibrationError):
+            blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS)
+        same_owner = {key: {**value, "owner_id": "one-person"} for key, value in OWNERSHIP.items()}
+        with self.assertRaises(CalibrationError):
+            blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS, annotator_ownership=same_owner)
 
     def test_jsonl_and_cli_export_write_only_blinded_packets(self):
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest_path = root / "manifest.json"
-            manifest_path.write_text(json.dumps(full_manifest()))
+            manifest_path = root / "frozen-selection.json"
+            freeze_calibration_selection(
+                frozen_manifest_rows(),
+                manifest_path,
+                reserved_cohort_lineages={"primary": ["primary-lineage"], "cost_confirmation": ["cost-lineage"]},
+            )
+            ownership_path = root / "ownership.json"
+            ownership_path.write_text(json.dumps(OWNERSHIP))
             output_path = root / "alex.jsonl"
+            resolver_path = root / "private-resolver.json"
             exit_code = main(
                 [
                     "export", "--manifest", str(manifest_path), "--annotator", ANNOTATORS[0],
-                    "--annotators", *ANNOTATORS, "--output", str(output_path),
+                    "--annotators", *ANNOTATORS, "--ownership", str(ownership_path), "--output", str(output_path),
+                    "--private-media-resolver", str(resolver_path),
                 ]
             )
             self.assertEqual(0, exit_code)
             exported = [json.loads(line) for line in output_path.read_text().splitlines()]
             self.assertTrue(exported)
             self.assertTrue(all("policy" not in row and "condition" not in row for row in exported))
+            self.assertTrue(all(row["media_ref"].startswith("annotation://") for row in exported))
+            self.assertEqual(0o600, resolver_path.stat().st_mode & 0o777)
+
+    def test_blinded_packet_rejects_policy_or_backend_in_opaque_reference(self):
+        rows = full_manifest()
+        rows[0]["media_ref"] = "artifact://calibration/OpenVLA-clip.mp4"
+        clips = validate_manifest(rows)
+        with self.assertRaises(CalibrationError):
+            blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS, annotator_ownership=OWNERSHIP)
 
 
 class AnnotationAndReportTests(unittest.TestCase):
@@ -249,7 +302,7 @@ class AnnotationAndReportTests(unittest.TestCase):
         target = next(
             row
             for row in rows
-            if row["clip_id"] == heldout.clip_id and row["annotator_id"] == ANNOTATORS[1]
+            if row["clip_id"] == blinded_clip_id(heldout) and row["annotator_id"] == ANNOTATORS[1]
         )
         target.update({"progress": 5, "completion_evidence": "met"})
         report = build_calibration_report(clips, rows, ANNOTATORS)
@@ -344,11 +397,18 @@ class AnnotationAndReportTests(unittest.TestCase):
     def test_export_function_can_write_csv_without_any_labels(self):
         with TemporaryDirectory() as temporary:
             output = Path(temporary) / "blair.csv"
-            count = export_annotation_packets(full_manifest(), output, ANNOTATORS[1], ANNOTATORS)
+            count = export_annotation_packets(full_manifest(), output, ANNOTATORS[1], ANNOTATORS, annotator_ownership=OWNERSHIP)
             self.assertGreaterEqual(count, 50)
             header = output.read_text().splitlines()[0]
             self.assertNotIn("policy", header)
             self.assertNotIn("condition", header)
+
+    def test_annotation_export_will_not_race_or_overwrite_an_existing_packet(self):
+        with TemporaryDirectory() as temporary:
+            output = Path(temporary) / "alex.jsonl"
+            export_annotation_packets(full_manifest(), output, ANNOTATORS[0], ANNOTATORS, annotator_ownership=OWNERSHIP)
+            with self.assertRaises(CalibrationError):
+                export_annotation_packets(full_manifest(), output, ANNOTATORS[0], ANNOTATORS, annotator_ownership=OWNERSHIP)
 
     def test_csv_label_schema_version_round_trips_as_a_string(self):
         clips = validate_manifest(full_manifest())
@@ -405,7 +465,7 @@ class BlindedFieldContractTests(unittest.TestCase):
         from plumb.calibration import BLINDED_EXPORT_FIELDS
 
         clips = validate_manifest(full_manifest())
-        for row in blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS):
+        for row in blinded_annotation_rows(clips, ANNOTATORS[0], ANNOTATORS, annotator_ownership=OWNERSHIP):
             self.assertEqual(set(BLINDED_EXPORT_FIELDS), set(row))
 
 
@@ -415,7 +475,7 @@ class BinarySuccessAgreementTests(unittest.TestCase):
         rows = complete_human_labels(clips)
         heldout = next(clip for clip in clips if clip.split == HELDOUT_SPLIT)
         for row in rows:
-            if row["clip_id"] == heldout.clip_id:
+            if row["clip_id"] == blinded_clip_id(heldout):
                 row.update({"integrity": "uncertain", "completion_evidence": "uncertain", "progress": 2})
         report = build_calibration_report(clips, rows, ANNOTATORS)
         binary = report["human_human_agreement"]["pooled"]["binary_success"]
@@ -522,6 +582,30 @@ class CalibrationJsonOutputTests(unittest.TestCase):
                         str(root / "out.json"),
                     ]
                 )
+
+
+class CalibrationFreezeTests(unittest.TestCase):
+    def test_frozen_selection_binds_media_hashes_and_external_primary_cost_lineages(self):
+        rows = frozen_manifest_rows()
+        reserved = {
+            "primary": ["primary-lineage-1", "primary-lineage-2"],
+            "cost_confirmation": ["cost-lineage-1"],
+        }
+        with TemporaryDirectory() as temporary:
+            output = Path(temporary) / "selection.json"
+            frozen = freeze_calibration_selection(rows, output, reserved_cohort_lineages=reserved)
+            loaded = load_frozen_calibration_selection(output)
+        self.assertEqual(frozen["sha256"], loaded["sha256"])
+        self.assertEqual(150, len(loaded["clips"]))
+        self.assertEqual("pass", loaded["lineage_partition"]["status"])
+
+    def test_freeze_requires_explicit_disjoint_primary_and_cost_lineages(self):
+        rows = frozen_manifest_rows()
+        with self.assertRaises(CalibrationError):
+            freeze_calibration_selection(rows, Path("/tmp/not-written.json"), reserved_cohort_lineages={"primary": []})
+        overlap = {"primary": [rows[0]["source_lineage_id"]], "cost_confirmation": []}
+        report = validate_calibration_lineage_partition(rows, overlap)
+        self.assertEqual("fail", report["status"])
 
 
 if __name__ == "__main__":

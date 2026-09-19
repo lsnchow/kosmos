@@ -63,9 +63,46 @@ clips); palette contrast is instead fixed by measured ratios in `styles.css`.
   and a 16-tick cluster closed-loop diagnostic with auditable feedback hashes.
   Real clips are displayed separately from synthetic fixture episodes. The first
   loop shows severe visual drift; it is not a qualified policy evaluation.
+- Source-backed Octo, MiniVLA, SuSIE/SuSIE_LL, and OpenPiZero adapter paths.
+  Artifact, license, state-conversion and execution-wrapper blockers remain
+  explicit; these are not six validated live policies. See the
+  [MiniVLA/SuSIE](docs/POLICY-DEPENDENCIES.md) and
+  [OpenPiZero](docs/OPENPI-DEPENDENCIES.md) dependency records.
 - Baseten async Chain client with verified-only queue routing, callback checking,
   resource-price unit validation, and a deployment topology requiring real model
   contracts before it can execute.
+- Durable Baseten submission outbox, signed callback storage, request association,
+  crash recovery, and cancellation tracking. Callback ingestion is opt-in;
+  the local application never automatically submits cloud work.
+- Provenance-checked scenario import, immutable calibration selection, blinded
+  annotation packets, and full-study planning with run-specific episode IDs.
+
+## Scenario, calibration, and study workflows
+
+```bash
+.venv/bin/plumb scenarios --help
+.venv/bin/plumb annotation --help
+.venv/bin/plumb study --help
+.venv/bin/plumb distillation --help
+```
+
+The [scenario/calibration workflow](SCENARIO-CALIBRATION-WORKFLOW.md)
+documents local source manifests, finite Bridge states, split isolation,
+opaque annotation packets, and independent human ratings. The
+[study workflow](docs/STUDY-WORKFLOW.md) freezes all 1,500 planned episodes,
+checks readiness, prepares cost/drift comparisons, and validates three fresh
+full-matrix rehearsals. These tools require supplied evidence; they do not
+create the missing panels, human labels, or scientific results.
+
+The [distillation workflow](docs/DISTILLATION-WORKFLOW.md) prepares immutable
+development-only training/validation inputs and checks launch and fresh
+calibration prerequisites. It does not submit a training job or claim a trained
+judge exists.
+
+The [Baseten delivery guide](deploy/baseten/README.md#durable-application-delivery)
+describes the durable state machine and optional signed callback endpoint.
+`GET /api/baseten/outbox` shows delivery state without raw payloads or secrets.
+Callback receipt alone does not finalize or score an episode.
 
 Real GPU validation is tracked in [HANDOFF.md](HANDOFF.md). A successful model
 download/import or fixture call does not certify feedback fidelity, the five-task

@@ -796,7 +796,7 @@ def test_octo_uses_two_image_history_four_action_proposal_and_one_ensembled_exec
     # actions and the revisioned normalizer is applied exactly once per row.
     assert call["unnormalization_statistics"] is None
     assert call["observations"]["image_primary"]["dtype"] == "uint8"
-    assert call["observations"]["pad_mask"]["value"] == [[False, True]]
+    assert call["observations"]["timestep_pad_mask"]["value"] == [[False, True]]
     assert model.task_calls == [("Open the drawer",)]
     assert adapter.normalizer.counters()["denormalize_calls"] == 4
 

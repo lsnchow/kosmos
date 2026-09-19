@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 import App from "./App";
@@ -242,7 +242,12 @@ describe("PLUMB console", () => {
 
   it("has no axe violations on the main view", { timeout: 60_000 }, async () => {
     const { container } = await renderConsole();
-    const results = await axe.run(container, {
+    let results!: axe.AxeResults;
+    await act(async () => {
+      results = await axe.run(container, {
+      // jsdom has no asset server; don't wait for image/font preloads. All
+      // semantic rules below still run, with clock updates inside React act.
+      preload: false,
       rules: {
         // jsdom has no layout or stylesheet, so computed-colour checks cannot run
         // here. Contrast is verified against the palette in styles.css instead.
@@ -251,6 +256,7 @@ describe("PLUMB console", () => {
         // a captions file would have nothing to transcribe.
         "video-caption": { enabled: false },
       },
+      });
     });
     const summary = results.violations.map(
       (violation) => `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
