@@ -7,11 +7,15 @@ build_commands:
   - git clone https://github.com/rail-berkeley/soar.git /app/source-soar-gcbc
   - git -C /app/source-soar-gcbc checkout --detach eabd5f16a856e484884a22e257a941bb358cea08
   - git -C /app/source-soar-gcbc diff --quiet
-  - pip install --no-deps /app/source-soar-gcbc/model_training
+  - python3 -m venv /opt/plumb-ml-venv
+  - /opt/plumb-ml-venv/bin/pip install --upgrade pip==23.3.2
+  - /opt/plumb-ml-venv/bin/pip install -r /app/model/ml_requirements.txt
+  - /opt/plumb-ml-venv/bin/python -m pip check
+  - /opt/plumb-ml-venv/bin/python -c "import google.protobuf, jax, flax, distrax, tensorflow; assert google.protobuf.__version__ == '4.25.8'; assert jax.__version__ == '0.4.20'; assert flax.__version__ == '0.7.5'; assert distrax.__version__ == '0.1.5'; assert tensorflow.__version__ == '2.15.0'"
 resources:
   accelerator: H100
   use_gpu: true
-  cpu: 4
+  cpu: "4"
   memory: 16Gi
 runtime:
   predict_concurrency: 1

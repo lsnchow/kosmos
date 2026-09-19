@@ -28,7 +28,7 @@ type CloudRequest = {
   diagnostic_only?: true;
   physical_action?: number[];
   modelrevision?: string;
-  timing?: { load_seconds_once?: number; inference_seconds?: number };
+  timing?: { load_seconds_once?: number; inference_seconds?: number; client_request_seconds?: number };
   report_url?: string;
   raw_response_url?: string;
   error?: { kind?: string; message?: string; manual_reconciliation_required?: boolean; automatic_retry_allowed?: boolean };
@@ -90,11 +90,12 @@ function actionValues(value: unknown): number[] | undefined {
   return value.every((item) => typeof item === "number" && Number.isFinite(item)) ? value : undefined;
 }
 
-function timingValues(value: unknown): { loadSeconds?: number; inferenceSeconds?: number } {
+function timingValues(value: unknown): { loadSeconds?: number; inferenceSeconds?: number; requestSeconds?: number } {
   const timing = record(value);
   return {
     loadSeconds: finite(timing?.load_seconds_once),
     inferenceSeconds: finite(timing?.inference_seconds),
+    requestSeconds: finite(timing?.client_request_seconds),
   };
 }
 
@@ -220,11 +221,7 @@ export function CloudDiagnosticPanel() {
   const deploymentId = text(status?.deployment_id);
   const action = actionValues(selected?.physical_action);
   const timing = timingValues(selected?.timing);
-  const readiness = status?.available === true
-    ? "available"
-    : status?.configured
-      ? "configured"
-      : "not configured";
+  const readiness = status?.configured ? "configured" : "not configured";
 
   return (
     <Panel
@@ -286,7 +283,8 @@ export function CloudDiagnosticPanel() {
           <div className="run-metrics">
             <DataValue label="Server state" value={selectedState} source="Persisted cloud diagnostic record" />
             <DataValue label="Reported 7-D physical action" value={actionText(action)} source="Server response in physical units; never client-generated" />
-            <DataValue label="Inference timing" value={formatSeconds(timing.inferenceSeconds)} source="Server timing record" />
+            <DataValue label="Cloud request timing" value={formatSeconds(timing.requestSeconds)} source="Observed CLI/cloud request, including cold start if any; excludes local result write" />
+            <DataValue label="Inference timing" value={formatSeconds(timing.inferenceSeconds)} source="Model inference only; excludes network and cold start" />
             <DataValue label="One-time load timing" value={formatSeconds(timing.loadSeconds)} source="Server timing record" />
           </div>
           {selectedNeedsManualReconciliation && <p className="inline-error" role="alert">{text(selected.error?.message, selected.error?.kind, selectedState === "ambiguous" ? "The cloud diagnostic state is ambiguous after restart." : "This cloud diagnostic failed.")} Use manual reconciliation; this page does not retry it.</p>}

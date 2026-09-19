@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -358,6 +359,7 @@ class CloudDiagnosticService:
             )
             connection.commit()
         payload = self.config.request_payload(request_id)
+        call_started = time.perf_counter()
         try:
             invocation = self.runner(
                 self._argv(payload), canonical_json(payload).encode("utf-8"), float(self.config.timeout_seconds)
@@ -377,6 +379,9 @@ class CloudDiagnosticService:
             except ValueError as error:
                 raise CloudDiagnosticError("CLI returned unreadable JSON") from error
             result = self._normalise_response(parsed, request_id)
+            result["timing"] = dict(result["timing"])
+            result["timing"]["client_request_seconds"] = time.perf_counter() - call_started
+            result["timing"]["client_request_scope"] = "CLI startup, cloud request/cold start, response parsing and validation; excludes local result write"
             self._write_json(self._artifact_dir(request_id) / "result.json", result)
         except Exception as error:
             failure = {

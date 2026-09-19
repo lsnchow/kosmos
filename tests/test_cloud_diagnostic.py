@@ -62,6 +62,8 @@ def test_durable_fixed_fixture_diagnostic_persists_input_raw_response_and_unqual
     assert completed["status"] == "completed"
     assert completed["qualified"] is False and completed["result"]["diagnostic_only"] is True
     assert completed["result"]["physical_action"][-1] == 1.0
+    assert completed["result"]["timing"]["client_request_seconds"] >= 0
+    assert completed["result"]["target"]["deployment_id"] == "deployment-1"
     assert calls[0][0][:4] == ["baseten", "model", "predict", "--profile"]
     assert "--file" in calls[0][0] and "--output" in calls[0][0]
     artifacts = tmp_path / "data" / "cloud-diagnostics" / "cloud-test-1"

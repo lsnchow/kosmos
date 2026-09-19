@@ -1,105 +1,143 @@
-"""CPU contract tests for the standalone Baseten SuSIE_LL MVP package."""
+"""CPU protocol tests for the isolated Baseten MVP worker."""
 
-import base64
-import importlib.util
-import io
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
-from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = ROOT / "deploy" / "baseten" / "mvp_policy" / "model" / "model.py"
-SPEC = importlib.util.spec_from_file_location("plumb_mvp_policy_model", MODEL_PATH)
-MODULE = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(MODULE)
 
 
-def _png(value):
-    buffer = io.BytesIO()
-    Image.fromarray(value, "RGB").save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
+def _load(path, name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
-class FakeJax:
-    @staticmethod
-    def device_get(value):
-        return value
+SHIM = _load(MODEL_PATH, "plumb_mvp_shim")
 
 
-class FakeAgent:
-    def __init__(self, output, tuple_output=False):
-        self.output = output
-        self.tuple_output = tuple_output
-        self.calls = []
+class FakeStdout:
+    def __init__(self, lines):
+        self.lines = list(lines)
 
-    def sample_actions(self, observations, goals, **kwargs):
-        self.calls.append((observations, goals, kwargs))
-        return (self.output, self.output.copy()) if self.tuple_output else self.output
+    def readline(self, size):
+        return self.lines.pop(0) if self.lines else ""
+
+    def fileno(self):
+        return 77
 
 
-def _loaded_model(output=None, tuple_output=False):
-    model = MODULE.Model()
-    model._agent = FakeAgent(
-        output if output is not None else np.asarray([[0.1, -0.2, 0.0, 0.5, -0.5, 0.25, 0.7]], dtype=np.float32),
-        tuple_output=tuple_output,
-    )
-    model._runtime = {"jax": FakeJax(), "numpy": np}
-    model._runtime_payload = {"jax_version": "0.4.20", "flax_version": "0.7.5", "distrax_version": "0.1.5", "tensorflow_version": "2.15.0", "tensorflow_gpu_visible": False}
-    model._load_seconds = 1.25
-    model._restore = {"method": "inference_params_only_source_checkpoint_no_optimizer_restore", "optimizer_state_excluded": True, "changed": True}
-    return model
+class FakeStdin:
+    def __init__(self):
+        self.writes = []
+
+    def write(self, value):
+        self.writes.append(value)
+
+    def flush(self):
+        pass
+
+
+class FakeProcess:
+    def __init__(self, messages):
+        self.stdout = FakeStdout(messages)
+        self.chunks = [message.encode("utf-8") for message in messages]
+        self.stdin = FakeStdin()
+        self.killed = False
+
+    def poll(self):
+        return None
+
+    def kill(self):
+        self.killed = True
+
+    def wait(self, timeout):
+        return 0
 
 
 def _request(**changes):
-    current = np.zeros((256, 256, 3), dtype=np.uint8)
-    goal = np.full((256, 256, 3), 5, dtype=np.uint8)
-    payload = {
-        "schema_version": 1,
-        "request_id": "mvp-test-1",
-        "current_png_base64": _png(current),
-        "goal_png_base64": _png(goal),
-        "prompt": "static diagnostic",
-    }
-    payload.update(changes)
-    return payload
+    value = {"schema_version": 1, "request_id": "mvp-test-1", "current_png_base64": "a" * 16, "goal_png_base64": "b" * 16, "prompt": "static diagnostic"}
+    value.update(changes)
+    return value
 
 
-def test_mvp_response_is_json_safe_unqualified_and_has_one_boundary_physical_action():
-    model = _loaded_model(tuple_output=True)
-
-    response = model.predict(_request())
-
-    assert json.loads(json.dumps(response))["runtime"]["jax_version"] == "0.4.20"
-    assert response["schema_version"] == 1
-    assert response["status"] == "completed_unqualified" and response["qualified"] is False
-    assert response["actions"]["shape"] == [1, 7]
-    assert response["actions"]["native_model_normalized"][-1] == pytest.approx(0.7)
-    assert response["actions"]["transformed_physical"] == [[pytest.approx(0.00110581619), pytest.approx(-0.00240724234), pytest.approx(-0.00014583133), pytest.approx(0.01284957569), pytest.approx(-0.01468450483), pytest.approx(0.0197941952), 1.0]]
-    assert response["model"]["restore"]["optimizer_state_excluded"] is True
-    assert model._agent.calls[0][2] == {"temperature": 0.0, "argmax": True, "seed": None}
+def test_shim_is_stdlib_only_and_strips_parent_pythonpath_for_worker(monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", "/unsafe/server/site-packages")
+    environment = SHIM._worker_environment()
+    assert "PYTHONPATH" not in environment
+    assert environment["PYTHONNOUSERSITE"] == "1"
+    assert environment["PLUMB_SOAR_SOURCE_ROOT"] == SHIM.SOURCE_ROOT
+    assert "/usr/local/nvidia/lib64" in environment["LD_LIBRARY_PATH"]
+    source = MODEL_PATH.read_text(encoding="utf-8")
+    for forbidden in ("import tensorflow", "import jax", "import flax", "import numpy", "from PIL"):
+        assert forbidden not in source
 
 
-@pytest.mark.parametrize(
-    "changes, message",
-    [
-        ({"schema_version": True}, "schema_version"),
-        ({"request_id": "https://not-an-id"}, "request_id"),
-        ({"goal_png_base64": _png(np.zeros((256, 256, 3), dtype=np.uint8))}, "differ"),
-        ({"current_png_base64": "https://input.invalid/a.png"}, "base64"),
-        ({"extra": "not-allowed"}, "exactly"),
-    ],
-)
-def test_mvp_rejects_malformed_url_substituted_duplicate_or_extra_inputs(changes, message):
-    with pytest.raises(MODULE.ContractError, match=message):
-        _loaded_model().predict(_request(**changes))
+def test_shim_validates_exact_bounded_request_before_child_write():
+    with pytest.raises(SHIM.WorkerProtocolError, match="exactly"):
+        SHIM._validate_request(_request(extra="bad"))
+    with pytest.raises(SHIM.WorkerProtocolError, match="byte bound"):
+        SHIM._validate_request(_request(prompt="p" * (SHIM.MAX_REQUEST_BYTES + 1)))
 
 
-def test_mvp_png_decoder_rejects_non_256_image_before_full_decode():
-    small = _png(np.zeros((2, 2, 3), dtype=np.uint8))
-    with pytest.raises(MODULE.ContractError, match="declared dimensions"):
-        _loaded_model().predict(_request(current_png_base64=small))
+def test_shim_handshake_forwards_one_request_and_returns_json_safe_unqualified_result(monkeypatch):
+    response = {"schema_version": 1, "request_id": "mvp-test-1", "status": "completed_unqualified", "qualified": False, "actions": {"native_model_normalized": [0.0] * 7, "transformed_physical": [[0.0] * 7], "shape": [1, 7], "finite": True}}
+    process = FakeProcess([json.dumps({"protocol": SHIM.PROTOCOL, "type": "ready", "runtime": {"protobuf": "4.25.8"}}) + "\n", json.dumps({"protocol": SHIM.PROTOCOL, "type": "result", "request_id": "mvp-test-1", "response": response}) + "\n"])
+    monkeypatch.setattr(SHIM.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(SHIM.select, "select", lambda *args, **kwargs: ([process.stdout], [], []))
+    monkeypatch.setattr(SHIM.os, "read", lambda fd, size: process.chunks.pop(0) if process.chunks else b"")
+    model = SHIM.Model()
+    model.load()
+    observed = model.predict(_request())
+    assert json.loads(json.dumps(observed))["qualified"] is False
+    assert json.loads(process.stdin.writes[0].decode("utf-8"))["request_id"] == "mvp-test-1"
+    assert observed["serving"]["isolated_ml_venv"] is True
+
+
+def test_shim_kills_worker_on_timeout_without_replay(monkeypatch):
+    process = FakeProcess([json.dumps({"protocol": SHIM.PROTOCOL, "type": "ready", "runtime": {}}) + "\n"])
+    monkeypatch.setattr(SHIM.subprocess, "Popen", lambda *args, **kwargs: process)
+    model = SHIM.Model()
+    monkeypatch.setattr(SHIM.select, "select", lambda *args, **kwargs: ([process.stdout], [], []))
+    monkeypatch.setattr(SHIM.os, "read", lambda fd, size: process.chunks.pop(0) if process.chunks else b"")
+    model.load()
+    monkeypatch.setattr(SHIM.select, "select", lambda *args, **kwargs: ([], [], []))
+    with pytest.raises(TimeoutError):
+        model.predict(_request())
+    assert process.killed is True and model._process is None
+
+
+def test_shim_partial_protocol_line_is_deadline_bounded_and_contract_error_keeps_worker(monkeypatch):
+    error = json.dumps({"protocol": SHIM.PROTOCOL, "type": "error", "request_id": "mvp-test-1", "message": "bad PNG"}) + "\n"
+    process = FakeProcess([json.dumps({"protocol": SHIM.PROTOCOL, "type": "ready", "runtime": {}}) + "\n", error])
+    process.chunks = [process.chunks[0][:10], process.chunks[0][10:], process.chunks[1]]
+    monkeypatch.setattr(SHIM.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(SHIM.select, "select", lambda *args, **kwargs: ([process.stdout], [], []))
+    monkeypatch.setattr(SHIM.os, "read", lambda fd, size: process.chunks.pop(0) if process.chunks else b"")
+    model = SHIM.Model()
+    model.load()
+    with pytest.raises(SHIM.WorkerRequestError, match="bad PNG"):
+        model.predict(_request())
+    assert process.killed is False and model._process is process
+    response = {"schema_version": 1, "request_id": "mvp-test-1", "status": "completed_unqualified", "qualified": False}
+    process.chunks.append((json.dumps({"protocol": SHIM.PROTOCOL, "type": "result", "request_id": "mvp-test-1", "response": response}) + "\n").encode("utf-8"))
+    assert model.predict(_request())["status"] == "completed_unqualified"
+
+
+def test_shim_kills_worker_on_wrong_response_identity(monkeypatch):
+    response = {"schema_version": 1, "request_id": "other", "status": "completed_unqualified", "qualified": False}
+    process = FakeProcess([json.dumps({"protocol": SHIM.PROTOCOL, "type": "ready", "runtime": {}}) + "\n", json.dumps({"protocol": SHIM.PROTOCOL, "type": "result", "request_id": "other", "response": response}) + "\n"])
+    monkeypatch.setattr(SHIM.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(SHIM.select, "select", lambda *args, **kwargs: ([process.stdout], [], []))
+    monkeypatch.setattr(SHIM.os, "read", lambda fd, size: process.chunks.pop(0) if process.chunks else b"")
+    model = SHIM.Model()
+    model.load()
+    with pytest.raises(SHIM.WorkerProtocolError, match="identity"):
+        model.predict(_request())
+    assert process.killed is True
