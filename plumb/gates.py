@@ -221,6 +221,29 @@ class GateRecord:
                     errors.append(
                         "Gate E requires a separately validated distilled judge before it scores anything"
                     )
+                else:
+                    # ``separately_validated`` is a claim. Spec section 5 says what
+                    # backs it: "A distilled judge must pass fresh held-out
+                    # calibration and paired frozen-video comparison before
+                    # scoring a burst." Require both records, so a hand-edited
+                    # ledger cannot assert validation it never performed.
+                    for record_name, label in (
+                        ("fresh_heldout_calibration", "fresh held-out calibration"),
+                        ("paired_frozen_video_comparison", "paired frozen-video comparison"),
+                    ):
+                        record = distilled.get(record_name)
+                        if not isinstance(record, Mapping):
+                            errors.append(
+                                "Gate E claims a validated distilled judge but records no %s" % label
+                            )
+                        elif not record.get("passed"):
+                            errors.append(
+                                "Gate E's distilled judge did not pass its %s" % label
+                            )
+                    if not distilled.get("original_judge_results_preserved"):
+                        errors.append(
+                            "Gate E must preserve the original judge's results alongside the distilled ones"
+                        )
         if self.gate_id == "F":
             rehearsals = self.measurements.get("rehearsals")
             if not isinstance(rehearsals, (list, tuple)) or len(rehearsals) < 3:

@@ -1163,7 +1163,20 @@ def default_protocol(
         judge_sampling=dict(FROZEN_JUDGE_SAMPLING),
         exclusion_policy=default_exclusion_policy(),
         cost_selection_rule=default_cost_selection_rule(),
-        cohorts=("primary", "development", "calibration", "cost_confirmation", "reverse_validation"),
+        cohorts=(
+            "primary",
+            "development",
+            "calibration",
+            "cost_confirmation",
+            "reverse_validation",
+            # Distillation needs three cohorts of its own. Spec section 5 requires
+            # training, held-out calibration and primary lineages to stay
+            # disjoint, so the cohorts are named in the frozen protocol rather
+            # than only enforced at runtime.
+            "distillation_train",
+            "distillation_dev_validation",
+            "distillation_fresh_heldout",
+        ),
         notes=(
             "Tolerances are candidates until a PreregistrationRecord reports status=registered.",
             "A changed adapter, backend, judge or operating point invalidates its dependent gates.",

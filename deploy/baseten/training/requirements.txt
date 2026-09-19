@@ -1,0 +1,107 @@
+# PLUMB Baseten image requirements — judge distillation Training Job (LoRA)
+#
+# Consumed by: deploy/baseten/training/job_config.py -> TrainingRuntime.requirements_ref
+# Base image:  baseten/training-py311-cu124 (see job_config.py TRAINING_IMAGE)
+# Entrypoint:  deploy/baseten/training/train_judge_lora.py
+# Gate:        plumb.distillation.DistillationGate (Gate E, distilled_judge)
+# Re-resolved against public PyPI on 2026-09-19 (UTC).
+#
+# ===========================================================================
+# NOTHING IN THIS FILE HAS EVER BEEN BUILT, INSTALLED, OR RUN
+# ===========================================================================
+# No Training Job has been submitted from this repository. `training_job`
+# appeared nowhere in it before this directory existed. There is no GPU here,
+# torch is not installed, and no container built from these pins has been
+# resolved by pip. Concretely unverified:
+#
+#   * Whether these versions co-resolve at all. The pins below are chosen to be
+#     mutually consistent on paper (peft/trl/transformers/accelerate track the
+#     same Transformers line the judge declares) but pip has not confirmed it.
+#   * Whether TRL's SFTTrainer accepts Qwen2.5-VL's processor and image inputs
+#     at transformers==4.49.0 without a custom collator. AGENT-BUILD-SPEC.md §7
+#     requires framework/model compatibility to be checked in its own
+#     container; that check is step 3 of docs/DISTILLATION_RUNBOOK.md and its
+#     result sets TrainingRuntime.framework_compatibility_checked.
+#   * Whether one H100 holds Qwen2.5-VL-7B plus LoRA optimizer state at the
+#     sequence length 16 timestamped frames produce. Batch size, gradient
+#     accumulation and gradient checkpointing must be measured, not assumed.
+#   * Every GPU-second and dollar figure. §7 forbids an assumed universal
+#     throughput preset, and distillation compute is a separate acquisition
+#     line item (plumb.distillation.TrainingBudgetItem), never zero.
+#
+# ===========================================================================
+# THE RECORDED COMPUTECANADA RUNTIME EVIDENCE DOES NOT TRANSFER TO THIS IMAGE
+# ===========================================================================
+# cluster-runtime-evidence.json records judge diagnostics under
+# `transformers==5.17.0+computecanada` / `torch==2.6.0+computecanada` on a
+# Queen's A100. Those Alliance local builds do not exist on PyPI and no pin
+# below is one of them. This image installs public upstream releases, which are
+# different binary builds, on different hardware, for a different task
+# (training, not five-sample inference). No recorded cluster number is evidence
+# about this image.
+#
+# Reviewed lock *input*, not a lock: no --require-hashes, no container digest.
+# ---------------------------------------------------------------------------
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+# Exact, and matched to plumb/policies/judge.py QwenJudgeProfile.torch_dtype
+# ("bfloat16"): bf16 LoRA training needs a CUDA build, not the CPU default
+# wheel. It is an extra (not primary) index so non-torch packages still resolve
+# from PyPI.
+torch==2.6.0
+
+# Exact, enforced by QwenJudgeProfile.transformers_version. A distilled adapter
+# trained against a different Transformers line is not an adapter for the judge
+# revision this project froze; 4.49.0 is the first release with native
+# Qwen2.5-VL support and trust_remote_code stays off.
+transformers==4.49.0
+
+# LoRA itself. peft is what applies lr/r/alpha; the three preregistered arms in
+# plumb.distillation.default_search_space() are passed to it as
+# lora_r / lora_alpha / lora_dropout / lora_target_modules.
+peft==0.14.0
+
+# Supervised fine-tuning loop. BUILD-SPEC.md names Axolotl/TRL for Training
+# Jobs; TRL is the arm taken here because train_judge_lora.py drives
+# trl.SFTTrainer from Python rather than an Axolotl YAML, which keeps the
+# preregistered hyperparameters in one place (the rendered payload) instead of
+# duplicating them in a config file. Switching to Axolotl changes this file, the
+# entrypoint and the recorded runtime, and therefore requires re-running the
+# compatibility check and re-rendering the payloads.
+trl==0.14.0
+accelerate==1.3.0
+datasets==3.2.0
+safetensors==0.5.2
+sentencepiece==0.2.0
+
+# Frame decoding for the 16 timestamped frames per clip. Pinned to the same
+# versions the validity gate and judge images use so a clip decodes identically
+# in training and in scoring; a training/serving decode mismatch would silently
+# change what the distilled judge learned to look at.
+pillow==11.1.0
+numpy==2.2.2
+opencv-python-headless==4.11.0.86
+
+# Object-store reads for the dataset URI in the rendered payload. The dataset is
+# read from s3://, never baked into the image.
+boto3==1.36.11
+
+# ---------------------------------------------------------------------------
+# UNRESOLVED, deliberately absent
+# ---------------------------------------------------------------------------
+# * No weight download line. Base weights arrive at container start from the
+#   model cache at an immutable revision, and the judge loader is
+#   local_files_only=True. A training job that pulls from the Hub at run time
+#   would break the pinned revision the adapter is trained against.
+# * No `bitsandbytes`. Quantized training is a design choice that changes the
+#   adapter, so it would be a new preregistered arm, not a silent substitution
+#   (AGENT-BUILD-SPEC.md §7: quantization exclusions are design choices, not
+#   assertions about hardware support).
+# * No `flash-attn`. It needs a compile step against the resolved torch/CUDA
+#   pair, and nothing here has been compiled.
+# * No `wandb` or other telemetry sink. Metrics are written to the job's output
+#   directory as JSON and read back by plumb.distillation.ArmResult, so the
+#   development-validation number that selects an arm has a recorded source.
+# * No `deepspeed`. Multi-node is excluded by choice; node_count is 1 in
+#   job_config.py.

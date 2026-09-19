@@ -94,6 +94,9 @@ COHORTS: Tuple[str, ...] = (
     "cost_confirmation",
     "reverse_validation",
     "load_rehearsal",
+    "distillation_train",
+    "distillation_dev_validation",
+    "distillation_fresh_heldout",
 )
 
 
