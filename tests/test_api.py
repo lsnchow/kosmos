@@ -152,6 +152,14 @@ def test_custom_data_root_uses_its_review_directory_by_default(tmp_path):
         ]
 
 
+def test_cloud_diagnostic_is_explicitly_unavailable_without_server_configuration(tmp_path):
+    with TestClient(create_app(tmp_path / "data")) as client:
+        status = client.get("/api/cloud-diagnostics/status").json()
+        assert status["configured"] is False and status["available"] is False
+        assert status["qualified"] is False and status["policy"] == "SuSIE_LL"
+        assert client.post("/api/cloud-diagnostics", json={"request_id": "browser-request"}).status_code == 409
+
+
 def test_freeplay_refuses_to_fabricate_a_frame(tmp_path):
     """Free-play exists to prove the video is generated live.
 

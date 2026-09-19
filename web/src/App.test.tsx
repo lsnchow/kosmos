@@ -165,6 +165,15 @@ const SIXCLIP = {
 function installRoutes() {
   return mockFetch({
     "/api/health": { status: "ok", version: "0.1.0", qualified: false, available_backends: ["synthetic", "baseten"] },
+    "/api/cloud-diagnostics/status": {
+      configured: false,
+      available: false,
+      reason: "No cloud diagnostic is configured in this test control plane.",
+      policy: "SuSIE_LL",
+      qualified: false,
+      fixture: {},
+    },
+    "/api/cloud-diagnostics": { requests: [] },
     "/api/protocol": PROTOCOL,
     "/api/gates": GATES,
     "/api/runs/run-1/episodes": EPISODES,
@@ -324,6 +333,17 @@ describe("Nightshift pages render their beats", () => {
     expect(burst).toBeGreaterThan(wall);
     expect(dial).toBeGreaterThan(burst);
     expect(scores).toBeGreaterThan(dial);
+  });
+
+  it("keeps the synthetic task prompt separate from the disabled cloud diagnostic", async () => {
+    await live();
+    const prompt = screen.getByRole("region", { name: "Run a synthetic rehearsal task" });
+    const cloud = screen.getByRole("heading", { name: "Cloud diagnostic" }).closest("section") as HTMLElement;
+    expect(screen.getByLabelText(/Task instruction/i)).toBeInTheDocument();
+    expect(cloud.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run cloud model" })).toBeDisabled();
+    expect(screen.getAllByText(/No cloud diagnostic is configured/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Synthetic rehearsal · no ML or robot inference/i)).toBeInTheDocument();
   });
 
   it("puts the scoreboard and the run ledger on results", async () => {
@@ -490,7 +510,7 @@ describe("Nightshift live page interactions", () => {
     const { calls } = await live();
     // The preset fills the input; submitting starts the rollout.
     fireEvent.click(screen.getByRole("button", { name: "Close the drawer" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Run synthetic rehearsal" }));
     await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
     const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
     // A benchmark task goes through as a registry task id, not as free text.
@@ -503,24 +523,24 @@ describe("Nightshift live page interactions", () => {
     fireEvent.change(screen.getByLabelText(/Task instruction/i), {
       target: { value: "Put the spoon in the drawer" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Run synthetic rehearsal" }));
     await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
     const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
     expect(body.prompts).toEqual(["Put the spoon in the drawer"]);
     expect(body.tasks).toEqual([]);
   });
 
-  it("says before submitting whether a task has a human score to compare against", async () => {
+  it("says before submitting that canonical matching is not a synthetic measurement", async () => {
     await live();
     const input = screen.getByLabelText(/Task instruction/i);
 
     fireEvent.change(input, { target: { value: "Close the drawer" } });
-    expect(screen.getByText(/Benchmark task\./)).toBeInTheDocument();
+    expect(screen.getByText(/Canonical instruction match\./)).toBeInTheDocument();
+    expect(screen.getByText(/synthetic rehearsal is not a measurement/i)).toBeInTheDocument();
 
-    // A near-miss is not the benchmark task: the reference cell was measured
-    // against the exact string.
+    // A near-miss is not a canonical registry instruction.
     fireEvent.change(input, { target: { value: "close the drawer" } });
-    expect(screen.getByText(/Off-benchmark\./)).toBeInTheDocument();
+    expect(screen.getByText(/Custom instruction\./)).toBeInTheDocument();
   });
 
   it("blows a wall tile up to full screen and gives the focus back on close", async () => {
@@ -561,6 +581,15 @@ describe("Nightshift against the current backend responses", () => {
     installEventSource();
     const routes = mockFetch({
       "/api/health": { status: "ok", version: "0.1.0", qualified: false, available_backends: ["synthetic"] },
+      "/api/cloud-diagnostics/status": {
+        configured: false,
+        available: false,
+        reason: "No cloud diagnostic is configured.",
+        policy: "SuSIE_LL",
+        qualified: false,
+        fixture: {},
+      },
+      "/api/cloud-diagnostics": { requests: [] },
       "/api/protocol": {
         policies: PROTOCOL.policies,
         tasks: PROTOCOL.tasks,

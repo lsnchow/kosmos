@@ -21,10 +21,12 @@ What this layer will not do:
 from __future__ import annotations
 
 import asyncio
+import base64
 import dataclasses
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -327,6 +329,68 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
     return backend, missing
 
 
+def _cloud_diagnostic_service(root: Path) -> Tuple[Optional[Any], Dict[str, Any]]:
+    """Load only a fixed hash-bound fixture; never inspect CLI credentials."""
+
+    from plumb.cloud_diagnostic import CloudDiagnosticConfig, CloudDiagnosticService, CloudDiagnosticValidationError
+
+    required = {
+        "model_id": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_MODEL_ID"),
+        "deployment_id": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_DEPLOYMENT_ID"),
+        "cli_profile": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_PROFILE"),
+        "model_revision": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_MODEL_REVISION"),
+        "checkpoint_sha256": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_CHECKPOINT_SHA256"),
+        "soar_revision": os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_SOAR_REVISION"),
+    }
+    if any(not isinstance(value, str) or not value.strip() for value in required.values()):
+        return None, {"configured": False, "available": False, "reason": "cloud diagnostic model/deployment/profile and pinned model bindings are not configured", "policy": "SuSIE_LL", "qualified": False, "fixture": None}
+    fixture_dir = root / "cloud-diagnostic-fixtures" / "susie-v1"
+    manifest_path = fixture_dir / "manifest.json"
+    try:
+        timeout_seconds = float(os.environ.get("PLUMB_CLOUD_DIAGNOSTIC_TIMEOUT_SECONDS", "300"))
+        if not math.isfinite(timeout_seconds) or not 1 <= timeout_seconds <= 600:
+            raise ValueError("cloud diagnostic timeout must be from 1 through 600 seconds")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        frames = manifest.get("frames") if isinstance(manifest, Mapping) else None
+        if not isinstance(frames, list) or len(frames) != 2:
+            raise ValueError("fixture must bind current and goal frames")
+        encoded = []
+        urls = []
+        for frame in frames:
+            if not isinstance(frame, Mapping):
+                raise ValueError("fixture frame is invalid")
+            name, digest = frame.get("output_file"), frame.get("output_file_sha256")
+            path = (fixture_dir / str(name)).resolve()
+            if fixture_dir.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+                raise ValueError("fixture image is unavailable")
+            raw = path.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != digest:
+                raise ValueError("fixture image digest mismatch")
+            encoded.append(base64.b64encode(raw).decode("ascii"))
+            urls.append("/api/artifacts/" + path.relative_to(root).as_posix())
+        config = CloudDiagnosticConfig(
+            **{key: str(value) for key, value in required.items()},
+            current_png_base64=encoded[0],
+            goal_png_base64=encoded[1],
+            current_png_sha256="sha256:" + str(frames[0]["output_file_sha256"]),
+            goal_png_sha256="sha256:" + str(frames[1]["output_file_sha256"]),
+            prompt="Fixed static current/goal diagnostic; goal conditioning only, not language or task success.",
+            timeout_seconds=timeout_seconds,
+        )
+    except (OSError, ValueError, KeyError, CloudDiagnosticValidationError) as error:
+        return None, {"configured": False, "available": False, "reason": "cloud diagnostic fixture is unavailable: %s" % error, "policy": "SuSIE_LL", "qualified": False, "fixture": None}
+    return CloudDiagnosticService(root, config), {
+        "configured": True,
+        "available": True,
+        "reason": "configured; CLI authentication is exercised only by an explicit diagnostic request",
+        "model_id": config.model_id,
+        "deployment_id": config.deployment_id,
+        "policy": "SuSIE_LL",
+        "qualified": False,
+        "fixture": {"current_url": urls[0], "goal_url": urls[1], "description": manifest.get("preprocessing", {}).get("limitation")},
+    }
+
+
 
 class _SinglePageApp(StaticFiles):
     """Static files that fall back to ``index.html`` for client-side routes.
@@ -380,6 +444,8 @@ def create_app(
     pool = ThreadPoolExecutor(
         max_workers=int(os.environ.get("PLUMB_MAX_WORKERS", "8")), thread_name_prefix="plumb-run"
     )
+    cloud_diagnostic, cloud_diagnostic_status = _cloud_diagnostic_service(root)
+    cloud_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plumb-cloud-diagnostic")
     submitted: set = set()
     lock = threading.RLock()
     freeplay_sessions: Dict[str, Dict[str, Any]] = {}
@@ -389,6 +455,7 @@ def create_app(
     async def lifespan(application):
         yield
         pool.shutdown(wait=True)
+        cloud_pool.shutdown(wait=True)
 
     app = FastAPI(title="Nightshift", version="0.2.0", lifespan=lifespan)
     app.state.service = service
@@ -397,6 +464,8 @@ def create_app(
     app.state.protocol = document
     app.state.baseten = baseten_backend
     app.state.baseten_outbox = outbox
+    app.state.cloud_diagnostic = cloud_diagnostic
+    app.state.cloud_diagnostic_status = cloud_diagnostic_status
     # Development review is intentionally isolated from the annotation/Gate D
     # routes. Its SQLite database is private data, never an artifact endpoint.
     from plumb.development_review import DevelopmentReviewStore, register_development_review_routes
@@ -416,6 +485,71 @@ def create_app(
     )
     app.state.development_review = development_review
     register_development_review_routes(app, development_review)
+
+    def cloud_public(record: Mapping[str, Any]) -> Dict[str, Any]:
+        request_id = str(record["request_id"])
+        result = record.get("result") if isinstance(record.get("result"), Mapping) else {}
+        status = str(record.get("status"))
+        artifact_name = "result.json" if status == "completed" else "failure.json"
+        def artifact_url(name: str) -> Optional[str]:
+            path = root / "cloud-diagnostics" / request_id / name
+            return "/api/artifacts/cloud-diagnostics/%s/%s" % (request_id, name) if path.is_file() else None
+        return {
+            "request_id": request_id,
+            "status": status,
+            "qualified": False,
+            "diagnostic_only": True,
+            "physical_action": result.get("physical_action"),
+            "modelrevision": result.get("modelrevision"),
+            "timing": result.get("timing"),
+            "error": record.get("error"),
+            "report_url": artifact_url(artifact_name),
+            "raw_response_url": artifact_url("raw-response.json"),
+            "created_at": record.get("created_at"),
+            "updated_at": record.get("updated_at"),
+        }
+
+    @app.get("/api/cloud-diagnostics/status")
+    def cloud_diagnostic_readiness() -> dict:
+        return dict(cloud_diagnostic_status)
+
+    @app.get("/api/cloud-diagnostics")
+    def cloud_diagnostic_list() -> dict:
+        if cloud_diagnostic is None:
+            return {"requests": [], **dict(cloud_diagnostic_status)}
+        return {"requests": [cloud_public(record) for record in cloud_diagnostic.list_requests()], **dict(cloud_diagnostic_status)}
+
+    @app.post("/api/cloud-diagnostics", status_code=202)
+    async def cloud_diagnostic_submit(request: Request) -> dict:
+        from plumb.development_review import _safe_origin
+
+        _safe_origin(request)
+        if cloud_diagnostic is None:
+            raise HTTPException(409, cloud_diagnostic_status)
+        try:
+            body = await request.json()
+        except json.JSONDecodeError:
+            raise HTTPException(422, "cloud diagnostic body must be valid JSON")
+        if not isinstance(body, Mapping) or set(body) - {"request_id", "prompt"}:
+            raise HTTPException(422, "cloud diagnostic body accepts only request_id and fixed prompt")
+        if "prompt" in body and body["prompt"] != cloud_diagnostic.config.prompt:
+            raise HTTPException(422, "cloud diagnostic prompt is fixed by the pinned goal fixture")
+        try:
+            record = cloud_diagnostic.submit(body.get("request_id"))
+        except (ValueError, TypeError) as error:
+            raise HTTPException(422, str(error))
+        if record["status"] == "pending":
+            cloud_pool.submit(cloud_diagnostic.execute, record["request_id"])
+        return cloud_public(record)
+
+    @app.get("/api/cloud-diagnostics/{request_id}")
+    def cloud_diagnostic_get(request_id: str) -> dict:
+        if cloud_diagnostic is None:
+            raise HTTPException(409, cloud_diagnostic_status)
+        try:
+            return cloud_public(cloud_diagnostic.get(request_id))
+        except KeyError:
+            raise HTTPException(404, "cloud diagnostic request not found")
 
     # ------------------------------------------------------------------ helpers
 

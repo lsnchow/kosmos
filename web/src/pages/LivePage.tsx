@@ -8,6 +8,7 @@
  */
 import { useAppData } from "../AppData";
 import { BurstPanel } from "../components/BurstPanel";
+import { CloudDiagnosticPanel } from "../components/CloudDiagnosticPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { RolloutWall } from "../components/RolloutWall";
 import { Scoreboard } from "../components/Scoreboard";
@@ -50,6 +51,10 @@ export function LivePage() {
       <PageHeader
         title="Live run"
       />
+
+      <ErrorBoundary region="Cloud diagnostic">
+        <CloudDiagnosticPanel />
+      </ErrorBoundary>
 
       <TaskPrompt onSubmit={(text) => void launchPrompt(text)} busy={promptBusy} />
 
