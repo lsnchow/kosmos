@@ -110,11 +110,7 @@ export function AppShell() {
           </ErrorBoundary>
 
           <footer className="footer-note">
-            <span>Nightshift measurement console</span>
-            <span>
-              Sources: application ledger, persisted artifacts, declared platform telemetry, and published
-              reference.
-            </span>
+            <span>Nightshift</span>
             <a href="/THIRD-PARTY-NOTICES.md" target="_blank" rel="noreferrer">
               Third-party notices <ExternalLink aria-hidden="true" className="size-3" />
             </a>

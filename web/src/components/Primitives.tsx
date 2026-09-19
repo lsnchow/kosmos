@@ -30,14 +30,12 @@ export function StatusPill({
 
 export function Panel({
   title,
-  eyebrow,
   children,
   className,
   action,
   id,
 }: {
   title: string;
-  eyebrow?: string;
   children: ReactNode;
   className?: string;
   action?: ReactNode;
@@ -46,10 +44,7 @@ export function Panel({
   return (
     <section className={cn("panel", className)} id={id}>
       <div className="panel-heading">
-        <div>
-          {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-          <h2 className="text-balance">{title}</h2>
-        </div>
+        <h2 className="text-balance">{title}</h2>
         {action}
       </div>
       {children}
@@ -116,6 +111,23 @@ export function SourceChip({ children }: { children: ReactNode }) {
   );
 }
 
-export function Note({ children }: { children: ReactNode }) {
-  return <p className="table-note text-pretty">{children}</p>;
+/**
+ * A caveat, available but not shouting.
+ *
+ * Ten panels each carried a paragraph of this prose permanently on screen, and
+ * together they made the live page 1,947 words. The content is not decoration —
+ * it is where this console says what a number does *not* mean — so it is kept
+ * and kept exact. What changes is that the reader opens it when the question
+ * occurs to them, instead of reading it every time.
+ *
+ * `summary` is required and should name the specific question, not say "note":
+ * a disclosure nobody can predict the contents of is one nobody opens.
+ */
+export function Note({ summary, children }: { summary: string; children: ReactNode }) {
+  return (
+    <details className="note">
+      <summary>{summary}</summary>
+      <div className="note-body text-pretty">{children}</div>
+    </details>
+  );
 }

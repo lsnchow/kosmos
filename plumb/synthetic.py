@@ -82,8 +82,7 @@ class SyntheticBackend:
         colour = "#36d399" if success else "#f87171"
         svg = """<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"180\" viewBox=\"0 0 320 180\" role=\"img\" aria-label=\"Synthetic engineering test fixture\">
   <rect width=\"320\" height=\"180\" fill=\"#102033\"/>
-  <text x=\"12\" y=\"20\" font-family=\"monospace\" font-size=\"10\" fill=\"#fbbf24\">SYNTHETIC — UNQUALIFIED ENGINEERING TEST ARTIFACT</text>
-  <text x=\"12\" y=\"35\" font-family=\"monospace\" font-size=\"9\" fill=\"#cbd5e1\">NOT REAL ROBOT / NOT PHYSICS SIMULATION</text>
+  <text x=\"12\" y=\"20\" font-family=\"monospace\" font-size=\"9\" fill=\"#fbbf24\">SYNTHETIC FIXTURE — NOT A ROBOT, NOT A SIMULATION</text>
   <rect x=\"24\" y=\"145\" width=\"272\" height=\"12\" rx=\"3\" fill=\"#334155\"/>
   <line x1=\"80\" y1=\"150\" x2=\"%d\" y2=\"%d\" stroke=\"#93c5fd\" stroke-width=\"10\" stroke-linecap=\"round\"/>
   <circle cx=\"%d\" cy=\"%d\" r=\"12\" fill=\"%s\"/>

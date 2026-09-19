@@ -61,7 +61,7 @@ describe("<RolloutWall />", () => {
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 1, frame_urls: ["f/2.png"], certified_frame_count: 9, provenance: "live" },
     ]);
     render(<RolloutWall wall={wall} />);
-    expect(screen.getByText("23 certified frames")).toBeInTheDocument();
+    expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.queryByText(/16 certified/)).not.toBeInTheDocument();
   });
 
@@ -70,7 +70,7 @@ describe("<RolloutWall />", () => {
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png", "f/1.png"] },
     ]);
     render(<RolloutWall wall={wall} />);
-    expect(screen.getByText("2 frames · certified count not reported")).toBeInTheDocument();
+    expect(screen.getByText("2 · uncertified")).toBeInTheDocument();
   });
 
   it("shows run, episode, task and policy identity on a live tile", () => {
@@ -81,7 +81,11 @@ describe("<RolloutWall />", () => {
     const tile = screen.getByLabelText(/Viewport slot #01: OpenVLA on close_drawer/i);
     expect(within(tile).getByText("OpenVLA")).toBeInTheDocument();
     expect(within(tile).getByText("close_drawer")).toBeInTheDocument();
-    expect(within(tile).getByText(/run-5 · ep-77/)).toBeInTheDocument();
+    // The episode id differs per tile, so it stays on the tile. The run id is
+    // the same for all twelve and is stated once, in the panel header.
+    expect(within(tile).getByText(/ep-77/)).toBeInTheDocument();
+    expect(within(tile).getByTitle(/run run-5 · episode ep-77/)).toBeInTheDocument();
+    expect(screen.getByText("run run-5")).toBeInTheDocument();
   });
 
   it("advances the accumulated clip on the shared display clock and loops it", () => {

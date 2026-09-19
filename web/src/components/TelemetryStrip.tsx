@@ -88,8 +88,8 @@ export function TelemetryStrip({
   const degraded = streamStatus === "degraded";
 
   return (
-    <section className="telemetry" aria-label="Live telemetry">
-      <div className="telemetry-title">
+    <section className="telemetry">
+      <h2 className="telemetry-title">
         {degraded ? (
           <WifiOff aria-hidden="true" className="size-5" />
         ) : (
@@ -98,7 +98,7 @@ export function TelemetryStrip({
         <span>Live telemetry</span>
         <StatusPill status={degraded ? "degraded" : streamStatus}>{streamStatus}</StatusPill>
         {stale && <StatusPill status="stale">stale</StatusPill>}
-      </div>
+      </h2>
 
       <DataValue
         label="Completed"

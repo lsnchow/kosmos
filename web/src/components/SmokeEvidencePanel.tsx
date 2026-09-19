@@ -86,7 +86,7 @@ export function experimentProfile(experiment: Experiment): Profile {
  */
 export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] }) {
   return (
-    <Panel title="Real model smoke evidence" eyebrow="Imported cluster report" className="smoke-panel">
+    <Panel title="Real model smoke evidence" className="smoke-panel">
       {experiments.length === 0 ? (
         <EmptyState className="smoke-empty" icon={<Activity aria-hidden="true" className="size-5" />}>
           No imported real-model smoke report has been returned by the API.
@@ -214,7 +214,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                   </p>
                 )}
                 {notes && <p className="smoke-notes text-pretty">{notes}</p>}
-                <Note>
+                <Note summary="What this imported report covers">
                   {profile.context} Runtime completion does not mean task success; timings are stage-scoped,
                   not cross-kind throughput comparisons.
                 </Note>

@@ -29,7 +29,6 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
   return (
     <Panel
       title="480p presentation rollout"
-      eyebrow="Separate track · never in a scored comparison"
       className="hero-panel"
       action={<SourceChip>{resolution ?? "resolution not reported"}</SourceChip>}
     >
@@ -72,7 +71,7 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
           </p>
         </>
       )}
-      <Note>
+      <Note summary="Why 480p is a separate track">
         The presentation track is a separate operating point from the 256p primary scoring protocol. If a 480p
         setting ever enters a scored comparison it is qualified as its own operating point, with its own sweep
         and its own confirmation panel.

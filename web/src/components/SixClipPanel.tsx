@@ -49,7 +49,6 @@ export function SixClipPanel({
   return (
     <Panel
       title="Real or generated?"
-      eyebrow="Audience test · one of six is a real robot"
       className="sixclip-panel"
       action={<SourceChip>{revealed ? "revealed" : "provenance sealed"}</SourceChip>}
       id="sixclip"
@@ -158,7 +157,7 @@ export function SixClipPanel({
           </div>
         </>
       )}
-      <Note>
+      <Note summary="How this test is run">
         Clip order is randomized by the server and the real clip's identity stays sealed until reveal. A
         result here is an audience observation, not a measurement of the world model.
       </Note>

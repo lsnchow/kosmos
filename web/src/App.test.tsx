@@ -235,8 +235,11 @@ async function renderAt(route: string, heading: RegExp) {
 const overview = () => renderAt("/", /Measure the ruler before trusting the ranking/i);
 const live = async () => {
   const view = await renderAt("/live", /^Live run$/i);
-  // The wall only has identities once the run's episodes have landed.
-  await waitFor(() => expect(screen.getByText("irasim@c72b6da")).toBeInTheDocument());
+  // Wait on something the *episodes* produce, not on protocol data. The wall's
+  // tiles only exist once /api/runs/run-1/episodes has landed; waiting on a
+  // protocol field instead let the test proceed with an empty wall whenever the
+  // two responses resolved in the other order.
+  await waitFor(() => expect(document.querySelectorAll(".rollout-tile").length).toBe(12));
   return view;
 };
 
@@ -297,7 +300,7 @@ describe("Nightshift shell", () => {
     assertNoFreeText("overview");
 
     // Free-play is the only surface that dispatches to the world model directly.
-    fireEvent.click(screen.getByRole("button", { name: /Open free-play/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Drive the world model/i }));
     expect(await screen.findByRole("dialog", { name: /Free-play control/i })).toBeInTheDocument();
     assertNoFreeText("free-play dialog");
     expect(screen.getByText(/Fixed instruction, clamped actions, release to stop/i)).toBeInTheDocument();
@@ -309,7 +312,7 @@ describe("Nightshift pages render their beats", () => {
     await overview();
     expect(screen.getByRole("heading", { name: /The called shot/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
-    expect(screen.getByText(/Qualified real burst unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not qualified/i)).toBeInTheDocument();
   });
 
   it("keeps the live page in the script's beat order", async () => {

@@ -13,9 +13,7 @@ export function EvidencePage() {
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Evidence ledger"
         title="Evidence"
-        lede="Gates A–F with the evidence each one rests on, and any smoke report imported from a real-model run. A gate that has not run says so rather than defaulting to a pass."
       />
 
       <div className="split-grid">

@@ -20,7 +20,7 @@ export function GatePanel({ gates }: { gates: Gate[] }) {
     (pickString(a.id, a.name) ?? "").localeCompare(pickString(b.id, b.name) ?? ""),
   );
   return (
-    <Panel title="Qualification gates" eyebrow="Evidence ledger" className="gates-panel" id="gates">
+    <Panel title="Qualification gates" className="gates-panel" id="gates">
       {ordered.length === 0 ? (
         <EmptyState icon={<ShieldAlert aria-hidden="true" className="size-5" />}>
           No gate ledger was returned. Qualified claims remain unavailable.

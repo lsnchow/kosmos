@@ -7,7 +7,7 @@
  * it filters what is already on screen. A world model here only ever receives a
  * registry task string, which is why this surface has no text field.
  */
-import { BENCHMARK_TASKS, TASK_REGISTRY_ID } from "../lib/tasks";
+import { BENCHMARK_TASKS } from "../lib/tasks";
 
 export type TaskScopeProps = {
   scopedTask?: string;
@@ -19,10 +19,6 @@ export function TaskScope({ scopedTask, onScopeTask }: TaskScopeProps) {
 
   return (
     <section className="task-scope" aria-label="Scope the rollout viewport">
-      <p className="task-scope-lede text-pretty">
-        Five fixed strings, exactly as registry <code>{TASK_REGISTRY_ID}</code> freezes them. Selecting one
-        scopes what the viewport shows; non-matching tiles are dimmed, never dropped.
-      </p>
       <ul className="chip-row">
         {BENCHMARK_TASKS.map((task) => {
           const active = task.id === scopedTask;
@@ -40,19 +36,17 @@ export function TaskScope({ scopedTask, onScopeTask }: TaskScopeProps) {
           );
         })}
       </ul>
-      <p className="chip-scope">
-        {scoped ? (
-          <>
-            <span>Viewport scoped to</span> <b>{scoped.id}</b>
-            <span>· {scoped.maxSteps} max steps</span>
-            <button type="button" className="button button-quiet" onClick={() => onScopeTask(undefined)}>
-              Clear scope
-            </button>
-          </>
-        ) : (
-          <span>No task selected, so the viewport shows every identity it has been sent.</span>
-        )}
-      </p>
+      {/* Nothing is said when nothing is selected: five unpressed chips already
+          say that, and a sentence repeating it is read on every visit. */}
+      {scoped && (
+        <p className="chip-scope">
+          <b>{scoped.id}</b>
+          <span>· {scoped.maxSteps} max steps · others dimmed</span>
+          <button type="button" className="button button-quiet" onClick={() => onScopeTask(undefined)}>
+            Clear
+          </button>
+        </p>
+      )}
     </section>
   );
 }

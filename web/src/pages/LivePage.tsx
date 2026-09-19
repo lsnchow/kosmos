@@ -47,9 +47,7 @@ export function LivePage() {
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Beat order · wall → controls → burst → dial"
         title="Live run"
-        lede="Twelve policy/task identities rendering as their segments persist, the four Chain stages that produced them, and the burst and dial that set what they cost."
       />
 
       <TaskScope scopedTask={scopedTask} onScopeTask={setScopedTask} />
@@ -102,7 +100,7 @@ export function LivePage() {
 
       {/* Beat four lands here, so the closing line has the error bars behind it. */}
       <ErrorBoundary region="Scoreboard">
-        <Scoreboard analysis={analysis} protocol={protocol} />
+        <Scoreboard analysis={analysis} protocol={protocol} compact />
       </ErrorBoundary>
     </div>
   );

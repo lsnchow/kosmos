@@ -264,7 +264,7 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 
 a { color: inherit; }
 
-code { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywhere; }
 
 :focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 3px; }
 
@@ -358,10 +358,10 @@ code { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere
 .page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-8) max(var(--space-5), env(safe-area-inset-right)) var(--space-8) max(var(--space-5), env(safe-area-inset-left)); min-width: 0; }
 .page:focus { outline: none; }
 .page-stack { display: grid; gap: var(--space-4); min-width: 0; }
-.page-header { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr); gap: var(--space-8); align-items: end; margin-bottom: var(--space-2); }
+.page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4) var(--space-8); margin-bottom: var(--space-2); }
 .page-header-main { display: grid; gap: var(--space-2); min-width: 0; }
-.page-lede { max-width: 68ch; color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--leading-normal); }
-.page-header-actions { display: grid; justify-items: start; gap: var(--space-2); border-left: var(--border-width) solid var(--line-1); padding-left: var(--space-5); }
+.page-lede { max-width: 62ch; color: var(--text-muted); font-size: var(--fs-2xs); line-height: var(--leading-normal); }
+.page-header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .page-header-actions p { margin: 0; color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
 .split-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-4); align-items: start; min-width: 0; }
 
@@ -373,7 +373,7 @@ code { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere
 .eyebrow { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-2); color: var(--accent-bright); font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 /* The fixture dot flags an unqualified mode, so it is caution amber, not brand. */
 .fixture-dot { background: var(--caution); }
-h1 { max-width: 18ch; margin: 0; color: var(--text-strong); font-size: clamp(2.25rem, 5vw, 4.5rem); line-height: 0.98; }
+h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-2xl); font-weight: 600; line-height: var(--leading-tight); letter-spacing: -0.015em; }
 .masthead-copy { max-width: 48rem; margin: var(--space-4) 0 0; color: var(--text-muted); font-size: var(--fs-md); line-height: 1.65; }
 .masthead-actions { display: flex; align-items: flex-start; flex-direction: column; gap: var(--space-3); border-left: 1px solid var(--line-2); padding-left: var(--space-6); }
 .masthead-actions p { margin: 0; color: var(--text-muted); font-size: var(--fs-2xs); line-height: 1.5; }
@@ -390,11 +390,6 @@ h1 { max-width: 18ch; margin: 0; color: var(--text-strong); font-size: clamp(2.2
 
 .error-banner, .qualified-blocker { display: flex; border-radius: var(--radius-lg); }
 .error-banner { align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); border: 1px solid var(--danger-line); background: var(--danger-deep); padding: var(--space-3-5) var(--space-4); color: var(--danger-text); font-size: var(--fs-xs); }
-.qualified-blocker { justify-content: space-between; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); border: 1px solid var(--caution-line); background: var(--caution-surface); padding: var(--space-4) var(--space-4); }
-.qualified-blocker > div { display: flex; gap: var(--space-3); color: var(--caution-text); }
-.qualified-blocker strong { display: block; color: var(--caution-strong); font-size: var(--fs-xs); }
-.qualified-blocker p { max-width: 44rem; margin: var(--space-1) 0 0; color: var(--text); font-size: var(--fs-2xs); line-height: 1.45; }
-.qualified-blocker ul { max-width: 34rem; margin: 0; padding-left: var(--space-4); color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.55; }
 
 .talk-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-4); align-items: start; margin-bottom: var(--space-4); }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: var(--space-4); align-items: start; }
@@ -501,7 +496,53 @@ h1 { max-width: 18ch; margin: 0; color: var(--text-strong); font-size: clamp(2.2
 .status-active { color: var(--accent-bright); }
 .status-muted { color: var(--text-muted); }
 
-.table-note { margin: var(--space-3-5) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.6; }
+/* ---------------------------------------------------------------------------
+ * Type hierarchy. Four roles, and every surface uses one of them:
+ *
+ *   page title   h1                 --fs-2xl   one per page
+ *   panel title  h2                 --fs-lg    one per panel
+ *   metric       DataValue strong   --fs-xl    the figure a panel exists to show
+ *   body         p, li, dd          --fs-2xs
+ *   meta         labels, captions   --fs-3xs
+ *
+ * Five roles, not five sizes chosen per component. --fs-xs and --fs-sm survive
+ * for controls and SVG text; nothing else should reach for them.
+ *
+ * Before this there were eleven distinct computed sizes on the live page, and
+ * an ALL-CAPS eyebrow above every panel title competing with the title itself.
+ * ------------------------------------------------------------------------- */
+
+/* A caveat the reader opens, rather than one they must scroll past. Ten of
+   these were permanently expanded; together they made the live page 1,947
+   words. */
+.note { margin: var(--space-4) 0 0; border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }
+.note > summary { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; color: var(--text-dim); font-size: var(--fs-3xs); list-style: none; }
+.note > summary::-webkit-details-marker { display: none; }
+.note > summary::before { content: "+"; display: inline-flex; align-items: center; justify-content: center; width: 1.1em; height: 1.1em; border: var(--border-width) solid var(--line-3); border-radius: var(--radius-sm); font-family: var(--font-mono); line-height: 1; }
+.note[open] > summary::before { content: "\2212"; }
+.note > summary:hover { color: var(--text-muted); }
+.note-body { max-width: 72ch; margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: var(--leading-relaxed); }
+.note-body code { font-size: inherit; }
+
+/* One line of status, with the blockers as the content. Replaces a banner that
+   carried a heading, a paragraph and a list for the same three facts. */
+.status-strip { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-5); border: var(--border-width) solid var(--caution-line); border-radius: var(--radius); background: var(--caution-surface); padding: var(--space-3) var(--space-4); }
+.status-strip p { margin: 0; color: var(--text); font-size: var(--fs-2xs); }
+.status-strip strong { color: var(--caution-strong); }
+.status-strip ul { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--fs-3xs); }
+.status-strip li::before { content: "· "; color: var(--caution); }
+
+/* Task filter, sitting directly above the wall it scopes. */
+.task-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.chip-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-dim); font-size: var(--fs-3xs); }
+.chip-scope b { color: var(--text); font-family: var(--font-mono); }
+
+.compact-more { margin: var(--space-3) 0 0; font-size: var(--fs-3xs); }
+.compact-more a { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--accent); text-decoration: none; }
+.compact-more a:hover { color: var(--accent-bright); text-decoration: underline; }
+
+.sidebar-divider { margin-top: var(--space-3); border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }
+
 
 /* --- Forms and metrics ---------------------------------------------------- */
 
@@ -519,7 +560,7 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 /* --- Telemetry ----------------------------------------------------------- */
 
 .telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3-5) var(--space-4); align-items: start; margin: var(--space-4) 0; border: 1px solid var(--line-1); border-radius: var(--radius-lg); background: var(--surface-inset); padding: var(--space-4) var(--space-4); }
-.telemetry-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--accent-bright); font-size: var(--fs-sm); font-weight: 700; grid-column: 1 / -1; }
+.telemetry-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-strong); font-size: var(--fs-lg); font-weight: 600; grid-column: 1 / -1; }
 .telemetry .metric strong { font-size: var(--fs-xl); }
 .freshness { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.45; grid-column: 1 / -1; border-top: 1px solid var(--line-1); padding-top: var(--space-3); }
 .freshness span { display: block; }
@@ -571,7 +612,7 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 .chart-legend-note { color: var(--text-dim); }
 .chart-figure figcaption { margin-top: var(--space-3); color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.55; }
 .chart-empty { display: flex; min-height: 12rem; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); border: 1px dashed var(--line-4); border-radius: var(--radius); padding: var(--space-5); text-align: center; }
-.chart-empty strong { color: var(--text-strong); font-size: var(--fs-sm); }
+.chart-empty strong { color: var(--text-strong); font-size: var(--fs-2xs); }
 .chart-empty p { max-width: 34rem; margin: 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.55; }
 .chart-table { margin-top: var(--space-3); }
 .chart-table summary, .pairwise-detail summary { color: var(--text-muted); font-size: var(--fs-3xs); cursor: pointer; }
@@ -635,7 +676,7 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 .provisional-counts dd { margin: var(--space-0-5) 0 0; color: var(--text-strong); font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 .ranking-verdict { display: flex; gap: var(--space-3); margin-top: var(--space-4); border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3-5) var(--space-4); color: var(--caution-text); }
-.ranking-verdict strong { display: block; color: var(--text-strong); font-size: var(--fs-xs); }
+.ranking-verdict strong { display: block; color: var(--text-strong); font-size: var(--fs-2xs); }
 .ranking-verdict p { margin: var(--space-1-5) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.55; }
 
 .pairwise-detail { margin-top: var(--space-3-5); }
@@ -763,48 +804,18 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
    viewport rather than 100dvh — otherwise the first screen overflows by the
    height of the bar above it. */
 .landing { position: relative; display: flex; min-height: calc(100dvh - 4.5rem); flex-direction: column; overflow: hidden; border-bottom: 1px solid var(--line-1); background: var(--surface-0); }
-.landing-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-.landing-backdrop-media { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* The last-resort background is CSS only. No <img>, no <video>, nothing that can
    fail to load and leave a broken element behind. */
-.landing-backdrop-gradient { width: 100%; height: 100%; background: radial-gradient(120% 90% at 50% 0%, #161616 0%, #0a0a0a 46%, #000000 100%); }
-.landing-wash { position: absolute; inset: 0; z-index: 0; background: rgb(0 0 0 / 80%); pointer-events: none; }
-.landing-nav, .landing-body, .landing-footer { position: relative; z-index: 1; }
 
-.landing-nav { padding: var(--space-6) max(var(--space-4), env(safe-area-inset-right)) 0 max(var(--space-4), env(safe-area-inset-left)); }
-.landing-body { display: flex; flex: 1; width: min(1680px, 100%); margin: 0 auto; gap: var(--space-10); padding: clamp(var(--space-8), 6vh, 5rem) max(var(--space-4), env(safe-area-inset-right)) var(--space-8) max(var(--space-4), env(safe-area-inset-left)); }
-.landing-main { flex: 1; min-width: 0; max-width: 58rem; margin: 0 auto; }
 
-.landing-wordmark { margin: 0; color: var(--text-strong); font-family: var(--font-display); font-size: clamp(3rem, 10vw, 6.5rem); font-weight: 400; letter-spacing: -0.02em; line-height: 0.92; }
-.landing-line { max-width: 46ch; margin: var(--space-4) 0 0; color: var(--text); font-size: var(--fs-lg); line-height: 1.55; }
-.landing-qualifier { display: flex; align-items: flex-start; gap: var(--space-1-5); max-width: 52ch; margin: var(--space-3) 0 0; color: var(--caution-text); font-size: var(--fs-2xs); line-height: 1.5; }
-.landing-section { margin-top: var(--space-8); }
-.landing-section > h2 { margin: 0 0 var(--space-1); color: var(--text-strong); font-size: var(--fs-lg); }
-.landing-section > p { max-width: 58ch; margin: 0 0 var(--space-3-5); color: var(--text-muted); font-size: var(--fs-2xs); line-height: 1.55; }
-.landing-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-5); }
-.landing-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3) var(--space-6); border-top: 1px solid var(--line-1); padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-4) + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); color: var(--text-muted); font-size: var(--fs-3xs); }
-.landing-footer a { display: inline-flex; align-items: center; gap: var(--space-1-5); color: var(--accent-bright); }
-.landing-backdrop-note { display: inline-flex; align-items: center; gap: var(--space-1-5); color: var(--text-dim); font-family: var(--font-mono); }
 
 /* Task chips. Five fixed strings; no free-text field anywhere on this page. */
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .chip { display: inline-flex; align-items: center; gap: var(--space-1-5); border: 1px solid var(--line-2); border-radius: 9999px; background: var(--surface-1); padding: 0.45em 0.95em; color: var(--text-muted); font-size: var(--fs-2xs); }
 .chip:hover { border-color: var(--line-interactive); color: var(--text-strong); }
 .chip[aria-pressed="true"] { border-color: var(--accent); background: rgb(123 230 96 / 10%); color: var(--accent-bright); }
-.chip-scope { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3-5) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); }
-.chip-scope b { color: var(--accent-bright); font-family: var(--font-mono); font-weight: 500; }
 
 /* Example rail: three cards from persisted runs. Never stand-in imagery. */
-.rail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.rail-card { display: block; width: 100%; overflow: hidden; border: 1px solid var(--line-1); border-radius: var(--radius-lg); background: var(--surface-1); padding: 0; color: inherit; text-align: left; }
-.rail-card:hover { border-color: var(--line-3); }
-.rail-frame { position: relative; overflow: hidden; }
-.rail-media, .rail-frame .media-empty { aspect-ratio: 16 / 9; }
-.rail-badge { position: absolute; top: 0.4rem; right: 0.4rem; }
-.rail-meta { display: grid; gap: var(--space-0-5); padding: var(--space-3) var(--space-3) var(--space-3); }
-.rail-meta strong { color: var(--text-strong); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
-.rail-meta span { color: var(--text-muted); font-size: var(--fs-3xs); overflow-wrap: anywhere; }
-.rail-meta .rail-id { color: var(--text-dim); font-family: var(--font-mono); }
 
 /* --- Fullscreen viewer --------------------------------------------------- */
 

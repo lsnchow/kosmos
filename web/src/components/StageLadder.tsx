@@ -46,7 +46,6 @@ export function StageLadder({
   return (
     <Panel
       title="Chain stages"
-      eyebrow="policy → world → validity → judge"
       id="stages"
       action={<SourceChip>{runId ? `run ${runId}` : "no run selected"}</SourceChip>}
     >
@@ -68,14 +67,12 @@ export function StageLadder({
                 <StatusPill status={PILL_STATUS[stage.state]}>{PILL_WORDS[stage.state]}</StatusPill>
               </div>
               <p className="ladder-detail">{stage.detail}</p>
-              <p className="ladder-source">
-                {stage.role} · {stage.source}
-              </p>
+              <p className="ladder-source">{stage.source}</p>
             </div>
           </li>
         ))}
       </ol>
-      <Note>
+      <Note summary="Where each stage's status is read from">
         Four stages, four hardware profiles, each scaling on its own — that is why the pipeline is a Chain
         and not one process. Every line above is read from a persisted record: the world stage from{" "}
         <code>segment_completed</code> events, the other three from episode records. A stage that reported

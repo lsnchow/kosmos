@@ -1,4 +1,6 @@
 import { Gauge, Scale } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { MetaList } from "./MetaList";
 import {
   isOperationalSummary,
@@ -159,12 +161,23 @@ function ProvisionalBand({ summary }: { summary: JsonRecord }) {
   );
 }
 
+const COMPACT_ROWS = 6;
+
 export function Scoreboard({
   analysis,
   protocol,
+  /**
+   * Show only the leading rows and link to the full table.
+   *
+   * The live page ends here — SCRIPT.md's fourth beat lands on the error bars
+   * as the closing line is said. Thirty rows across twelve columns is a data
+   * dump at that moment; the top of the ranking with its intervals is the shot.
+   */
+  compact = false,
 }: {
   analysis: AnalysisResponse;
   protocol?: JsonRecord;
+  compact?: boolean;
 }) {
   const cells = analysis.cells ?? [];
   const pairwise = analysis.pairwise ?? [];
@@ -184,13 +197,13 @@ export function Scoreboard({
     return String(a.task ?? "").localeCompare(String(b.task ?? ""));
   });
 
+  const visibleCells = compact ? sortedCells.slice(0, COMPACT_ROWS) : sortedCells;
   const macroRanking = analysis.rankings?.find((ranking) => ranking.scope === "macro");
   const indeterminatePairs = pairwise.filter((pair) => pair.supported !== true);
 
   return (
     <Panel
       title="Scoreboard"
-      eyebrow={provisional ? "Provisional · study statistics unavailable" : "Persisted analysis · unqualified"}
       className="score-panel"
       action={<SourceChip>published reference is a separate column</SourceChip>}
       id="scoreboard"
@@ -263,7 +276,7 @@ export function Scoreboard({
                 </tr>
               </thead>
               <tbody>
-                {sortedCells.map((cell) => {
+                {visibleCells.map((cell) => {
                   const policy = String(cell.policy ?? "—");
                   // `policy` is an arm id that can encode variant and cohort;
                   // the readable base name goes in the cell and the full arm id
@@ -363,6 +376,15 @@ export function Scoreboard({
             </table>
           </div>
 
+          {compact && sortedCells.length > visibleCells.length && (
+            <p className="compact-more">
+              <Link to="/results">
+                All {formatCount(sortedCells.length)} cells
+                <ArrowRight aria-hidden="true" className="size-3.5" />
+              </Link>
+            </p>
+          )}
+
           <div className="bar-key" aria-hidden="true">
             <span>
               <svg viewBox="0 0 16 16" width="14" height="14">
@@ -437,7 +459,7 @@ export function Scoreboard({
         </details>
       )}
 
-      <Note>
+      <Note summary="How to read rank, coverage and intervals">
         The rank column sorts estimates visually and nothing more. An ordering is claimed only where the
         pairwise test reports it as supported under its declared family alpha; every other pair stays
         indeterminate. Coverage carries both denominators, so <code>V</code> and <code>n</code> are never

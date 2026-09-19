@@ -55,7 +55,6 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
   return (
     <Panel
       title="The called shot"
-      eyebrow="One cell · frozen before the reference is read"
       className="calledshot-panel"
       action={<SourceChip>{pickString(calledShot?.cell) ?? "OpenVLA / close_drawer"}</SourceChip>}
       id="calledshot"
@@ -72,7 +71,9 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
           <span>Nightshift pre-registered estimate</span>
           {estimate === undefined ? (
             <strong className="calledshot-pending">
-              <StatusPill status="pending">{status}</StatusPill>
+              <StatusPill status="pending" title={status}>
+                {status.split(/[_\s]/)[0].toLowerCase()}
+              </StatusPill>
             </strong>
           ) : (
             <strong className="tabular-nums">{formatRateAsPercent(estimate)}</strong>
@@ -120,7 +121,7 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
         )}
       </div>
 
-      <Note>
+      <Note summary="Where these reference numbers come from">
         Both reference numbers are AutoEval's published results, not Nightshift outcomes. The already-published
         human value is not treated as a blind target; what is frozen is Nightshift's own estimate and the time it
         was recorded.

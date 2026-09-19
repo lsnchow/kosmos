@@ -63,7 +63,6 @@ export function BurstPanel({
   return (
     <Panel
       title="Full-matrix burst"
-      eyebrow="Elastic scale-up · separately timed"
       className="burst-panel"
       action={<SourceChip>key {idempotencyKey}</SourceChip>}
       id="burst"
@@ -128,7 +127,7 @@ export function BurstPanel({
         }
       />
 
-      <Note>
+      <Note summary="How cost and counts are derived">
         Estimated USD is an allocation-ledger estimate against timestamped account prices, not settled
         billing. Completed counts are logical episodes from the application ledger and do not grow with
         transport retries. The scale-up is timed separately from the run so a cold start is not hidden inside

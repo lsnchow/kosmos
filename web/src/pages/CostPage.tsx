@@ -25,9 +25,7 @@ export function CostPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Precomputed sweep · no generation on drag"
         title="Cost"
-        lede="Generation settings against measured cost, each point keeping its fixed task horizon so a shorter task cannot read as a saving. Estimates come from the allocation ledger, not from settled billing."
       />
 
       <ErrorBoundary region="Cost–fidelity slider">

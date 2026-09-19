@@ -13,9 +13,7 @@ export function ClipsPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Audience test · one of six is a real robot"
         title="Clips"
-        lede="Clip order is randomised by the server and the real clip's identity stays sealed until reveal. A result here is an audience observation, not a measurement of the world model."
       />
 
       <div className="split-grid">

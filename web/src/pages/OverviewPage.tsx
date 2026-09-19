@@ -1,58 +1,57 @@
 /**
- * What the project claims, and what is not yet qualified.
+ * The entry point, and the start of the path through the product.
  *
- * Pre-live beats of the 180 seconds: the positioning line, the called shot
- * frozen before the reference is read, and the gate blockers stated plainly.
+ * The claim, then the one thing blocking it, then the called shot and the
+ * gates. The primary action goes to the run, because the run is what the rest
+ * of the console is about — free-play is a demonstration, not the flow.
  */
-import { Expand, ShieldAlert } from "lucide-react";
-import { useAppData, STARTS_PER_TASK } from "../AppData";
+import { ArrowRight, Expand } from "lucide-react";
+import { Link } from "react-router-dom";
+import { STARTS_PER_TASK, useAppData } from "../AppData";
 import { CalledShotPanel } from "../components/CalledShotPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { GatePanel } from "../components/GatePanel";
+import { StatusPill } from "../components/Primitives";
 import { pickString } from "../lib/format";
 import { PageHeader } from "./PageHeader";
 
 export function OverviewPage() {
   const { protocol, policies, tasks, blockers, calledShot, gates, openFreeplay } = useAppData();
+  const matrix =
+    policies.length > 0 && tasks.length > 0
+      ? `${policies.length} policies × ${tasks.length} tasks × ${STARTS_PER_TASK} starts`
+      : undefined;
 
   return (
     <div className="page-stack">
       <PageHeader
         eyebrow={
-          <>
-            <span className="fixture-dot" />
-            {pickString(protocol?.mode) ?? "mode not reported"} · unqualified
-          </>
+          <StatusPill status="unqualified" title={`mode: ${pickString(protocol?.mode) ?? "not reported"}`}>
+            unqualified
+          </StatusPill>
         }
         title="Measure the ruler before trusting the ranking."
-        lede="Nightshift keeps generated-rollout evidence, the published real-robot reference, missingness and runtime accounting in one console. No qualified real-world conclusion is available until its gates pass."
+        lede="Six robot policies scored inside a generative world model, with four numbers saying how far to trust the ranking."
         actions={
           <>
-            <button type="button" className="button button-secondary" onClick={() => openFreeplay()}>
+            <Link className="button button-primary" to="/live">
+              Start a run
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Link>
+            <button type="button" className="button button-quiet" onClick={() => openFreeplay()}>
               <Expand aria-hidden="true" className="size-4" />
-              Open free-play
+              Drive the world model
             </button>
-            <p>
-              {policies.length > 0 && tasks.length > 0
-                ? `${policies.length} policies × ${tasks.length} tasks × ${STARTS_PER_TASK} starts.`
-                : "The protocol has not returned its policy and task matrix."}{" "}
-              Fixture scores are engineering tests, not robot results.
-            </p>
           </>
         }
       />
 
-      <section className="qualified-blocker" aria-label="Real burst qualification status">
-        <div>
-          <ShieldAlert aria-hidden="true" className="size-5" />
-          <div>
-            <strong>Qualified real burst unavailable</strong>
-            <p className="text-pretty">
-              Real backends cannot be dispatched through this console until evidence gates qualify the chosen
-              protocol.
-            </p>
-          </div>
-        </div>
+      {/* One line, not a paragraph. The blockers themselves are the content. */}
+      <section className="status-strip" aria-label="Qualification status">
+        <p>
+          <strong>Not qualified.</strong> Real backends stay blocked until these pass
+          {matrix ? ` · ${matrix}` : ""}
+        </p>
         <ul>
           {blockers.slice(0, 3).map((reason) => (
             <li key={reason}>{reason}</li>

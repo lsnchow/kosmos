@@ -6,9 +6,9 @@
  * working pages: it is the one the 180-second demo is driven from, and it keeps
  * the wall, the burst and the dial in script order on a single scroll.
  *
- * Each item states what it holds rather than only naming itself, because a
- * one-word label ("Evidence") does not tell a first-time viewer whether the
- * gates live there or on "Results".
+ * Ordered as the product is used, not alphabetically: Overview states the
+ * claim, Live run produces the evidence, Results reads it. The last three are
+ * supporting detail and sit below a divider so the spine is obvious.
  */
 import {
   Activity,
@@ -24,17 +24,18 @@ import { NavLink } from "react-router-dom";
 export type NavItem = {
   to: string;
   label: string;
-  hint: string;
   icon: LucideIcon;
+  /** First of the supporting pages; a divider is drawn above it. */
+  startsSecondary?: boolean;
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Overview", hint: "The claim, the called shot, what is not qualified", icon: LayoutDashboard },
-  { to: "/live", label: "Live run", hint: "Wall, chain, telemetry, burst, dial", icon: Activity },
-  { to: "/results", label: "Results", hint: "Scoreboard and the run ledger", icon: Table2 },
-  { to: "/evidence", label: "Evidence", hint: "Gates A–F, imported smoke reports", icon: ShieldCheck },
-  { to: "/cost", label: "Cost", hint: "Cost–fidelity dial and replica accounting", icon: Gauge },
-  { to: "/clips", label: "Clips", hint: "Six-clip test, gallery, 480p track", icon: FlaskConical },
+  { to: "/", label: "Overview", icon: LayoutDashboard },
+  { to: "/live", label: "Live run", icon: Activity },
+  { to: "/results", label: "Results", icon: Table2 },
+  { to: "/evidence", label: "Evidence", icon: ShieldCheck, startsSecondary: true },
+  { to: "/cost", label: "Cost", icon: Gauge },
+  { to: "/clips", label: "Clips", icon: FlaskConical },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
@@ -44,7 +45,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           return (
-            <li key={item.to}>
+            <li key={item.to} className={item.startsSecondary ? "sidebar-divider" : undefined}>
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
@@ -55,10 +56,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 className={({ isActive }) => (isActive ? "sidebar-link sidebar-link-active" : "sidebar-link")}
               >
                 <Icon aria-hidden="true" className="size-4 shrink-0" />
-                <span className="sidebar-text">
-                  <strong>{item.label}</strong>
-                  <span className="sidebar-hint">{item.hint}</span>
-                </span>
+                <span className="sidebar-text">{item.label}</span>
               </NavLink>
             </li>
           );

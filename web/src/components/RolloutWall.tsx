@@ -43,17 +43,14 @@ export function ProvenanceBadge({ slot }: { slot: TileSlot }) {
 }
 
 function frameCountLabel(slot: TileSlot): string {
-  if (slot.certifiedFrameCount !== undefined) {
-    const suffix =
-      slot.segmentsMissingCertifiedCount > 0
-        ? ` (+${slot.segmentsMissingCertifiedCount} seg. uncertified)`
-        : "";
-    return `${formatCount(slot.certifiedFrameCount)} certified frames${suffix}`;
-  }
-  if (slot.frames.length > 0) {
-    return formatFrameCaption(slot.frames.length, undefined);
-  }
-  return "no frames yet";
+  // The `Frames` label carries the noun, so the value is the number and the one
+  // caveat that changes its meaning. "uncertified" is not cosmetic: it marks a
+  // count the server never certified, and it must not read as a certified one.
+  if (slot.certifiedFrameCount === undefined) return `${formatCount(slot.frames.length)} · uncertified`;
+  const extra = slot.segmentsMissingCertifiedCount;
+  return extra > 0
+    ? `${formatCount(slot.certifiedFrameCount)} · ${extra} uncertified`
+    : formatCount(slot.certifiedFrameCount);
 }
 
 function RolloutTile({
@@ -146,7 +143,6 @@ function RolloutTile({
         ]}
       />
       <p className="tile-id truncate" title={`run ${slot.runId ?? "unreported"} · episode ${slot.episodeId ?? "unreported"}`}>
-        {slot.runId ? `${slot.runId} · ` : ""}
         {slot.episodeId ?? "episode id unreported"}
         {slot.episodeIds.length > 1 ? ` · ${slot.episodeIds.length} episodes` : ""}
       </p>
@@ -179,7 +175,6 @@ export function RolloutWall({
   return (
     <Panel
       title="Rollout viewport"
-      eyebrow="12 viewport slots · persisted segment events only"
       className="rollouts-panel"
       action={<SourceChip>{runId ? `run ${runId}` : "no run selected"}</SourceChip>}
     >
@@ -226,7 +221,7 @@ export function RolloutWall({
           ))}
         </div>
       )}
-      <Note>
+      <Note summary="What the twelve tiles are, and are not">
         The tile count is a viewport choice, not the total robot or policy count — twelve tiles do not mean
         twelve robots. Each slot is keyed by policy and task and accumulates frames from persisted
         <code> segment_completed</code> events; frame counts are the counts the server certified, never a

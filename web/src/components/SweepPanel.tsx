@@ -46,7 +46,6 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
   return (
     <Panel
       title="Cost–fidelity operating point"
-      eyebrow="Precomputed sweep · no generation on drag"
       className="sweep-panel"
       action={<SourceChip>{pickString(sweeps.status) ?? "status not reported"}</SourceChip>}
     >
@@ -178,7 +177,7 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
           )}
         </>
       )}
-      <Note>
+      <Note summary="How cost per point is measured">
         {points.length > 0 && pickString(sweeps.reason) ? `${sweeps.reason} ` : ""}
         Every point keeps its fixed task horizon beside its cost, so a shorter task cannot read as a saving.
         Cost is an allocation-ledger estimate until billing reconciliation. Only a held-out-confirmed
