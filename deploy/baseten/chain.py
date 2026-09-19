@@ -1356,7 +1356,7 @@ WORLD_VARIANTS: Mapping[str, WorldVariant] = {
         revision=WORLD_EDGE_REVISION,
         volume_folder=COSMOS3_EDGE_VOLUME,
         parameter_note="Speed arm; its model card lists 4B. Excluded Super (64B) from the single-H100 design.",
-        metadata_model_id_is_profile_default=True,
+        metadata_model_id_is_profile_default=False,
     ),
 }
 
@@ -1412,9 +1412,14 @@ class WorldAdapterCore:
             )
             return
         try:
+            # ``model_id`` is passed explicitly so the selected arm labels
+            # itself. The profile used to hard-code the Nano repo id, which meant
+            # selecting the Edge arm emitted a *Nano* label into the backend
+            # profile hash and every episode record.
             self.profile = Cosmos3NanoDiffusersProfile(
                 profile_id=self.profile_id,
                 local_model_path=self.local_model_path,
+                model_id=self.variant.repo_id,
                 model_revision=self.variant.revision,
                 resolution_tier=WORLD_RESOLUTION_TIER,
             )
@@ -1434,14 +1439,28 @@ class WorldAdapterCore:
     def ready(self) -> bool:
         return self.adapter is not None and not self.unresolved
 
-    def batch_key(self, action_rows: int, action_width: int, domain: str) -> str:
-        """Everything that changes the forward's shapes or schedule."""
+    def batch_key(
+        self,
+        action_rows: int,
+        action_width: int,
+        domain: str,
+        compatibility_profile_id: Optional[str] = None,
+    ) -> str:
+        """Everything that changes the forward's shapes or schedule.
+
+        ``compatibility_profile_id`` is the id the *request* declares, which the
+        adapter's own key also covers.  Including it here keeps the two keys
+        aligned: without it a payload naming a different profile would land in
+        this group and then make the adapter reject the entire batch as mixed,
+        costing every other episode in it their frames.
+        """
 
         profile = self.profile
         return "|".join(
             str(part)
             for part in (
                 self.profile_id,
+                compatibility_profile_id or self.profile_id,
                 domain,
                 action_rows,
                 action_width,
@@ -1479,7 +1498,34 @@ class WorldAdapterCore:
                     )
                     for _ in requests
                 ]
-            return [(result, "fused_adapter_generate_batch", len(requests)) for result in results]
+            # Per-item failures arrive in band as exception instances. Wrapping
+            # one as a value would surface it downstream as a confusing
+            # attribute error on a non-result; mirror the sequential path and
+            # let it stay an exception for its own slot only.
+            #
+            # The fused size comes from the result, not from len(requests):
+            # invalid members are excluded from the forward, so len(requests)
+            # can overstate the batch and corrupt the GPU-second divisor.
+            outcomes: List[Any] = []
+            for result in results:
+                if isinstance(result, BaseException):
+                    outcomes.append(result)
+                    continue
+                timing = getattr(result, "timing", None)
+                fused_size = getattr(timing, "batch_size", None)
+                if not isinstance(fused_size, int) or fused_size < 1:
+                    metadata = getattr(result, "metadata", None)
+                    if isinstance(metadata, Mapping):
+                        candidate = metadata.get("batch_size")
+                        if isinstance(candidate, int) and candidate >= 1:
+                            fused_size = candidate
+                if not isinstance(fused_size, int) or fused_size < 1:
+                    # Never guess the divisor: an unlabelled fused call is
+                    # reported as a single-item call so GPU-seconds are not
+                    # silently divided by a number nobody measured.
+                    fused_size = 1
+                outcomes.append((result, "fused_adapter_generate_batch", fused_size))
+            return outcomes
         outcomes: List[Any] = []
         mode = "sequential_adapter_calls" if len(requests) > 1 else "single_request"
         for request in requests:
@@ -2544,7 +2590,12 @@ if CHAINS_RUNTIME_AVAILABLE:
             except Exception as error:  # noqa: BLE001 - explicit caller failure
                 return _failed("world", "world_request_rejected: %s" % error, worker=worker)
 
-            key = self._core.batch_key(len(payload.compiled_actions), action_width, payload.domain)
+            key = self._core.batch_key(
+                len(payload.compiled_actions),
+                action_width,
+                payload.domain,
+                payload.compatibility_profile_id,
+            )
             started = time.perf_counter()
             try:
                 bundle = await self._queue.submit(key, world_request)

@@ -417,7 +417,12 @@ def test_world_variants_never_invent_an_edge_revision():
     assert len(nano.revision) == 40
     # Unset unless the operator supplies PLUMB_WORLD_EDGE_REVISION at push time.
     assert edge.revision == ""
-    assert edge.metadata_model_id_is_profile_default is True
+    # WorldAdapterCore now passes the selected variant's repo id into the
+    # profile, so the Edge arm labels itself as Edge. It previously inherited
+    # the adapter's hard-coded Nano default, which put a Nano label on Edge
+    # episodes and into the backend profile hash.
+    assert edge.metadata_model_id_is_profile_default is False
+    assert nano.metadata_model_id_is_profile_default is False
     assert chain.selected_world_variant().variant_id == "cosmos3_nano"
 
 

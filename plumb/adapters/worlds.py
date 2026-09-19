@@ -86,6 +86,12 @@ ACTION_LENGTH_CERTIFICATION_KIND = "plumb_world_action_length_certification"
 PROTOCOL_EXACT_TERMINAL_HORIZON = "exact_terminal_horizon"
 PROTOCOL_CERTIFIED_TERMINAL_PADDING = "certified_terminal_padding"
 
+#: ``batch_execution_mode`` labels an adapter result may carry.  They describe
+#: what the adapter actually did, so a deployment cannot report one fused
+#: forward when it made several consecutive calls.
+COSMOS_FUSED_BATCH_MODE = "fused_single_forward"
+UNBATCHED_SINGLE_FORWARD = "unbatched_single_forward"
+
 PADDING_POLICY_ZERO_DELTA_HOLD_GRIPPER = "zero_delta_hold_gripper"
 PADDING_POLICY_REPEAT_LAST_ACTION = "repeat_last_action"
 PADDING_POLICIES: Tuple[str, ...] = (
@@ -490,19 +496,26 @@ class Cosmos3NanoDiffusersProfile:
     enable_safety_checker: bool = False
     action_length_certification: Optional[ActionLengthCertification] = None
     terminal_padding_certificate: Optional[TerminalPaddingCertificate] = None
+    #: Derived in ``__post_init__``; any supplied value is replaced.  It names
+    #: the probe lengths dropped because the certification already measured
+    #: them, so the narrowing is visible instead of silent.
+    probe_lengths_superseded_by_certification: Tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.profile_id:
             raise ValueError("Cosmos profile_id is required.")
         if not self.local_model_path:
             raise ValueError("Cosmos local_model_path is required; Hub fetching is intentionally disabled.")
+        if not self.model_id:
+            raise ValueError(
+                "Cosmos model_id is required; an unlabelled checkpoint cannot be recorded in a backend profile."
+            )
         if self.resolution_tier not in (256, 480, 704, 720):
             raise ValueError("Cosmos action resolution_tier must be 256, 480, 704, or 720.")
         if self.fps <= 0 or self.num_inference_steps < 1:
             raise ValueError("Cosmos fps and num_inference_steps must be positive.")
-        if not set(self.allowed_action_lengths).isdisjoint(set(self.probe_action_lengths)):
-            raise ValueError("Normal and probe Cosmos action lengths must not overlap.")
         certification = self.action_length_certification
+        superseded: Tuple[int, ...] = ()
         if certification is not None:
             if certification.profile_id != self.profile_id:
                 raise CertificationError(
@@ -515,6 +528,21 @@ class Cosmos3NanoDiffusersProfile:
                     "use Cosmos3NanoDiffusersProfile.from_certification instead of asserting a length"
                     % (tuple(sorted(self.allowed_action_lengths)), certification.supported_lengths)
                 )
+            # A length the certification measured as supported is evidence, not
+            # an open probe, so it stops being a Gate-B probe here.  Lengths the
+            # certification measured as *unsupported* stay probes: a recorded
+            # failure does not stop anyone re-probing it on a new deployment.
+            supported = set(certification.supported_lengths)
+            superseded = tuple(length for length in self.probe_action_lengths if length in supported)
+            if superseded:
+                object.__setattr__(
+                    self,
+                    "probe_action_lengths",
+                    tuple(length for length in self.probe_action_lengths if length not in supported),
+                )
+        object.__setattr__(self, "probe_lengths_superseded_by_certification", superseded)
+        if not set(self.allowed_action_lengths).isdisjoint(set(self.probe_action_lengths)):
+            raise ValueError("Normal and probe Cosmos action lengths must not overlap.")
         padding = self.terminal_padding_certificate
         if padding is not None and padding.profile_id != self.profile_id:
             raise CertificationError(
@@ -555,7 +583,7 @@ class Cosmos3NanoDiffusersProfile:
         return BackendProfile(
             profile_id=self.profile_id,
             backend="cosmos3_diffusers",
-            model_id="nvidia/Cosmos3-Nano",
+            model_id=self.model_id,
             model_revision=self.model_revision,
             code_revision=self.diffusers_revision,
             container_digest=self.container_digest,
@@ -578,6 +606,7 @@ class Cosmos3NanoDiffusersProfile:
                 "frame_contract": "N actions -> N+1 returned frames, condition at index 0",
                 "action_length_certification_class": self.action_length_certification_class,
                 "action_length_certification_source_hash": self.action_length_certification_source_hash,
+                "probe_lengths_superseded_by_certification": list(self.probe_lengths_superseded_by_certification),
                 "action_length_certification": (
                     None if self.action_length_certification is None else self.action_length_certification.as_dict()
                 ),
@@ -604,6 +633,10 @@ class Cosmos3NanoDiffusersAdapter:
     never pads/repeats policy actions.  Diffusers itself can repeat a short
     sequence when a caller chooses a larger chunk size, so this wrapper sets
     ``chunk_size == len(compiled_actions)`` and records the action length.
+
+    :meth:`generate` serves one request per pipeline call.  :meth:`generate_batch`
+    packs several requests into exactly one pipeline call, which is the only
+    throughput lever this adapter has; group with :meth:`batch_key` first.
     """
 
     def __init__(
@@ -620,18 +653,45 @@ class Cosmos3NanoDiffusersAdapter:
         self._pipeline: Any = None
         self._real_backend_calls = 0
         self._backend_call_attempts = 0
+        self._fused_batch_calls = 0
+        self._fused_batched_items = 0
 
     @property
     def backend_call_attempts(self) -> int:
-        """Actual pipeline invocation attempts, including calls that raise."""
+        """Actual pipeline invocation attempts, including calls that raise.
+
+        A fused batch of eight counts as one attempt, because one pipeline
+        invocation happened.
+        """
 
         return self._backend_call_attempts
 
     @property
     def successful_backend_calls(self) -> int:
-        """Calls that returned a frame result passing the adapter frame contract."""
+        """Calls that returned a frame result passing the adapter frame contract.
+
+        A fused batch counts once, and only when at least one of its members
+        satisfied the ``N -> N+1`` frame contract.
+        """
 
         return self._real_backend_calls
+
+    @property
+    def fused_batch_calls(self) -> int:
+        """Pipeline invocations made through :meth:`generate_batch`."""
+
+        return self._fused_batch_calls
+
+    @property
+    def fused_batched_items(self) -> int:
+        """Requests actually packed into those fused invocations.
+
+        ``fused_batched_items / fused_batch_calls`` is the measured mean fused
+        batch size.  Both counters only ever move when a real pipeline call was
+        issued, so neither can report packing that did not happen.
+        """
+
+        return self._fused_batched_items
 
     @property
     def backend_profile(self) -> BackendProfile:
@@ -642,10 +702,14 @@ class Cosmos3NanoDiffusersAdapter:
         if not model_exists and self._pipeline_factory is None:
             return CapabilityResult(
                 status=CapabilityStatus.UNAVAILABLE,
-                reason="Cosmos3-Nano local model directory is not present; no Hub download was attempted.",
+                reason=(
+                    "%s local model directory is not present; no Hub download was attempted."
+                    % self.profile.model_id
+                ),
                 source_verified=True,
                 evidence_uris=(COSMOS3_DIFFUSERS_SOURCE, COSMOS3_VENDOR_FIXTURE),
                 details={
+                    "model_id": self.profile.model_id,
                     "local_model_path": self.profile.local_model_path,
                     "local_files_only": True,
                     # Action-length certification status is independent of model
@@ -664,10 +728,13 @@ class Cosmos3NanoDiffusersAdapter:
             source_verified=True,
             evidence_uris=(COSMOS3_DIFFUSERS_SOURCE, COSMOS3_VENDOR_FIXTURE),
             details={
+                "model_id": self.profile.model_id,
                 "model_revision": self.profile.model_revision,
                 "diffusers_revision": self.profile.diffusers_revision,
                 "allowed_action_lengths": self.profile.allowed_action_lengths,
                 "probe_action_lengths": self.profile.probe_action_lengths,
+                "fused_batch_supported": True,
+                "fused_batch_shape_verified_on_gpu": False,
                 "expected_frame_rule": "N actions -> N+1 returned frames",
                 "safety_checker": self.profile.enable_safety_checker,
                 "action_length_certification_class": self.profile.action_length_certification_class,
@@ -712,8 +779,8 @@ class Cosmos3NanoDiffusersAdapter:
         path = Path(self.profile.local_model_path)
         if not path.is_dir():
             raise BackendUnavailableError(
-                "Expected local Cosmos3-Nano checkpoint directory at %s; refusing a remote model download."
-                % path
+                "Expected local %s checkpoint directory at %s; refusing a remote model download."
+                % (self.profile.model_id, path)
             )
         # This is the current official constructor.  ``dtype`` (not top-level
         # torch_dtype) is intentionally aligned with the pinned Diffusers docs.
@@ -755,13 +822,63 @@ class Cosmos3NanoDiffusersAdapter:
         return "probe_unqualified" if action_count in self.profile.probe_action_lengths else "configured_unqualified"
 
     @staticmethod
-    def _frames_from_result(result: Any) -> Tuple[Any, ...]:
+    def _video_from_result(result: Any) -> Any:
         video = getattr(result, "video", None)
         if video is None and isinstance(result, Mapping):
             video = result["video"] if "video" in result else result.get("videos")
         if video is None:
             raise BackendContractError("Cosmos pipeline result did not contain video frames.")
-        return tuple(video)
+        return video
+
+    @classmethod
+    def _frames_from_result(cls, result: Any) -> Tuple[Any, ...]:
+        return tuple(cls._video_from_result(result))
+
+    @classmethod
+    def _batched_frames_from_result(cls, result: Any, batch_size: int) -> Tuple[Tuple[Any, ...], ...]:
+        """Split one fused pipeline result into exactly ``batch_size`` sequences.
+
+        A result that does not carry one frame sequence per batch member is a
+        whole-batch contract failure.  Broadcasting, trimming, or reusing one
+        member's frames to fill a slot would attribute one episode's video to a
+        different episode, so it is refused rather than repaired.
+        """
+
+        samples = tuple(cls._video_from_result(result))
+        if len(samples) != batch_size:
+            raise BackendContractError(
+                "Fused Cosmos call returned %d frame sequences for a batch of %d; frames are never reused, "
+                "broadcast, or trimmed across batch members." % (len(samples), batch_size)
+            )
+        sequences: List[Tuple[Any, ...]] = []
+        for position, sample in enumerate(samples):
+            try:
+                sequences.append(tuple(sample))
+            except TypeError as error:
+                raise BackendContractError(
+                    "Fused Cosmos batch member %d is not a frame sequence (%s); a batched result must be one "
+                    "sequence of frames per member." % (position, type(sample).__name__)
+                ) from error
+        return tuple(sequences)
+
+    @staticmethod
+    def _seeded_generator(runtime: _CosmosRuntime, seed: int) -> Any:
+        """One generator bound to one request's seed.
+
+        Seeds are part of each episode's RNG lineage, so a batched call gets one
+        of these per member rather than a single shared generator.
+        """
+
+        try:
+            return runtime.torch.Generator(device="cuda").manual_seed(int(seed))
+        except (AttributeError, RuntimeError, TypeError):
+            # Some CPU fixture runtimes only support the device-less constructor.
+            return runtime.torch.Generator().manual_seed(int(seed))
+
+    def _nominal_frame_timestamps(self, frame_count: int) -> Tuple[float, ...]:
+        """Wrapper-assigned nominal frame times; never measured physical times."""
+
+        return tuple(index / self.profile.fps for index in range(frame_count))
 
     @staticmethod
     def _peak_memory(runtime: _CosmosRuntime) -> Optional[int]:
@@ -800,12 +917,7 @@ class Cosmos3NanoDiffusersAdapter:
             image=request.conditioning_image,
             view_point=self.profile.view_point,
         )
-        generator = None
-        try:
-            generator = runtime.torch.Generator(device="cuda").manual_seed(int(request.seed))
-        except (AttributeError, RuntimeError, TypeError):
-            # Some CPU fixture runtimes only support the device-less constructor.
-            generator = runtime.torch.Generator().manual_seed(int(request.seed))
+        generator = self._seeded_generator(runtime, request.seed)
 
         started_unix = time.time()
         start = time.perf_counter()
@@ -828,7 +940,7 @@ class Cosmos3NanoDiffusersAdapter:
         elapsed = time.perf_counter() - start
         self._real_backend_calls += 1
         frames = self._frames_from_result(result)
-        timestamps = tuple(index / self.profile.fps for index in range(len(frames)))
+        timestamps = self._nominal_frame_timestamps(len(frames))
         timing = ServerTiming(
             backend_calls=1,
             wall_seconds=elapsed,
@@ -847,7 +959,7 @@ class Cosmos3NanoDiffusersAdapter:
             timing=timing,
             request_id=request.request_id,
             metadata={
-                "model_id": "nvidia/Cosmos3-Nano",
+                "model_id": self.profile.model_id,
                 "model_revision": self.profile.model_revision,
                 "diffusers_revision": self.profile.diffusers_revision,
                 "mode": "forward_dynamics",
@@ -857,11 +969,264 @@ class Cosmos3NanoDiffusersAdapter:
                 "prompt_is_plain_task_string": True,
                 "nominal_timestamps_only": True,
                 "feedback_mode": request.feedback_mode.value,
+                "batch_execution_mode": UNBATCHED_SINGLE_FORWARD,
+                "batch_size": 1,
+                "per_sample_generator_seed": int(request.seed),
             },
         )
         # Never trim, duplicate, or invent frames to make a test pass.
         world_result.validate(len(request.compiled_actions))
         return world_result
+
+    @classmethod
+    def batch_key(
+        cls,
+        request: WorldRequest,
+        profile: Optional[Cosmos3NanoDiffusersProfile] = None,
+    ) -> str:
+        """Group key for requests that may share exactly one diffusion forward.
+
+        Two requests are fusable only when this string is equal for both.  The
+        key covers the compatibility profile, the domain, the action length, and
+        every profile setting that changes the forward's tensor shapes or its
+        denoise schedule (resolution tier, inference steps, guidance scale, fps,
+        view point).  A caller groups by this key before submitting;
+        :meth:`generate_batch` re-checks it and raises rather than splitting.
+
+        ``profile`` is optional so a caller can group before it owns an adapter.
+        Omitting it substitutes ``profile-implied`` for the profile-derived
+        parts.  That is sound only because the adapter refuses any request whose
+        ``compatibility_profile_id`` is not its own profile's, so within one
+        adapter instance those parts cannot vary; do not mix keys computed with
+        and without a profile, because the two spellings differ.
+
+        ``action_width`` is deliberately *not* in the key.  This profile accepts
+        exactly one width (10-D Bridge rows), so a wrong width is a per-request
+        validity failure that :meth:`generate_batch` isolates to that request,
+        rather than a second legitimate group whose presence should cost every
+        other episode in the batch its frames.
+        """
+
+        if not isinstance(request, WorldRequest):
+            raise BackendContractError(
+                "batch_key requires a WorldRequest, got %s" % type(request).__name__
+            )
+        implied = "profile-implied"
+        parts: Tuple[Any, ...] = (
+            request.compatibility_profile_id,
+            request.domain,
+            len(request.compiled_actions),
+            implied if profile is None else profile.resolution_tier,
+            implied if profile is None else profile.num_inference_steps,
+            implied if profile is None else profile.guidance_scale,
+            implied if profile is None else profile.fps,
+            implied if profile is None else profile.view_point,
+        )
+        return "|".join(str(part) for part in parts)
+
+    def generate_batch(self, requests: Sequence[WorldRequest]) -> Tuple[Any, ...]:
+        """Run one fused pipeline forward for a whole batch of requests.
+
+        Returns exactly one entry per input request, in input order.  Each entry
+        is that request's :class:`WorldResult`, or — when that one request could
+        not be served at all — the exception explaining why, so one bad request
+        never costs the others their frames.  Nothing is ever dropped: the
+        returned tuple always has ``len(requests)`` entries.
+
+        Whole-batch failures raise instead, because they are not attributable to
+        one member: an empty batch, a batch whose members are not mutually
+        fusable (:class:`MixedBatchError`), an unavailable runtime, the fused
+        pipeline call itself raising, or a pipeline result that does not carry
+        one frame sequence per member.
+
+        Batching mechanics, and what is *not* established about them:
+
+        * One stacked ``(B, N, 10)`` action tensor, one conditioning image per
+          member and one prompt per member go into a single
+          ``CosmosActionCondition`` and a single pipeline call.  The batch
+          dimension is per-member data; no member's work is duplicated to fill
+          it.
+        * Each member gets its **own** generator seeded from its own
+          ``WorldRequest.seed``, which is the per-sample generator convention
+          the pinned Diffusers pipelines use.  Same-seed repeatability is the
+          project's reproducibility evidence and a fused call must not weaken it.
+        * This batched-condition shape convention is extrapolated from the
+          reviewed single-sample call, not executed against the pinned GPU
+          stack.  Every result therefore carries
+          ``batched_condition_shape_verified=False``; that flag may only be
+          flipped by a real GPU run.
+        * ``ServerTiming.wall_seconds`` is the whole fused call, shared by every
+          member.  ``ServerTiming.attributed_gpu_seconds`` divides it by the
+          fused batch size and is labelled
+          ``attribution_method="fused_batch_equal_share"``.  It is an
+          attribution; a single fused forward does not isolate one member's
+          share of the GPU.
+        """
+
+        items = list(requests)
+        if not items:
+            raise BackendContractError(
+                "generate_batch received an empty batch; there is no forward pass to make."
+            )
+
+        # The grouping key is computed before per-request validation and from
+        # raw request fields only.  A broken grouping must surface as a grouping
+        # error, not be hidden behind one member's data problem.
+        keys = [type(self).batch_key(request, self.profile) for request in items]
+        distinct = sorted(set(keys))
+        if len(distinct) > 1:
+            raise MixedBatchError(
+                "generate_batch was handed %d mutually unfusable requests spanning %d batch keys (%s). "
+                "Group by Cosmos3NanoDiffusersAdapter.batch_key before submitting; this call refuses to split "
+                "the batch silently, because a reported batch size that was never fused would invalidate every "
+                "per-item GPU-second attribution derived from it."
+                % (len(items), len(distinct), "; ".join(distinct))
+            )
+
+        outcomes: List[Any] = [None] * len(items)
+        fused_positions: List[int] = []
+        statuses: Dict[int, str] = {}
+        for index, request in enumerate(items):
+            try:
+                statuses[index] = self._check_request(request)
+            except (ValueError, TypeError) as error:
+                # Invalid for reasons outside the batch key (action row width,
+                # non-finite values, timestamp alignment, empty prompt). Isolated
+                # so the rest of the batch still returns.
+                outcomes[index] = error
+            else:
+                fused_positions.append(index)
+        if not fused_positions:
+            # No pipeline call is made and no counter moves: nothing ran.
+            return tuple(outcomes)
+
+        runtime = self._load_runtime()
+        cold_start = self._pipeline is None
+        load_start = time.perf_counter()
+        pipeline = self._ensure_pipeline(runtime)
+        model_load_seconds = time.perf_counter() - load_start
+
+        cuda = getattr(runtime.torch, "cuda", None)
+        try:
+            if cuda is not None and cuda.is_available():
+                cuda.reset_peak_memory_stats()
+        except (AttributeError, RuntimeError):
+            pass
+
+        fused = [items[index] for index in fused_positions]
+        batch_size = len(fused)
+        action_length = len(fused[0].compiled_actions)
+        raw_actions = runtime.torch.as_tensor(
+            tuple(request.compiled_actions for request in fused), dtype=runtime.torch.float32
+        )
+        action_condition = runtime.action_condition_cls(
+            mode="forward_dynamics",
+            chunk_size=action_length,
+            domain_name=fused[0].domain,
+            resolution_tier=self.profile.resolution_tier,
+            raw_actions=raw_actions,
+            image=[request.conditioning_image for request in fused],
+            view_point=self.profile.view_point,
+        )
+        generators = [self._seeded_generator(runtime, request.seed) for request in fused]
+
+        started_unix = time.time()
+        start = time.perf_counter()
+        self._backend_call_attempts += 1
+        try:
+            # Exactly one invocation for the whole batch.  As in the single-request
+            # path, action mode passes no top-level image/video/height/width/
+            # num_frames: Diffusers derives N+1 frames from CosmosActionCondition.
+            result = pipeline(
+                prompt=[request.prompt for request in fused],
+                action=action_condition,
+                fps=self.profile.fps,
+                num_inference_steps=self.profile.num_inference_steps,
+                guidance_scale=self.profile.guidance_scale,
+                generator=generators,
+                output_type="np",
+                use_system_prompt=self.profile.use_system_prompt,
+            )
+        finally:
+            finished_unix = time.time()
+        elapsed = time.perf_counter() - start
+        self._fused_batch_calls += 1
+        self._fused_batched_items += batch_size
+
+        sequences = self._batched_frames_from_result(result, batch_size)
+        # One frozen timing object, shared by every member because the
+        # measurement itself was shared.  batch_size makes the sharing visible so
+        # nobody sums these as independent per-item durations.
+        timing = ServerTiming(
+            backend_calls=1,
+            wall_seconds=elapsed,
+            cold_start=cold_start,
+            gpu_peak_memory_bytes=self._peak_memory(runtime),
+            model_load_seconds=model_load_seconds,
+            started_at_unix=started_unix,
+            finished_at_unix=finished_unix,
+            batch_size=batch_size,
+            attributed_gpu_seconds=elapsed / batch_size,
+            attribution_method=FUSED_BATCH_EQUAL_SHARE,
+        )
+        batch_limitations = (
+            "wall_seconds is the whole fused call, shared by every batch member; it is not a per-item duration.",
+            "attributed_gpu_seconds divides the fused call equally between members. It is an attribution under "
+            "attribution_method, not an independent per-item measurement.",
+            "gpu_peak_memory_bytes is the peak across the whole fused batch, not this member's footprint.",
+            "The batched CosmosActionCondition shape convention is extrapolated from the reviewed single-sample "
+            "call and has not been executed on the pinned GPU stack.",
+        )
+
+        contract_passes = 0
+        for position, index in enumerate(fused_positions):
+            request = items[index]
+            frames = sequences[position]
+            world_result = WorldResult(
+                backend="cosmos3_diffusers",
+                profile_id=self.profile.profile_id,
+                frames=frames,
+                nominal_frame_timestamps=self._nominal_frame_timestamps(len(frames)),
+                conditioning_frame_included=True,
+                timing=timing,
+                request_id=request.request_id,
+                metadata={
+                    "model_id": self.profile.model_id,
+                    "model_revision": self.profile.model_revision,
+                    "diffusers_revision": self.profile.diffusers_revision,
+                    "mode": "forward_dynamics",
+                    "domain_name": request.domain,
+                    "action_length": len(request.compiled_actions),
+                    "action_length_status": statuses[index],
+                    "prompt_is_plain_task_string": True,
+                    "nominal_timestamps_only": True,
+                    "feedback_mode": request.feedback_mode.value,
+                    "batch_execution_mode": COSMOS_FUSED_BATCH_MODE,
+                    "batch_key": distinct[0],
+                    "batch_size": batch_size,
+                    "batch_index": position,
+                    "batch_submitted_size": len(items),
+                    "per_sample_generator_seed": int(request.seed),
+                    "fused_call_wall_seconds": elapsed,
+                    "attributed_gpu_seconds": elapsed / batch_size,
+                    "attributed_gpu_seconds_method": FUSED_BATCH_EQUAL_SHARE,
+                    "attributed_gpu_seconds_is_measurement": False,
+                    "gpu_peak_memory_is_whole_batch": True,
+                    "batched_condition_shape_verified": False,
+                    "batch_limitations": batch_limitations,
+                },
+            )
+            try:
+                # Never trim, duplicate, or invent frames to make a batch tidy.
+                world_result.validate(len(request.compiled_actions))
+            except ValueError as error:
+                outcomes[index] = error
+                continue
+            contract_passes += 1
+            outcomes[index] = world_result
+        if contract_passes:
+            self._real_backend_calls += 1
+        return tuple(outcomes)
 
 
 @dataclass(frozen=True)
