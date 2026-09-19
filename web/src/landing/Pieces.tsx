@@ -1,15 +1,18 @@
 /**
- * The parts every landing section reuses: the scroll reveal, the glass surfaces
- * and the hero's dream wall.
+ * The parts every landing section reuses: the scroll reveal, the section frame,
+ * the figure panel and the hero's dream wall.
  *
  * `Reveal` is one component rather than a `motion.div` per section because the
  * reduced-motion decision has to be made in exactly one place. Under that
  * preference the content is rendered at its final position with no transform at
- * all — not a faster animation, none.
+ * all — not a faster animation, none. `useFigureInView` extends the same rule to
+ * the four data figures: reduced motion gets the final frame, not a slow one.
  */
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useRef } from "react";
+import { Link } from "react-router-dom";
+import { Glyph } from "../components/Terminal";
 import { cn } from "../lib/utils";
 
 type RevealProps = {
@@ -49,18 +52,36 @@ export function Reveal({ children, className, from = { y: 40 }, delay = 0, durat
   );
 }
 
-/** The small label that opens every section. */
-export function SectionLabel({ children }: { children: ReactNode }) {
+/**
+ * The gate every figure draws through.
+ *
+ * Returns `play: true` only when the element is on screen *and* motion is
+ * allowed. A figure that reads `false` must render its completed state, because
+ * the figure is the evidence — an empty chart under reduced motion would hide
+ * the one thing the panel exists to show.
+ */
+export function useFigureInView() {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const reduced = useReducedMotion() ?? false;
+  return { ref, play: inView && !reduced, reduced };
+}
+
+/** The small mono label that opens a section or names a figure. */
+export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <p className="m-0 text-xs text-fg-dim">{children}</p>
+    <p className={cn("m-0 font-mono text-xs uppercase tracking-[0.18em] text-fg-dim", className)}>
+      {children}
+    </p>
   );
 }
 
 /**
- * A glass panel.
+ * A framed surface.
  *
- * `liquid-glass` paints a masked gradient border through a `::before`, so the
- * element needs its own border radius passed down for the mask to follow.
+ * One hairline, square, over a flat fill. Depth on this page comes from exactly
+ * one thing — a rule drawn or not drawn — so there is no blur, no shadow and no
+ * gradient edge anywhere in the frame system.
  */
 export function Glass({
   children,
@@ -75,36 +96,124 @@ export function Glass({
 }
 
 /**
- * The hero background: twelve tiles that ignite in sequence and then extend in
- * five chunks, on a loop.
+ * A full-bleed section card: the bordered box each pillar lives inside.
  *
- * It is a schematic and the page labels it one. Drawing it in CSS rather than
- * shipping a video is the same rule the console follows — nothing on the page
- * can fail to load and leave a broken element behind — and it means the one
- * thing the illustration shows is the one thing a still frame cannot: a rollout
- * that grows a chunk at a time.
+ * The border is the page's structural grammar. Sections butt against each other
+ * with a single shared hairline rather than floating on a margin, which is what
+ * makes a long page read as one instrument panel instead of eight slides.
  */
-export function DreamWall({ className }: { className?: string }) {
+export function SectionCard({
+  id,
+  children,
+  className,
+}: {
+  id?: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div
-      className={cn("grid grid-cols-4 grid-rows-3 gap-px bg-white/10", className)}
-      aria-hidden="true"
-    >
-      {Array.from({ length: 12 }, (_, index) => (
-        <div
-          key={index}
-          className="dream-tile"
-          // 40–60 ms between tiles: fast enough to read as one wall igniting,
-          // slow enough that the eye still resolves individual tiles.
-          style={{ animationDelay: `${index * 52}ms` }}
-        >
-          <span
-            className="dream-chunk"
-            style={{ animationDelay: `${(index % 5) * 420}ms` }}
-          />
-        </div>
-      ))}
-    </div>
+    <section id={id} className={cn("section-card", className)}>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * A labelled figure panel.
+ *
+ * `FIG.n` sits in the corner in mono at the dimmest ink on the page, the way a
+ * plate is numbered in a paper. The caption is not decoration: every figure on
+ * this page draws real constants from `content.ts`, and the caption says which.
+ */
+export function FigPanel({
+  index,
+  caption,
+  children,
+  className,
+}: {
+  index: number;
+  caption: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <figure className={cn("fig-panel", className)}>
+      <figcaption className="fig-panel-label">
+        <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">
+          FIG.{index}
+        </span>
+        <span className="font-mono text-xs text-fg-dim">{caption}</span>
+      </figcaption>
+      <div className="fig-panel-body">{children}</div>
+    </figure>
+  );
+}
+
+/**
+ * The page's one button shape: a square-cornered pill with a trailing glyph.
+ *
+ * `primary` is reverse video — the single loudest element in any viewport — and
+ * there is never more than one of them on screen at a time.
+ */
+export function PillButton({
+  href,
+  children,
+  variant = "secondary",
+  external = false,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  variant?: "primary" | "secondary";
+  external?: boolean;
+  className?: string;
+}) {
+  const classes = cn("pill-button", variant === "primary" ? "pill-primary" : "pill-secondary", className);
+  const content = (
+    <>
+      <span>{children}</span>
+      <Glyph name={external ? "arrowUpRight" : "arrowRight"} />
+    </>
+  );
+
+  // An absolute path that leaves the SPA (the raw protocol JSON, the notices
+  // file) has to be a real navigation; a router <Link> would 404 into the shell.
+  if (external) {
+    return (
+      <a className={classes} href={href} target="_blank" rel="noreferrer">
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link className={classes} to={href}>
+      {content}
+    </Link>
+  );
+}
+
+/**
+ * A heading in two inks: a white lead-in, then the sentence in muted grey.
+ *
+ * The split carries the hierarchy that a single weight cannot at this size —
+ * the lead-in names the pillar, the remainder makes the claim.
+ */
+export function TwoToneHeading({
+  lead,
+  children,
+  className,
+  as: Component = "h2",
+}: {
+  lead: string;
+  children: ReactNode;
+  className?: string;
+  as?: "h1" | "h2";
+}) {
+  return (
+    <Component className={cn("two-tone-heading", className)}>
+      <span className="text-fg-strong">{lead}</span> <span className="text-fg-muted">{children}</span>
+    </Component>
   );
 }
 
@@ -125,9 +234,7 @@ export function Figure({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <p className="m-0 flex items-baseline gap-2">
-        <span className="font-display-serif text-4xl leading-none text-fg-strong md:text-5xl">
-          {value}
-        </span>
+        <span className="font-sans text-4xl leading-none text-fg-strong md:text-5xl">{value}</span>
         {unit && <span className="text-sm text-fg-muted">{unit}</span>}
       </p>
       {note && <p className="m-0 text-sm leading-relaxed text-fg-muted">{note}</p>}

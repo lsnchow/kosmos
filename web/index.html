@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
-    <title>Nightshift — Measurement Console</title>
+    <title>Kosmos — Measurement Console</title>
     <meta
       name="description"
       content="Roll a robot policy out inside a generative world model, score it with a validated judge, and get four numbers saying how far to trust the ranking."
@@ -14,14 +14,19 @@
       has to render identically with no network at all.
     -->
     <!--
-      Two faces now, not five. Every surface is set in Geist Mono, and Bitcount
-      Grid Double draws the headings on both the landing and the console, so
-      both are first-screen on every route. Geist Sans and Instrument Serif are
-      no longer referenced by any token or class; preloading either would be
-      fetching a font nothing asks for.
+      Three faces. Geist Mono sets every console surface and every label on the
+      landing; Bitcount Grid Double draws the console's headings and the
+      landing's wordmark and footer display.
+
+      Geist Sans is third and is landing-only: `.kosmos-landing` redeclares
+      `--font-sans` to reach it, so it carries the hero headline and the pillar
+      headings. It is preloaded because that headline is the first-screen text
+      on `/` — the one string on the site that has to be legible immediately.
+      Instrument Serif stays unreferenced and unpreloaded.
     -->
     <link rel="preload" href="/fonts/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/BitcountGridDouble-vf.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

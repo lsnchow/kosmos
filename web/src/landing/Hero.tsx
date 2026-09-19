@@ -1,133 +1,115 @@
 /**
- * The first screen: navigation, the claim, the two ways in.
+ * The masthead and the first viewport.
  *
- * The heading names the differentiator rather than the category, because the
- * category already has three entrants. What none of them published is the
- * second line.
+ * The nav is sticky and numbered: the same `01 … 04` that label the pillars
+ * below, so a reader who scrolls back up finds the spine they just walked. It
+ * is the only navigation on the page — there is no mobile drawer, because four
+ * anchors and two buttons collapse to a scrollable row without one.
+ *
+ * Nothing here fetches, and nothing here is remote. Every string is a constant
+ * in `content.ts` and the backdrop is CSS, so the hero renders identically with
+ * no network — a landing page that goes blank when the API is the thing being
+ * demoed has failed at the one moment it matters.
  */
-import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
-import { CONSOLE_PATH, LIVE_PATH, NAV_LINKS, PRODUCT } from "./content";
-import { VIDEO } from "./media";
-import { DreamWall, Glass } from "./Pieces";
-import { HeroVideo } from "./Video";
+import { Glyph } from "../components/Terminal";
+import { BUILT_ON, CONSOLE_PATH, LIVE_PATH, NAV_LINKS, PRODUCT, PROTOCOL_PATH } from "./content";
+import { PillButton } from "./Pieces";
+
+/** The wordmark. Set in the display face at a size where its grid still reads. */
+function Wordmark() {
+  return (
+    <Link to="/" className="wordmark" aria-label={`${PRODUCT.name} home`}>
+      <span aria-hidden="true" className="wordmark-mark">
+        K
+      </span>
+      <span className="wordmark-text">{PRODUCT.name}</span>
+    </Link>
+  );
+}
 
 function Nav() {
   return (
-    <nav className="relative z-20 px-6 py-6" aria-label="Landing sections">
-      <Glass className="mx-auto flex max-w-5xl items-center justify-between rounded-none px-6 py-3">
-        <div className="flex items-center">
-          <Link to="/" className="flex items-center gap-2.5 no-underline" aria-label={`${PRODUCT.name} home`}>
-            <span
-              aria-hidden="true"
-              className="grid size-6 place-items-center rounded-none bg-accent font-mono text-sm font-semibold text-black"
-            >
-              N
-            </span>
-            <span className="text-lg font-semibold text-fg-strong">{PRODUCT.name}</span>
-          </Link>
-          <ul className="m-0 ml-8 hidden list-none gap-8 p-0 md:flex">
-            {NAV_LINKS.map((link) => (
-              <li key={link.href}>
-                <a className="text-sm font-medium text-fg no-underline hover:text-fg-strong" href={link.href}>
-                  {link.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="flex items-center gap-4">
-          <a
-            className="hidden text-sm font-medium text-fg no-underline hover:text-fg-strong sm:inline"
-            href="/api/protocol"
-            target="_blank"
-            rel="noreferrer"
-          >
+    <header className="landing-nav">
+      <nav className="landing-nav-inner" aria-label="Primary">
+        <Wordmark />
+
+        <ul className="nav-tabs">
+          {NAV_LINKS.map((link) => (
+            <li key={link.href}>
+              <a href={link.href}>
+                <span>{link.label}</span>
+                <span className="nav-tab-number" aria-hidden="true">
+                  {link.number}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <div className="nav-actions">
+          <a className="nav-link" href={PROTOCOL_PATH} target="_blank" rel="noreferrer">
             Protocol record
           </a>
-          <Glass
-            as="div"
-            className="rounded-none"
-          >
-            <Link
-              to={CONSOLE_PATH}
-              className="block px-6 py-2 text-sm font-medium text-fg-strong no-underline"
-            >
-              Open the console
-            </Link>
-          </Glass>
+          <PillButton href={CONSOLE_PATH} variant="primary">
+            Open the console
+          </PillButton>
         </div>
-      </Glass>
-    </nav>
+      </nav>
+    </header>
   );
 }
 
 export function Hero() {
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden">
-      {/* Three layers, bottom to top: the CSS wall, the video, the washes.
-          The wall is not a placeholder that gets replaced — it is what remains
-          when the CDN is unreachable, and the video fades in over it only once
-          the browser says it can play. The washes hold the headline at full
-          contrast over whichever of the two is showing. */}
-      <DreamWall className="absolute inset-0 h-full w-full" />
-      <HeroVideo
-        src={VIDEO.hero}
-        className="absolute inset-0 h-full w-full object-cover object-bottom"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0.08)_0%,_rgba(0,0,0,0.2)_60%,_rgba(0,0,0,0.5)_100%)]"
-      />
-      <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black via-black/60 to-transparent" />
+    <div className="hero">
+      {/*
+        The backdrop is static.
+
+        It was a remote MP4, then a wall of drifting gradients that read as a
+        video still buffering — motion behind a headline that the eye keeps
+        checking on instead of reading past. What is left is the console's own
+        idiom: a hairline lattice on the field colour, drawn once and never
+        moved, with a scrim handing off to the first section.
+
+        Nothing here loads. The hero renders identically with no network, which
+        is the one moment that matters if the API is the thing being demoed.
+      */}
+      <div className="hero-backdrop" aria-hidden="true">
+        <div className="hero-lattice" />
+        <div className="hero-scrim" />
+      </div>
 
       <Nav />
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-8 px-6 py-12 text-center">
-        <Glass className="flex items-center gap-2.5 rounded-none px-4 py-1.5">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-caution" />
-          <span className="font-mono text-xs text-fg">
-            Unqualified · synthetic mode · every number carries its status
-          </span>
-        </Glass>
-
-        <h1 className="font-display-serif m-0 max-w-5xl text-5xl leading-[1.05] text-fg-strong sm:text-6xl md:text-7xl lg:text-8xl">
-          Evaluate a robot policy <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">without a robot.</em>
+      <div className="hero-body">
+        <h1 className="hero-title">
+          <span className="text-fg-strong">Evaluate a robot policy</span>{" "}
+          <span className="text-fg-muted">without a robot.</span>
         </h1>
 
-        <p className="m-0 max-w-2xl text-base leading-relaxed text-fg md:text-lg">
-          {PRODUCT.promise}
-        </p>
+        <p className="hero-promise">{PRODUCT.promise}</p>
 
-        <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <Glass className="rounded-none liquid-glass-accent">
-            <Link
-              to={CONSOLE_PATH}
-              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-accent no-underline"
-            >
-              Open the console
-              <Glyph name="arrowRight" />
-            </Link>
-          </Glass>
-          <Glass className="rounded-none">
-            <Link
-              to={LIVE_PATH}
-              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-fg-strong no-underline"
-            >
-              <Glyph name="play" />
-              Watch a live run
-            </Link>
-          </Glass>
+        <div className="hero-actions">
+          <PillButton href={CONSOLE_PATH} variant="primary">
+            Open the console
+          </PillButton>
+          <PillButton href={LIVE_PATH}>Watch a live run</PillButton>
         </div>
 
-        {/* The one sentence the whole project turns on, placed where a
-            newsletter field would be on a page selling something else. */}
-        <p className="m-0 max-w-xl text-sm leading-relaxed text-fg-muted">
-          Three groups have already automated this with world models. All three reported accuracy.
-          <span className="text-fg-strong"> None reported precision.</span>
-        </p>
+        <div className="hero-built-on">
+          <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">Built on</span>
+          <ul>
+            {BUILT_ON.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
       </div>
 
+      <a className="hero-scroll" href={`#${NAV_LINKS[0].href.slice(1)}`} aria-label="Skip to the first section">
+        <Glyph name="arrowRight" />
+      </a>
     </div>
   );
 }
