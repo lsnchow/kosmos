@@ -43,6 +43,49 @@ def _video(report_path: Path, metadata: dict, root: Path) -> Optional[str]:
     return _url(path, root)
 
 
+def _replica_notes(report_path: Path, summary: dict) -> list:
+    refs = summary.get("reports")
+    if not isinstance(refs, list) or not 1 <= len(refs) <= 64:
+        raise ValueError("Replica summary needs bounded raw report references")
+    reports = []
+    for ref in refs:
+        candidate = report_path.parent / str(_mapping(ref).get("relative_path", ""))
+        if candidate.is_symlink() or report_path.parent.resolve() not in candidate.resolve().parents:
+            raise ValueError("Replica report escapes its evidence bundle")
+        if not candidate.is_file() or candidate.stat().st_size > 4 * 1024 * 1024:
+            raise ValueError("Replica report unavailable")
+        raw = candidate.read_bytes()
+        if "sha256:" + hashlib.sha256(raw).hexdigest() != ref.get("sha256"):
+            raise ValueError("Replica report digest mismatch")
+        report = _mapping(json.loads(raw))
+        if report.get("kind") != "plumb_octo_small_native_two_observation_diagnostic" or report.get("status") != "completed_unqualified":
+            raise ValueError("Replica summary does not bind completed native reports")
+        if report.get("source_release") != summary.get("source_release"):
+            raise ValueError("Replica summary mixes source releases")
+        reports.append(report)
+    if len({r.get("slurm_process_id") for r in reports}) != len(reports):
+        raise ValueError("Replica summary repeats a worker")
+    calls = [_mapping(r.get("native_calls")) for r in reports]
+    def finite_action(value: Any) -> bool:
+        return isinstance(value, list) and len(value) == 7 and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in value)
+    for call in calls:
+        if call.get("backend_calls") != 3:
+            raise ValueError("Replica must record all three native calls")
+        for case in ("first", "second", "after_reset_first"):
+            entry = _mapping(call.get(case))
+            proposal = entry.get("proposal")
+            if not finite_action(entry.get("action")) or not isinstance(proposal, list) or len(proposal) != 4 or not all(finite_action(row) for row in proposal):
+                raise ValueError("Replica has an incomplete native proposal")
+    equal = all(len({json.dumps(_mapping(c.get(case)).get(field), sort_keys=True, allow_nan=False)
+                     for c in calls}) == 1 for case in ("first", "second") for field in ("action", "proposal"))
+    resets = all(c["first"][field] == c["after_reset_first"][field]
+                 for c in calls for field in ("action", "proposal"))
+    return ["%d hash-verified worker reports across %d nodes." % (len(reports), len({r.get("slurm_node") for r in reports})),
+            "Fixed-input actions/proposals match: %s; every reset/repeat matches: %s." % (equal, resets),
+            "Unqualified native-v0.1 profile; not a rollout, physics, cost or throughput result."]
+
+
 def experiments_payload(root: Path) -> Dict[str, Any]:
     root = root.resolve()
     evidence = root / "cluster-evidence"
@@ -69,6 +112,7 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                     "outcome": "unknown", "notes": []}
             timing = {}
             video = {}
+            video_report_path = path
             if kind == "cosmos3_nano_diffusers_smoke":
                 result = _mapping(report.get("result"))
                 timing = _mapping(result.get("timing"))
@@ -110,6 +154,19 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                             notes=["Released horizon: 15 supplied actions, 16 returned frames.",
                                    "First prediction sees 14 future action rows. This is not native OpenVLA feedback.",
                                    "Qualitative open-loop reference only; physical fidelity remains unqualified."])
+            elif kind == "plumb_irasim_causal_history_replay_diagnostic":
+                outcome = _mapping(report.get("outcome"))
+                rows = outcome.get("rows", [])
+                video = _mapping(outcome.get("video"))
+                video_report_path = path.parent / "history" / path.name
+                item.update(model="IRASim original Frame-Ada", stage="causal_history_replay",
+                            frame_count=_number(outcome.get("frame_count")),
+                            ticks_completed=len(rows) if isinstance(rows, list) else None,
+                            ticks_requested=16, total_seconds=_number(report.get("total_seconds")),
+                            timing_scope="history_replay_and_repeat_including_load_and_artifacts",
+                            notes=["Saved actions replayed with growing past-latent conditioning; no future action rows.",
+                                   "Conditioning differs from training mask=1; policy was not queried.",
+                                   "Runtime and repeatability only; no fidelity or task-success score."])
             elif kind == "plumb_local_policy_smoke" and report.get("command") == "openvla":
                 action = _mapping(report.get("action"))
                 timing = action
@@ -117,6 +174,24 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                             action_dimensions=_number(action.get("dimension")),
                             timing_scope="policy_inference_excludes_model_load",
                             notes=["One actual native action; no rollout outcome established."])
+            elif kind == "plumb_octo_small_native_two_observation_diagnostic":
+                calls = _mapping(report.get("native_calls"))
+                first = _mapping(calls.get("first"))
+                action = first.get("action")
+                runtime = _mapping(report.get("runtime"))
+                timing = {"wall_seconds": first.get("wall_seconds"),
+                          "gpu_peak_memory_bytes": _mapping(runtime.get("after_native_calls")).get(
+                              "gpu_peak_memory_bytes", runtime.get("gpu_peak_memory_bytes"))}
+                item.update(model="rail-berkeley/octo-small v1.0", stage="policy",
+                            total_seconds=_number(report.get("total_seconds")),
+                            action_dimensions=len(action) if isinstance(action, list) else None,
+                            timing_scope="first_native_policy_call_excludes_model_load",
+                            notes=["Two observed fixture frames and reset/repeat; four-action native proposals.",
+                                   "No generated-image feedback, task outcome, or policy qualification is asserted."])
+            elif kind == "plumb_octo_worker_reproducibility_diagnostic":
+                item.update(model="Octo-Small v1.0 worker consistency", stage="policy_reproducibility",
+                            timing_scope="no_episode_or_burst_timing",
+                            notes=_replica_notes(path, report))
             elif kind == "plumb_local_policy_smoke" and report.get("command") == "judge":
                 timing = {"wall_seconds": _mapping(report.get("timing")).get("judge_call_seconds")}
                 raw_outcome = _mapping(report.get("outcome"))
@@ -130,7 +205,7 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
             item.update(latency_seconds=_number(timing.get("wall_seconds")),
                         model_load_seconds=_number(timing.get("model_load_seconds")),
                         gpu_peak_memory_bytes=_number(timing.get("gpu_peak_memory_bytes")),
-                        video_url=_video(path, video, root))
+                        video_url=_video(video_report_path, video, root))
             reports.append(item)
         except (ValueError, OSError, TypeError):
             continue

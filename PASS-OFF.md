@@ -46,7 +46,7 @@ For Baseten, evaluation is a recurring inference workload: each compatible fine-
 | Five-task benchmark comparability | **Unresolved.** Matched drawer, sink, and cloth starts, goal references, and control horizons must be established. |
 | 1,500 episodes / 60 seconds / ~$11 | **Target, not evidence.** Capacity, cold starts, policy inference, judge sampling, persistence, and billing all matter. |
 | Judge reliability | **Uncalibrated.** Actual five-sample Qwen diagnostics ran; the closed-loop clip returned unknown with insufficient quorum. Blinded human calibration is still required before scoring, and again after distillation. |
-| Assets and missing artifacts | **Selected assets cluster-side and hash-verified.** Cosmos Nano, OpenVLA, Qwen, original IRASim safe tensors, and the SDXL VAE are staged; other policy assets, scenario panels, and original handoff material remain dependencies. No model weights were copied to the laptop. |
+| Assets and missing artifacts | **Selected assets cluster-side and hash-verified.** Cosmos Nano, OpenVLA, Qwen, original IRASim safe tensors, SDXL VAE, and Octo-Small are staged; remaining policy assets, scenario panels, and original handoff material remain dependencies. No model weights were copied to the laptop. |
 
 Current demoable engineering evidence: the dashboard at `http://127.0.0.1:8787`
 separates the 1,500-row **synthetic fixture** from actual model diagnostics and
@@ -55,6 +55,13 @@ ticks and persisted 17 frames in 142.21 seconds including model load and artifac
 The exact trace is auditable, but the final gripper is visibly distorted; neither
 task success nor physical fidelity is asserted. This does not satisfy the real
 1,500-episode study or its performance target.
+
+The continuation adds durable submission/callback recovery, scenario and blinded
+calibration workflows, full-study planning, and distillation-data preparation.
+Octo-Small completed real native-v0.1 GPU calls and an eight-worker consistency
+check. That source profile differs from the unverified newer AutoEval API, so
+it is diagnostic evidence only. A new causal-history IRASim replay still showed
+substantial visual distortion. See the current first section of `HANDOFF.md`.
 
 ## What we deliberately are not doing
 

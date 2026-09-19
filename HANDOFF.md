@@ -1,5 +1,195 @@
 # PLUMB execution handoff — implementation in progress
 
+## Num2 continuation — 2026-09-19 06:09 EDT (supersedes the older snapshot below)
+
+**Morning entrypoint:** source implementation and bounded GPU checks are done
+for this continuation. Read this section first, then the workflow documents as
+needed. The full scientific project is not complete. Local API runs in tmux
+`plumb-api`; source code is separate from ignored local/cluster evidence.
+
+The continuation implements additional control-plane and study tooling. The
+full scientific study is still blocked; no primary result, physical-fidelity,
+Baseten deployment, or speed/cost claim is established. All prior raw evidence
+is preserved. Source at the start of this continuation was commit `425a6dd`.
+
+Completed code tracks:
+
+- Durable Baseten outbox, one-POST ambiguity handling, exact raw signed callback
+  storage, callback-before-ack association, leased finalization, cancellation,
+  and local reconciliation. Fixture workers cannot claim/reclaim cloud-owned
+  episodes. The API exposes optional signed callback ingress and a sanitized
+  outbox view; it never submits cloud work automatically. See
+  `deploy/baseten/README.md`. Actual deployed serializers, independent object
+  storage and account-tested Chain lifecycle routes remain prerequisites.
+- Safe scenario import checks explicit real-robot provenance, local image/state/
+  goal hashes, finite 8-D states and disjoint source lineages. Calibration
+  selection is frozen before CLI export/report; packets use opaque identifiers
+  and a private resolver. Two distinct human owner attestations are required.
+  See `SCENARIO-CALIBRATION-WORKFLOW.md`; use `plumb scenarios --help` and
+  `plumb annotation --help`. No actual panels or annotations were invented.
+- Full-study planning and run-specific episode materialization retain all
+  6 × 5 × 50 slots and exact task horizons. Readiness binds actual gate and
+  component revisions. Native cost comparisons preserve each policy's feedback
+  boundaries; 1–6-request partition experiments are a separate unqualified
+  sensitivity. Rehearsal checks distinguish judging attempts from scientific
+  V/1,500 coverage. See `docs/STUDY-WORKFLOW.md` and `plumb study --help`.
+- Distillation preparation freezes an 80/20 development-only training/
+  validation split with teacher, rubric, sampling, media and raw-output
+  bindings. It rejects held-out/primary/cost lineage leakage and prepares a
+  no-submit Training Jobs readiness record. A distilled revision still needs
+  fresh held-out humans and paired-video evidence. See
+  `docs/DISTILLATION-WORKFLOW.md` and `plumb distillation --help`; no training
+  job, dataset upload or cloud spend occurred.
+- Source-backed policy candidates now cover Octo, MiniVLA, SuSIE/SuSIE_LL,
+  and OpenPiZero.
+  MiniVLA remains blocked by the unlicensed VQ dependency and unbound auxiliary
+  vision/language assets. Its pinned tokenizer exposes one action, despite
+  seven-future-action latent configuration; do not advertise a seven-action
+  proposal. SuSIE `gc_bc` replication and `gc_ddpm_bc` sensitivity have distinct
+  identities; corrected-arm weights remain missing. See
+  `docs/POLICY-DEPENDENCIES.md`. Unit fixtures do not certify live loaders.
+  OpenPiZero retains its four-row proposal and requires an explicitly tagged,
+  unit WXYZ quaternion pose; canonical Euler state is not silently accepted.
+  Its external execution wrapper/prefix, state conversion, checksum-bound
+  PaliGemma support assets and checkpoint remain unqualified/unavailable. See
+  `docs/OPENPI-DEPENDENCIES.md`.
+
+New actual GPU evidence:
+
+- Trillium H100 job **937822**, immutable source release
+  `a763859e977ce3a6baf6fe0f83f63137fa2cf6229921e11d021e0785b8f7ba83`,
+  completed successfully. It replays the saved 16 actions with a growing window
+  of up to 15 committed past latents, producing one new frame per request with
+  no future actions. This changes inference conditioning from training mask=1;
+  it is not a policy re-query run or qualification.
+- Runtime **187.265 seconds** includes loading, 16 ticks, their repeat, and
+  artifacts. All 16 pixel and final-latent hashes repeat exactly. Tick zero
+  also matches the earlier 937751 latent-carry replay. The inspected final
+  frame still has substantial blur and gripper/object distortion, so history
+  conditioning did **not** resolve fidelity. Different horizon/noise shapes
+  prevent treating cross-profile differences as a history-only causal effect.
+- The whole small bundle is mirrored at
+  `data/cluster-evidence/irasim-history-937822/`; original cluster location is
+  `/scratch/lchow432/plumb/evidence/irasim-history-937822/`. The API now exposes
+  its digest-checked video as an unscored diagnostic. Do not resubmit this run.
+
+Octo staging: Trillium now has the pinned MIT Octo-Small snapshot at
+`models/rail-berkeley--octo-small`, revision
+`03d88976c54a58e10480d2043a8c762b35bc2611`, checkpoint SHA
+`590df097f8a37bbc1c3aac2a488c0fb08e72bae8abaedfb89f0685677d848962`.
+Only the Apache-2.0 T5 config/tokenizer files were needed, not T5 model weights:
+the Octo checkpoint already restores encoder parameters. They are cached under
+`models/.hf-octo`, T5 revision `a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1`.
+The clean `source-octo` checkout pins
+`37951e4e6d708fd76374f6e09e716763fe2673b1`. See
+`cluster/prepare_octo_assets.py` and `cluster/setup_octo_runtime.sh`.
+
+### Octo runtime and actual GPU results
+
+- Isolated Trillium `venv-octo`: Python3.10, Alliance JAX0.4.20 / CUDA12 JAXlib,
+  Flax0.7.5, Orbax0.4.3, TF2.15.1, exact pure-Python TFP0.23. TF2.15.1 is a
+  recorded compatibility deviation from the source lead2.15.0. Load modules
+  `StdEnv/2023 python/3.10 cuda/12.2 cudnn/8.9.5.29`; do not mix it with the
+  Python3.11 IRASim/OpenVLA environments. `pip check` and offline T5 imports pass.
+- Immutable runtime lock:
+  `/scratch/lchow432/plumb/evidence/octo-runtime-cuda12-jax0420-v2.json`, SHA
+  `5c10b8881e8ab97830ee84f565aeebe1cb689f1d161359a64a2ca450a62e74b9`.
+  Version1 is preserved separately. The v2 lock includes the actual package
+  inventory; no public CUDA wheel was installed. Assets total about550MB;
+  no full T5 weight download was needed.
+- Canonical lossless PNGs and provenance are in
+  `fixtures/octo-small-bridge-cv2-linear-rgb-256-v3/` on Trillium. The helper
+  records BGR→RGB decoding, source-compatible OpenCV linear resize, original
+  MP4 hash, source RGB/BGR hashes, and output file/pixel hashes. Source frame
+  indices are **0 and2** because0/1 decoded identically. Physical control
+  timestamps remain unknown. Manifest SHA:
+  `996bdb5294d27b5d0245aa93f61272364f0f1300dd386abb7eb5aa42ae5e34c1`.
+  This is a declared diagnostic input transform, not camera-pipeline parity.
+- Allocation937277 step0 failed after checkpoint loading: the pinned Octo
+  v0.1 API does not accept AutoEval's newer `unnormalization_statistics`
+  keyword. Preserve `data/cluster-evidence/octo-smoke-937277-step0/` and release
+  `7342b517935f7054db57b84b8e975a9bda816dc54c5537267405b7a3da1965ff`.
+  Failure report SHA is
+  `d91bd5a05357a865a40d52366652071c99426056c67706bce61deedc02a4857b`.
+- Corrected native-v0.1 profile calls the actual source API and unnormalizes
+  `actions * std + mean` on the native JAX array before host collection, as
+  the pinned source notebook does. This is explicitly **not** a verified
+  substitute for the newer AutoEval server profile. Its source history-mask
+  behavior is preserved; the code does not silently repair upstream semantics.
+- **937277.1 completed** from release
+  `b90de29b065e81586c3479301780acbeee63bc118cb08ab6bcfefd6c2c0d3645`:
+  three real native calls, each with a finite4×7 proposal; reset/repeat exact.
+  First call9.4596s includes JIT, subsequent calls0.03633/0.03674s;
+  total38.6858s includes loading/setup. JAX-reported peak577,332,736B is an
+  allocator measurement, not total device memory. Bundle:
+  `data/cluster-evidence/octo-smoke-937277-step1/`.
+- **937277.2 completed**: eight independent worker processes across
+  trig0010/trig0030, one visible allocated H100 each,24 native calls total.
+  Every worker reset/repeat was exact; both observations' proposals and
+  selected actions matched across all workers. Scheduler step elapsed28s;
+  worker totals23.52–24.85s. This is **not** a rollout/burst/cost result.
+  Immutable release:
+  `46c353e2786fd1b2dd86fc72223d26af716d2691df515082d5cfa0658c1b8392`.
+  All eight raw reports/logs and a hash-bound comparison summary are in
+  `data/cluster-evidence/octo-repro8-937277-step2/`. Physical GPU UUIDs were
+  not recorded; logical CUDA ordinal0 is per worker, not a global GPU identity.
+- All these diagnostics remain unqualified: no generated-image feedback,
+  primary task outcome, real-robot parity, or full AutoEval replication claim.
+
+All five SSH routes were rechecked successfully during this continuation.
+The historical eight-H100 request **937277 started at05:11 EDT** on two nodes
+and is scheduled to end at09:11 EDT. Its bounded GPU checks are complete.
+Cancellation permission was requested asynchronously after the checks because
+the prior handoff explicitly withheld it; absent a reply, the parent allocation
+is preserved. Recheck live state before touching it. No duplicate allocation
+was submitted. The site rejects `srun` from a login node even with `--jobid`:
+run a new bounded step only from the inspected idle allocated compute shell
+inside REMOTE `drac:0.0`. Never paste while that pane is running a step.
+
+Root verification: **212 passed, 5 skipped** in the lightweight
+local environment; frontend production build and TypeScript checks passed.
+The four original-IRASim tensor checks also passed inside the H100 batch job.
+Fresh synthetic integration `run-08d9b32ef23144d086bccc8d89ce5eee` completed
+1,500/1,500, exported 1,500 JSONL rows, and returned all30 API analysis cells
+with `qualified=false`. Its scratch test data is
+`/tmp/plumb-num2-integration.jjbXlK`; its timing is not model performance.
+
+The actual local API was restarted with current source in **LOCAL tmux
+`plumb-api:0.0`**, listening at `http://127.0.0.1:8787`. PID at final restart65815;
+inspect the pane/listener before any future restart. It exposes12 diagnostic
+cards and5 playable digest-checked clips, whose report/media HTTP links were
+all checked. Baseten outbox is empty; callback ingress and automatic cloud
+submission are disabled. No existing run was active during restart.
+
+### What remains (do not shrink the requested scope)
+
+1. A fidelity-acceptable causal world profile and exact remaining native
+   wrapper/state certification. Current IRASim profiles visibly distort; the
+   Octo native-v0.1 diagnostic is not certified AutoEval replication. OpenPi's
+   executed prefix/quaternion conversion and MiniVLA's support assets/license/
+   exposed-action contract remain unresolved.
+2. Real matched five-task panels plus disjoint development/calibration/cost
+   cohorts,150 selected generated calibration clips, and two actual human
+   annotators. The new CLI workflows are usable once those inputs exist.
+3. Real Baseten credentials, immutable deployment images/serializers, independent
+   object storage, account-tested lifecycle APIs, capacity and pricing; then
+   actual full-matrix execution, drift/cost sweeps, held-out confirmation,
+   distillation training/fresh calibration, and three complete rehearsals.
+4. Recover the original reverse-validation question/script and other absent
+   original handoff material; do not invent the missing experiment.
+
+Model weights remain only on clusters. The private source repo deliberately
+excludes `data/`, environments and model artifacts. Preserve all failed and
+successful reports. Curation guidance was applied to the new fixture path:
+reuse existing media processing, preserve originals, and hash-bind every
+derived RGB input and transform.
+
+The following older sections retain useful asset/runtime details and historical
+evidence. Their process IDs, test counts and live scheduler descriptions are
+snapshots, not current guarantees.
+
+---
+
 **For the new context named num2:** also read [CLUSTER-OPERATIONS.md](CLUSTER-OPERATIONS.md)
 in full. It contains the verified local/remote tmux layout, exact SSH/Slurm
 commands, latest five-cluster capacity check and submission/recovery procedures.

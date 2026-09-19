@@ -10,6 +10,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -22,6 +23,9 @@ from plumb.engine import RunService
 from plumb.evidence import experiments_payload
 from plumb.measurement import analyze
 from plumb.reference import reference_payload
+from plumb.ledger import CallbackConflictError
+from plumb.outbox import BasetenOutbox
+from plumb.platform import BasetenChainClient, BasetenPlatformConfig, CallbackVerificationError, PlatformSchemaError
 
 POLICIES = ["OpenVLA", "OpenPiZero", "Octo", "MiniVLA", "SuSIE", "SuSIE_LL"]
 TASKS = ["open_drawer", "close_drawer", "to_basket", "to_sink", "fold_cloth"]
@@ -52,10 +56,16 @@ class FreeplayInput(BaseModel):
     action: List[float] = Field(min_length=7, max_length=7)
 
 
-def create_app(data_dir: Optional[Path] = None) -> FastAPI:
+def create_app(data_dir: Optional[Path] = None, *, baseten_client: Optional[BasetenChainClient] = None) -> FastAPI:
     root = (data_dir or Path(os.environ.get("PLUMB_DATA_DIR", "data"))).resolve()
     root.mkdir(parents=True, exist_ok=True)
     service = RunService(root)
+    if baseten_client is None and os.environ.get("PLUMB_ENABLE_BASETEN_CALLBACKS") == "1":
+        config = BasetenPlatformConfig.from_env()
+        if not config.webhook_secret:
+            raise ValueError("PLUMB_ENABLE_BASETEN_CALLBACKS requires BASETEN_WEBHOOK_SECRET")
+        baseten_client = BasetenChainClient(config)
+    outbox = BasetenOutbox(service.ledger, baseten_client) if baseten_client is not None else None
     pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plumb-run")
     submitted: set = set()
     lock = threading.RLock()
@@ -68,6 +78,7 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
     app = FastAPI(title="PLUMB", version="0.1.0", lifespan=lifespan)
     app.state.service = service
     app.state.data_dir = root
+    app.state.baseten_outbox = outbox
 
     def require_run(run_id: str) -> dict:
         try:
@@ -130,6 +141,51 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
     @app.get("/api/experiments")
     def experiments() -> dict:
         return experiments_payload(root)
+
+    @app.get("/api/baseten/outbox")
+    def platform_submissions(run_id: Optional[str] = None) -> dict:
+        if run_id is not None:
+            require_run(run_id)
+        # Never return payloads, callback bodies, credentials, or ownership tokens.
+        public_fields = ("outbox_id", "run_id", "episode_id", "state", "platform_request_id",
+                         "post_attempt_count", "remote_status", "remote_status_observed_at",
+                         "cancellation_requested", "deadline_at", "created_at", "updated_at")
+        rows = service.ledger.list_baseten_submissions(run_id=run_id)
+        return {"submissions": [{key: row.get(key) for key in public_fields} for row in rows],
+                "callback_ingress_enabled": outbox is not None,
+                "automatic_submission_enabled": False, "qualified": False}
+
+    @app.post("/api/baseten/callback", status_code=202)
+    async def platform_callback(request: Request) -> dict:
+        if outbox is None:
+            raise HTTPException(503, "Baseten callback ingress is not configured")
+        chunks = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 1024 * 1024:
+                raise HTTPException(413, "Callback exceeds the 1 MiB limit")
+            chunks.append(chunk)
+        try:
+            receipt = outbox.ingest_callback(b"".join(chunks), dict(request.headers))
+        except CallbackVerificationError:
+            raise HTTPException(401, "Invalid callback authentication")
+        except CallbackConflictError:
+            raise HTTPException(409, "Conflicting callback for a persisted request")
+        except (PlatformSchemaError, ValueError):
+            raise HTTPException(422, "Invalid callback payload")
+        return {"request_id": receipt.callback.request_id, "persisted": True,
+                "duplicate": receipt.duplicate, "associated": receipt.associated,
+                "logical_result_finalized": False}
+
+    @app.post("/api/baseten/reconcile")
+    async def reconcile_platform() -> dict:
+        if outbox is None:
+            raise HTTPException(503, "Baseten delivery is not configured")
+        # Only local recovery here. No guessed Chain lifecycle URL or network
+        # retry is reachable from this endpoint.
+        result = await outbox.reconcile()
+        return {**asdict(result), "scope": "local_recovery_only", "submission_posts": 0}
 
     @app.get("/api/runs")
     def list_runs() -> dict:

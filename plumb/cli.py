@@ -2,13 +2,28 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from pathlib import Path
+import sys
+from typing import Optional, Sequence
 
 
-def main() -> None:
+def main(argv: Optional[Sequence[str]] = None) -> Optional[int]:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    workflows = {
+        "scenarios": ("plumb.scenarios", "Import, freeze, and inspect provenance-backed scenario panels"),
+        "annotation": ("plumb.annotation", "Prepare blinded human calibration and import independent ratings"),
+        "study": ("plumb.study", "Freeze the full study and validate designs and rehearsal evidence"),
+        "distillation": ("plumb.distillation", "Prepare development-only judge training data and check launch prerequisites"),
+    }
+    if arguments and arguments[0] in workflows:
+        module = importlib.import_module(workflows[arguments[0]][0])
+        return module.main(arguments[1:])
     parser = argparse.ArgumentParser(prog="plumb")
     commands = parser.add_subparsers(dest="command", required=True)
+    for name, (_, description) in workflows.items():
+        commands.add_parser(name, help=description, add_help=False)
     serve = commands.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8787)
@@ -27,7 +42,7 @@ def main() -> None:
     recover = commands.add_parser("recover", help="Recover an orphaned fixture run after its owner lease expires")
     recover.add_argument("run_id")
     recover.add_argument("--data-dir", type=Path, default=Path("data"))
-    args = parser.parse_args()
+    args = parser.parse_args(arguments)
     if args.command == "serve":
         import uvicorn
         from plumb.api import create_app
@@ -65,4 +80,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

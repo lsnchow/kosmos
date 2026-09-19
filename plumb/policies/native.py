@@ -1,10 +1,13 @@
-"""Declared, non-fabricating hooks for policy stacks with incompatible runtimes.
+"""Legacy compatibility hooks for policy stacks with isolated native adapters.
 
-These are deliberately not partial reimplementations of Octo, MiniVLA,
-OpenPiZero, or SuSIE.  Their released wrappers carry important execution,
-normalization, and feedback semantics that must be certified from fixtures in
-their own environments.  The hooks make those constraints inspectable while
-remaining unable to invent a result on a CPU planning host.
+Octo's source-backed loader lives in :mod:`plumb.policies.octo` and currently
+certifies only its pinned v0.1 normalized-action API; the AutoEval server's
+newer ``unnormalization_statistics`` call is a distinct unverified profile.
+MiniVLA and SuSIE have distinct source-adapter APIs in
+:mod:`plumb.policies.minivla` and :mod:`plumb.policies.susie`. The historic
+``*Policy`` classes here retain an explicit injection-only compatibility
+boundary. They do not become live loaders merely because a separately named
+adapter exists, and never invent an action on a planning host.
 """
 
 from __future__ import annotations
@@ -14,6 +17,12 @@ from typing import Callable, Optional, Tuple
 from plumb.adapters.contracts import CapabilityStatus, PolicyContract
 
 from .contracts import AUTOEVAL_POLICY_SOURCE_COMMIT, OPEN_PI_ZERO_SOURCE_COMMIT, ExternalPolicyHook, ExternalPolicyProfile, NativePolicyCallable
+from .octo import (
+    OCTO_BASE_V1_CONTRACT,
+    OCTO_SMALL_V1_CONTRACT,
+    OctoBaseV1Policy,
+    OctoSmallV1Policy,
+)
 
 
 AUTOEVAL_POLICY_SOURCE = (
@@ -26,38 +35,7 @@ OPEN_PI_ZERO_SOURCE = (
 )
 MINIVLA_SOURCE = "https://github.com/Stanford-ILIAD/openvla-mini"
 SUSIE_SOURCE = "https://github.com/kvablack/susie"
-OCTO_SOURCE = "https://github.com/octo-models/octo"
 
-
-OCTO_SMALL_V1_CONTRACT = PolicyContract(
-    name="Octo-Small v1.0",
-    required_observation_history=2,
-    requires_proprio=False,
-    native_proposal_horizon=4,
-    certified_execute_prefix=None,
-    temporal_ensembling=True,
-    preprocessing="Released Octo v1.0 Bridge observation wrapper; do not substitute octo-small-1.5.",
-    normalization="Native Octo action statistics; fixture verification required.",
-    reset_rule="Reset two-image history using released wrapper semantics.",
-    rng_rule="Pinned JAX/Octo RNG stream required.",
-    implementation_status=CapabilityStatus.BLOCKED,
-    limitation="Native temporal ensembling and executed prefix are unresolved until wrapper fixtures pass.",
-)
-
-OCTO_BASE_V1_CONTRACT = PolicyContract(
-    name="Octo-Base v1.0 diagnostic",
-    required_observation_history=2,
-    requires_proprio=False,
-    native_proposal_horizon=4,
-    certified_execute_prefix=None,
-    temporal_ensembling=True,
-    preprocessing="Released Octo v1.0 Bridge observation wrapper; diagnostic only, not a primary-matrix policy.",
-    normalization="Native Octo action statistics; fixture verification required.",
-    reset_rule="Reset two-image history using released wrapper semantics.",
-    rng_rule="Pinned JAX/Octo RNG stream required.",
-    implementation_status=CapabilityStatus.BLOCKED,
-    limitation="Diagnostic contract only; no bundled JAX loader or certified prefix.",
-)
 
 MINIVLA_CONTRACT = PolicyContract(
     name="MiniVLA",
@@ -71,7 +49,10 @@ MINIVLA_CONTRACT = PolicyContract(
     reset_rule="Released wrapper reset behavior must be preserved.",
     rng_rule="Pinned Torch RNG stream required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="No bundled MiniVLA/VQ loader; action chunk is declared, executed prefix is not certified.",
+    limitation=(
+        "Legacy compatibility hook only. The distinct source adapter remains blocked until the VQ asset's "
+        "license is resolved and the released one-action VQ boundary is reconciled with the claimed seven-action proposal."
+    ),
 )
 
 OPEN_PI_ZERO_CONTRACT = PolicyContract(
@@ -101,7 +82,10 @@ SUSIE_CONTRACT = PolicyContract(
     reset_rule="Reset diffusion and low-level policy state under the released configuration.",
     rng_rule="Pinned JAX/Flax and diffusion RNG streams required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="Requires separate subgoal/low-level models and fixture-tested cadence; AutoEval gc_bc arm differs from upstream.",
+    limitation=(
+        "Legacy compatibility hook only. The distinct source adapter keeps the AutoEval gc_bc replication arm "
+        "separate from the blocked upstream gc_ddpm_bc sensitivity arm; assets/runtime/cadence still need fixtures."
+    ),
 )
 
 SUSIE_LL_CONTRACT = PolicyContract(
@@ -116,21 +100,15 @@ SUSIE_LL_CONTRACT = PolicyContract(
     reset_rule="Reset released low-level policy state.",
     rng_rule="Pinned JAX/Flax RNG stream required.",
     implementation_status=CapabilityStatus.BLOCKED,
-    limitation="No bundled goal-conditioned low-level loader; exact native execution remains fixture-blocked.",
+    limitation=(
+        "Legacy compatibility hook only. The separately named low-level source adapter remains fixture-blocked "
+        "until its artifacts and JAX/Flax runtime are locally verified."
+    ),
 )
 
 
-class OctoSmallV1Policy(ExternalPolicyHook):
-    def __init__(self, profile: ExternalPolicyProfile, *, loader_hook: Optional[Callable[[ExternalPolicyProfile], NativePolicyCallable]] = None) -> None:
-        super().__init__(OCTO_SMALL_V1_CONTRACT, profile, loader_hook=loader_hook, source_urls=(OCTO_SOURCE, AUTOEVAL_POLICY_SOURCE))
-
-
-class OctoBaseV1Policy(ExternalPolicyHook):
-    def __init__(self, profile: ExternalPolicyProfile, *, loader_hook: Optional[Callable[[ExternalPolicyProfile], NativePolicyCallable]] = None) -> None:
-        super().__init__(OCTO_BASE_V1_CONTRACT, profile, loader_hook=loader_hook, source_urls=(OCTO_SOURCE, AUTOEVAL_POLICY_SOURCE))
-
-
 class MiniVLAPolicy(ExternalPolicyHook):
+    """Legacy injection-only hook; use ``MiniVLAPolicyAdapter`` for source loading."""
     def __init__(self, profile: ExternalPolicyProfile, *, loader_hook: Optional[Callable[[ExternalPolicyProfile], NativePolicyCallable]] = None) -> None:
         super().__init__(MINIVLA_CONTRACT, profile, loader_hook=loader_hook, source_urls=(MINIVLA_SOURCE, AUTOEVAL_POLICY_SOURCE))
 
@@ -141,10 +119,12 @@ class OpenPiZeroPolicy(ExternalPolicyHook):
 
 
 class SuSIEPolicy(ExternalPolicyHook):
+    """Legacy injection-only hook; use ``SuSIEPolicyAdapter`` for source loading."""
     def __init__(self, profile: ExternalPolicyProfile, *, loader_hook: Optional[Callable[[ExternalPolicyProfile], NativePolicyCallable]] = None) -> None:
         super().__init__(SUSIE_CONTRACT, profile, loader_hook=loader_hook, source_urls=(SUSIE_SOURCE, AUTOEVAL_POLICY_SOURCE))
 
 
 class SuSIELowLevelPolicy(ExternalPolicyHook):
+    """Legacy injection-only hook; use ``SuSIELowLevelPolicyAdapter`` for source loading."""
     def __init__(self, profile: ExternalPolicyProfile, *, loader_hook: Optional[Callable[[ExternalPolicyProfile], NativePolicyCallable]] = None) -> None:
         super().__init__(SUSIE_LL_CONTRACT, profile, loader_hook=loader_hook, source_urls=(SUSIE_SOURCE, AUTOEVAL_POLICY_SOURCE))
