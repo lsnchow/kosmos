@@ -42,6 +42,11 @@ EPISODE_RECORD_COLUMNS = (
     ("estimated_usd", "REAL"),
     ("cost_basis_ref", "TEXT"),
     ("exclusion_reason", "TEXT"),
+    # Presentation fields the console reads off the row, so a client that
+    # connects late or reloads rebuilds its wall without replaying every event.
+    ("segments_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("presentation_track", "TEXT"),
+    ("resolution", "INTEGER"),
 )
 
 #: Identity fields supplied when a run is planned.  ``feedback_mode`` and
@@ -71,6 +76,8 @@ _RESULT_MEASUREMENT_FIELDS = (
     "estimated_usd",
     "cost_basis_ref",
     "exclusion_reason",
+    "presentation_track",
+    "resolution",
 )
 
 
@@ -458,8 +465,30 @@ class Ledger:
                 "estimated_usd": self._column(row, "estimated_usd"),
                 "cost_basis_ref": self._column(row, "cost_basis_ref"),
                 "exclusion_reason": self._column(row, "exclusion_reason"),
+                "presentation_track": self._column(row, "presentation_track"),
+                "resolution": self._column(row, "resolution"),
             }
         )
+        # Flatten the persisted segments into the shape the console's wall reads.
+        segments = self._json_column(row, "segments_json", [])
+        frame_urls: List[str] = []
+        certified: Optional[int] = None
+        provenance: Optional[str] = None
+        for segment in segments if isinstance(segments, list) else []:
+            if not isinstance(segment, Mapping):
+                continue
+            frame_urls.extend(str(url) for url in (segment.get("frame_urls") or []))
+            count = segment.get("certified_frame_count")
+            if isinstance(count, int) and not isinstance(count, bool):
+                certified = (certified or 0) + count
+            if provenance is None and segment.get("provenance"):
+                provenance = str(segment["provenance"])
+        record["segments"] = segments if isinstance(segments, list) else []
+        record["frame_urls"] = frame_urls
+        # None, not 0: a segment that did not report a certified count must show
+        # as unreported rather than as a measured zero.
+        record["certified_frame_count"] = certified
+        record["provenance"] = provenance
         # ``video_ref`` is the durable spec-section-8 reference; ``video_url`` is
         # the presentation convenience the console reads.  Prefer an explicit
         # artifact URL and fall back to the durable reference.
@@ -755,6 +784,7 @@ class Ledger:
         for name, column in (
             ("platform_request_ids", "platform_request_ids_json"),
             ("attempt_ids", "attempt_ids_json"),
+            ("segments", "segments_json"),
         ):
             if name in result:
                 fragments.append(column + " = ?")

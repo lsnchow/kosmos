@@ -405,6 +405,7 @@ def normalise_backend_result(
         "exclusion_reason",
         "feedback_mode",
         "parity_status",
+        "presentation_track",
     ):
         if name in raw and raw[name] is not None:
             normalised[name] = str(raw[name])

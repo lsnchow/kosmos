@@ -800,8 +800,24 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
                 segment_events = []
                 for event in service.list_events(run_id, after=last_sequence):
                     last_sequence = max(last_sequence, int(event.get("sequence") or 0))
-                    if event.get("event_type") in ("segment_completed", "episode_completed"):
-                        segment_events.append(event)
+                    # The ledger projects the event kind as "type", not
+                    # "event_type". Reading the wrong key matched nothing and the
+                    # wall silently stayed empty while 1,022 segments existed.
+                    kind = event.get("type")
+                    if kind not in ("segment_completed", "episode_completed"):
+                        continue
+                    payload = event.get("payload")
+                    # Flatten the payload onto the event: the console's wall
+                    # reducer reads episode_id/segment_index/frame_urls directly
+                    # off the event, not from a nested object.
+                    flattened = {
+                        "type": kind,
+                        "sequence": event.get("sequence"),
+                        "timestamp": event.get("timestamp"),
+                    }
+                    if isinstance(payload, Mapping):
+                        flattened.update(payload)
+                    segment_events.append(flattened)
                 data = {
                     "run": run,
                     "tiles": slots,

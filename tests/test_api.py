@@ -147,3 +147,76 @@ def test_imported_smoke_evidence_never_becomes_qualification(tmp_path):
         assert record["latency_seconds"] == 4.5
         assert record["model_load_seconds"] is None
         assert client.get(record["report_url"]).status_code == 200
+
+
+def test_sse_segment_events_use_the_key_the_ledger_actually_projects(tmp_path):
+    """The ledger projects the event kind as `type`, not `event_type`.
+
+    Reading the wrong key matched nothing, so the console's rollout wall stayed
+    empty while the ledger held over a thousand segment events. The mismatch was
+    silent because an empty list is a legitimate state early in a run.
+    """
+
+    from plumb.ledger import Ledger
+
+    ledger = Ledger(tmp_path / "probe.sqlite3")
+    rows = ledger.list_events.__doc__ or ""
+    # Assert the projection contract directly rather than trusting a comment.
+    ledger.create_run(
+        "run-x",
+        {"mode": "synthetic", "backend": "synthetic", "policies": ["OpenVLA"], "tasks": ["close_drawer"]},
+        [
+            {
+                "episode_id": "ep-1",
+                "logical_key": "k",
+                "policy": "OpenVLA",
+                "task": "close_drawer",
+                "start_id": "s",
+                "start_lineage_id": "l",
+                "world_seed": 1,
+                "mode": "synthetic/unqualified",
+                "horizon_actions": 70,
+            }
+        ],
+    )
+    events = ledger.list_events("run-x", after=0)
+    assert events, "run_created must be recorded"
+    assert "type" in events[0], "the projection key is `type`"
+    assert "event_type" not in events[0], (
+        "if this key ever appears, plumb/api.py's SSE filter must be revisited"
+    )
+    assert rows is not None
+
+
+def test_episode_rows_carry_the_presentation_fields_the_console_reads(tmp_path):
+    """A client that connects late or reloads rebuilds its wall from the row."""
+
+    from plumb.ledger import Ledger
+
+    ledger = Ledger(tmp_path / "rows.sqlite3")
+    ledger.create_run(
+        "run-y",
+        {"mode": "synthetic", "backend": "synthetic", "policies": ["OpenVLA"], "tasks": ["close_drawer"]},
+        [
+            {
+                "episode_id": "ep-1",
+                "logical_key": "k",
+                "policy": "OpenVLA",
+                "task": "close_drawer",
+                "start_id": "s",
+                "start_lineage_id": "l",
+                "world_seed": 1,
+                "mode": "qualification/pending-gate-review",
+                "horizon_actions": 70,
+            }
+        ],
+    )
+    row = ledger.list_episodes("run-y")[0]
+    for field_name in ("frame_urls", "certified_frame_count", "provenance", "segments",
+                       "presentation_track", "resolution"):
+        assert field_name in row, field_name
+    # A planned episode has reported nothing, and an unreported certified count
+    # must read as unknown rather than as a measured zero.
+    assert row["frame_urls"] == []
+    assert row["certified_frame_count"] is None
+    assert row["provenance"] is None
