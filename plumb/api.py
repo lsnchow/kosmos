@@ -299,7 +299,7 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
         yield
         pool.shutdown(wait=True)
 
-    app = FastAPI(title="PLUMB", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Nightshift", version="0.2.0", lifespan=lifespan)
     app.state.service = service
     app.state.data_dir = root
     app.state.store = store
@@ -1060,7 +1060,7 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
         @app.get("/")
         def root_status() -> dict:
             return {
-                "service": "PLUMB",
+                "service": "Nightshift",
                 "dashboard": "Run npm --prefix web install && npm --prefix web run build",
                 "docs": "/docs",
             }

@@ -1404,7 +1404,7 @@ def _service_from_args(args: argparse.Namespace) -> AnnotationService:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entrypoint: ``python -m plumb.annotation <command>``."""
 
-    parser = argparse.ArgumentParser(description="PLUMB blinded annotation surface")
+    parser = argparse.ArgumentParser(description="Nightshift blinded annotation surface")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     def shared(command: argparse.ArgumentParser) -> None:

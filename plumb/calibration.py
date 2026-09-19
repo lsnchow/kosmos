@@ -1644,7 +1644,7 @@ def _load_judge_reports(path: Union[str, Path]) -> List[Mapping[str, Any]]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entrypoint: ``python -m plumb.calibration export|report``."""
 
-    parser = argparse.ArgumentParser(description="PLUMB blinded human-calibration workflow")
+    parser = argparse.ArgumentParser(description="Nightshift blinded human-calibration workflow")
     subcommands = parser.add_subparsers(dest="command", required=True)
     export = subcommands.add_parser("export", help="write one blinded annotation packet")
     export.add_argument("--manifest", required=True)

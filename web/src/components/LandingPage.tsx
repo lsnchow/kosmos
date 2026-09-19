@@ -244,7 +244,7 @@ export function LandingPage({
       <div className="landing-body">
         <div className="landing-main">
           <h1 id="landing-wordmark" className="landing-wordmark">
-            PLUMB
+            Nightshift
           </h1>
           <p className="landing-line text-pretty">
             Point us at a policy endpoint and get a ranked report in twenty minutes for a few dollars — with
@@ -415,7 +415,7 @@ export function LandingPage({
       </div>
 
       <footer className="landing-footer">
-        <span>PLUMB measurement console</span>
+        <span>Nightshift measurement console</span>
         <span className="landing-backdrop-note">
           <Film aria-hidden="true" className="size-3.5" />
           Background: {backdrop.label}

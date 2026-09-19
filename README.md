@@ -1,4 +1,4 @@
-# PLUMB
+# Nightshift
 
 A working control plane and measurement console for world-model robot-policy
 evaluation. The full scientific scope remains in [AGENT-BUILD-SPEC.md](AGENT-BUILD-SPEC.md).

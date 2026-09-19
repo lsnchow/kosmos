@@ -2,7 +2,7 @@
 
 ## Mirage (design language and landing-page patterns)
 
-PLUMB's console theme and landing page adapt the visual language of **Mirage**
+Nightshift's console theme and landing page adapt the visual language of **Mirage**
 (https://github.com/kyan-yang/Mirage), a TreeHacks 2026 project by Shrey
 Birmiwal, Kyan Yang, Kevin Thomas and Adi Prasad.
 
@@ -13,14 +13,14 @@ underline, and the example-gallery card pattern.
 
 Three component *shapes* were also ported, rewritten rather than copied:
 
-| PLUMB | Adapted from |
+| Nightshift | Adapted from |
 |---|---|
 | `TabSelector` | `TabSelector.tsx` — generalised, with `role="tablist"`, `aria-selected` and arrow-key navigation added |
-| `StageLadder` | `ProgressSteps.tsx` — the labelled left-rail pipeline, re-aimed at PLUMB's four-stage Chain and given a "not reported" state |
+| `StageLadder` | `ProgressSteps.tsx` — the labelled left-rail pipeline, re-aimed at Nightshift's four-stage Chain and given a "not reported" state |
 | `GalleryModal` | `GalleryModal.tsx` — keeps its portal-to-`document.body` fix (commit `db98e0f`), adds a focus trap and focus restoration |
 
 What was **not** taken: none of Mirage's stylesheet, pipeline, models, or data,
-and none of its application logic. PLUMB's state, data model, copy and
+and none of its application logic. Nightshift's state, data model, copy and
 accessibility work are its own.
 
 Mirage is MIT licensed. Its notice is reproduced in full below as that licence

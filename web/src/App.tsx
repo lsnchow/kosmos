@@ -279,9 +279,9 @@ export default function App() {
         Skip to console
       </a>
       <header className="topbar">
-        <a className="brand" href="#main" aria-label="PLUMB landing page">
-          <span className="brand-mark">P</span>
-          <span>PLUMB</span>
+        <a className="brand" href="#main" aria-label="Nightshift landing page">
+          <span className="brand-mark">N</span>
+          <span>Nightshift</span>
         </a>
         <nav aria-label="Console sections">
           <a href="#stages">Chain</a>
@@ -343,7 +343,7 @@ export default function App() {
             </p>
             <h1 className="text-balance">Measure the ruler before trusting the ranking.</h1>
             <p className="masthead-copy text-pretty">
-              PLUMB keeps generated-rollout evidence, the published real-robot reference, missingness and
+              Nightshift keeps generated-rollout evidence, the published real-robot reference, missingness and
               runtime accounting in one console. No qualified real-world conclusion is available until its
               gates pass.
             </p>
@@ -481,7 +481,7 @@ export default function App() {
         </section>
 
         <footer className="footer-note">
-          <span>PLUMB measurement console</span>
+          <span>Nightshift measurement console</span>
           <span>
             Sources: application ledger, persisted artifacts, declared platform telemetry, and published
             reference.

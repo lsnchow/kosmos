@@ -99,7 +99,7 @@ function renderLanding(
 describe("<LandingPage /> wordmark and positioning", () => {
   it("leads with the wordmark and one positioning line", () => {
     renderLanding();
-    expect(screen.getByRole("heading", { level: 1, name: "PLUMB" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nightshift" })).toBeInTheDocument();
     expect(
       screen.getByText(
         /Point us at a policy endpoint and get a ranked report in twenty minutes for a few dollars/i,

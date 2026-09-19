@@ -387,7 +387,7 @@ describe("PLUMB console against the current backend responses", () => {
 describe("PLUMB landing page over the console", () => {
   it("opens on the wordmark with the console still in the document", async () => {
     await renderConsole();
-    expect(screen.getByRole("heading", { level: 1, name: "PLUMB" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nightshift" })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /Measure the ruler before trusting the ranking/i }),
     ).toBeInTheDocument();
