@@ -1,6 +1,9 @@
 # Start message for a new chat named num2
 
 Continue implementing PLUMB in /Users/lucas/Desktop/tax_stuff/htn26.
+Current tested branch: num2-verified-continuation. Kevin concurrently advanced
+origin/main to6625b17; do NOT force-push or blindly select one side of conflicts.
+Read INTEGRATION-HANDOFF.md before integrating the parallel implementations.
 Read HANDOFF.md and CLUSTER-OPERATIONS.md completely, then AGENT-BUILD-SPEC.md,
 PASS-OFF.md and README.md. The full project is NOT done.
 
@@ -25,7 +28,7 @@ integration, calibration tooling and full-study infrastructure. Missing human
 labels, task panels and credentials must not be fabricated. Keep the complete
 six-policy/five-task/1500-episode scope and measurement/demo requirements.
 
-Private repo: https://github.com/lsnchow/htn26, main. kevinvalenciaa has ACTIVE
+Private repo: https://github.com/lsnchow/htn26. kevinvalenciaa has ACTIVE
 write access. Source is pushed; models/local data deliberately are not.
 The num2 continuation implemented durable cloud delivery, scenario/calibration
 workflows, full-study planning/validation, distillation preparation, and new

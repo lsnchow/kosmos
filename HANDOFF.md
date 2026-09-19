@@ -7,6 +7,14 @@ for this continuation. Read this section first, then the workflow documents as
 needed. The full scientific project is not complete. Local API runs in tmux
 `plumb-api`; source code is separate from ignored local/cluster evidence.
 
+**Parallel-main update:** the tested continuation is preserved on branch
+`num2-verified-continuation` (implementation commit `f5eddee`). During execution
+Kevin advanced `origin/main` to `6625b17` with another substantial build.
+No force-push or automatic merge was performed. Read
+[INTEGRATION-HANDOFF.md](INTEGRATION-HANDOFF.md) before combining them:14 paths
+have conflicts, and their interfaces need deliberate integration. Test results
+here apply to the continuation branch, not the unreviewed combined system.
+
 The continuation implements additional control-plane and study tooling. The
 full scientific study is still blocked; no primary result, physical-fidelity,
 Baseten deployment, or speed/cost claim is established. All prior raw evidence
@@ -175,8 +183,10 @@ submission are disabled. No existing run was active during restart.
    object storage, account-tested lifecycle APIs, capacity and pricing; then
    actual full-matrix execution, drift/cost sweeps, held-out confirmation,
    distillation training/fresh calibration, and three complete rehearsals.
-4. Recover the original reverse-validation question/script and other absent
-   original handoff material; do not invent the missing experiment.
+4. Newer `origin/main` now contains `BUILD-SPEC.md`, `SCRIPT.md`, and
+   `reverse_validation.py`. They are not merged into this tested branch;
+   verify provenance and reconcile them with the reviewed spec before treating
+   the prior missing-original-material requirement as resolved.
 
 Model weights remain only on clusters. The private source repo deliberately
 excludes `data/`, environments and model artifacts. Preserve all failed and
