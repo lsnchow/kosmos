@@ -42,11 +42,26 @@ export function burstIdentity(input: {
  *
  * With a derived key the second POST matches the first row, the server returns
  * the existing run, and no second execution is scheduled.
+ *
+ * That alone was too strong. Every input to the identity is a constant, so the
+ * key was constant *forever*: the pre-roll burst started before the pitch and
+ * the burst pressed on stage derived the same key, the server returned the
+ * already-finished pre-roll run, no tile ignited, and the forty-second beat was
+ * dead air.
+ *
+ * `attempt` restores the distinction the key is actually meant to draw. It is
+ * held while a run is alive, so a duplicate submission still collapses into the
+ * run already going; it advances once that run is terminal, so a deliberate
+ * second run gets a key of its own.
  */
-export function burstIdempotencyKey(identity: BurstIdentity): string {
-  return `plumb-burst-${stableHashHex(canonicalJson(identity))}`;
+export function burstIdempotencyKey(identity: BurstIdentity, attempt = 0): string {
+  // `attempt` enters the hash but never the request body, so every attempt
+  // submits an identical run configuration under a different key. That matters:
+  // the ledger refuses a key it has already seen against a *different* config,
+  // and accepts a new key for the same one.
+  return `plumb-burst-${stableHashHex(canonicalJson({ ...identity, attempt }))}`;
 }
 
-export function burstRequestBody(identity: BurstIdentity): CreateRunBody {
-  return { ...identity, idempotency_key: burstIdempotencyKey(identity) };
+export function burstRequestBody(identity: BurstIdentity, attempt = 0): CreateRunBody {
+  return { ...identity, idempotency_key: burstIdempotencyKey(identity, attempt) };
 }

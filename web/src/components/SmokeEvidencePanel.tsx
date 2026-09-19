@@ -1,4 +1,4 @@
-import { Activity, ExternalLink, ShieldAlert } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { artifactUrl, type Experiment } from "../lib/api";
 import {
   formatBytes,
@@ -7,6 +7,7 @@ import {
   joinStrings,
   pickNumber,
   pickString,
+  formatCountPair,
 } from "../lib/format";
 import { EmptyState, Note, Panel, StatusPill } from "./Primitives";
 
@@ -85,9 +86,9 @@ export function experimentProfile(experiment: Experiment): Profile {
  */
 export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] }) {
   return (
-    <Panel title="Real model smoke evidence" eyebrow="Imported cluster report" className="smoke-panel">
+    <Panel title="Real model smoke evidence" className="smoke-panel">
       {experiments.length === 0 ? (
-        <EmptyState className="smoke-empty" icon={<Activity aria-hidden="true" className="size-5" />}>
+        <EmptyState className="smoke-empty" icon={<Glyph name="activity" />}>
           No imported real-model smoke report has been returned by the API.
         </EmptyState>
       ) : (
@@ -112,9 +113,9 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
             return (
               <article className="smoke-card" key={pickString(experiment.id, experiment.report_url) ?? index}>
                 <div className="smoke-card-topline">
-                  <div className="truncate">
-                    <strong className="truncate">{profile.title}</strong>
-                    <span className="truncate">{label}</span>
+                  <div>
+                    <strong>{profile.title}</strong>
+                    <span>{label}</span>
                   </div>
                   <StatusPill status={experiment.qualification ?? "unknown"}>
                     {String(experiment.qualification ?? "unknown")}
@@ -151,7 +152,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                     <dd>
                       {ticksCompleted === undefined && ticksRequested === undefined
                         ? "—"
-                        : `${formatCount(ticksCompleted)} / ${formatCount(ticksRequested)}`}
+                        : formatCountPair(ticksCompleted, ticksRequested)}
                     </dd>
                   </div>
                   {actionDimensions !== undefined && (
@@ -192,7 +193,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                       rel="noreferrer"
                       aria-label={`Open report for ${label}, ${experiment.id ?? profile.title} (new tab)`}
                     >
-                      Report <ExternalLink aria-hidden="true" className="size-3" />
+                      Report <Glyph name="arrowUpRight" />
                     </a>
                   )}
                   {videoUrl && (
@@ -202,18 +203,18 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                       rel="noreferrer"
                       aria-label={`Open video for ${label}, ${experiment.id ?? profile.title} (new tab)`}
                     >
-                      Open video <ExternalLink aria-hidden="true" className="size-3" />
+                      Open video <Glyph name="arrowUpRight" />
                     </a>
                   )}
                 </div>
                 {profile.needsIntegrityWarning && (
                   <p className="smoke-warning text-pretty">
-                    <ShieldAlert aria-hidden="true" className="size-4" />
+                    <Glyph name="alert" />
                     World-video integrity: unknown. Inspecting a distorted frame does not establish fidelity.
                   </p>
                 )}
                 {notes && <p className="smoke-notes text-pretty">{notes}</p>}
-                <Note>
+                <Note summary="What this imported report covers">
                   {profile.context} Runtime completion does not mean task success; timings are stage-scoped,
                   not cross-kind throughput comparisons.
                 </Note>

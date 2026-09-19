@@ -56,7 +56,7 @@ MINIVLA_ACTION_CHUNK = 7
 MINIVLA_REFUSED_WEIGHT_SUFFIXES = (".pt", ".pth", ".pkl", ".bin", ".ckpt")
 MINIVLA_VQ_LICENSE_STATUS = "absent_cardData_null"
 MINIVLA_VQ_REDISTRIBUTION = "prohibited_pending_resolution"
-KNOWN_LICENSE_STATUSES = ("declared", "advertised_unverified", "absent_cardData_null", "unresolved")
+KNOWN_LICENSE_STATUSES = ("declared", "verified", "advertised_unverified", "absent_cardData_null", "unresolved")
 
 
 class MiniVLAUnavailableError(PolicyLoadError):

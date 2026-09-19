@@ -1428,7 +1428,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ):
         return _calibration_main(arguments)
 
-    parser = argparse.ArgumentParser(description="PLUMB blinded annotation surface")
+    parser = argparse.ArgumentParser(description="Nightshift blinded annotation surface")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     def shared(command: argparse.ArgumentParser) -> None:

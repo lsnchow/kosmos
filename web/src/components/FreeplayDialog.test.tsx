@@ -12,7 +12,9 @@ const OK_CHUNK = {
   generating: false,
   qualified: false,
   backend: "irasim@c72b6da",
-  resolution: "480x480",
+  requested_resolution: 480,
+  frame_height: 480,
+  frame_width: 480,
   action_clamp: 0.03,
   chunk_size: 16,
   reason: "Unscored free-play; no qualified world fidelity is claimed.",
@@ -193,5 +195,27 @@ describe("<FreeplayDialog />", () => {
     gate.resolve(OK_CHUNK);
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(JSON.parse(calls[1].body ?? "{}").direction).toBe("left");
+  });
+
+  it("captions the frames' measured size, not the size that was requested", async () => {
+    // The 480p request is answered with 64px frames. Printing "480x480" here
+    // would caption a rehearsal frame with a resolution nothing produced, which
+    // is the one claim this panel makes on stage.
+    mockFetch({
+      "/api/freeplay/step": { ...OK_CHUNK, requested_resolution: 480, frame_height: 64, frame_width: 64 },
+    });
+    open();
+    await userEvent.keyboard("{ArrowRight>}");
+    expect(await screen.findByText("64x64")).toBeInTheDocument();
+    expect(screen.queryByText("480x480")).not.toBeInTheDocument();
+  });
+
+  it("says so when the Chain reports no frame dimensions", async () => {
+    mockFetch({
+      "/api/freeplay/step": { ...OK_CHUNK, frame_height: null, frame_width: null },
+    });
+    open();
+    await userEvent.keyboard("{ArrowRight>}");
+    expect(await screen.findByText("resolution not reported")).toBeInTheDocument();
   });
 });

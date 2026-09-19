@@ -82,8 +82,7 @@ class SyntheticBackend:
         colour = "#36d399" if success else "#f87171"
         svg = """<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"180\" viewBox=\"0 0 320 180\" role=\"img\" aria-label=\"Synthetic engineering test fixture\">
   <rect width=\"320\" height=\"180\" fill=\"#102033\"/>
-  <text x=\"12\" y=\"20\" font-family=\"monospace\" font-size=\"10\" fill=\"#fbbf24\">SYNTHETIC — UNQUALIFIED ENGINEERING TEST ARTIFACT</text>
-  <text x=\"12\" y=\"35\" font-family=\"monospace\" font-size=\"9\" fill=\"#cbd5e1\">NOT REAL ROBOT / NOT PHYSICS SIMULATION</text>
+  <text x=\"12\" y=\"20\" font-family=\"monospace\" font-size=\"9\" fill=\"#fbbf24\">SYNTHETIC FIXTURE — NOT A ROBOT, NOT A SIMULATION</text>
   <rect x=\"24\" y=\"145\" width=\"272\" height=\"12\" rx=\"3\" fill=\"#334155\"/>
   <line x1=\"80\" y1=\"150\" x2=\"%d\" y2=\"%d\" stroke=\"#93c5fd\" stroke-width=\"10\" stroke-linecap=\"round\"/>
   <circle cx=\"%d\" cy=\"%d\" r=\"12\" fill=\"%s\"/>
@@ -125,6 +124,28 @@ class SyntheticBackend:
             "fixture_frame": _relative_ref(artifact_dir, frame_path, "image/svg+xml"),
             "manifest": _relative_ref(artifact_dir, manifest_path, "application/json"),
         }
+
+        # One segment per chunk of actions, so a fixture rollout extends on the
+        # wall the way a real one does instead of appearing whole. The frames are
+        # the same placard repeated: this fixture does not generate video, and a
+        # segment that looked like it had is the misreading the label exists to
+        # prevent. `certified_frame_count` stays absent because nothing certified
+        # it -- the tile reads "uncertified", which is true.
+        horizon = int(episode.get("horizon_actions") or horizon_for(str(episode["task"])))
+        chunk = int(episode.get("action_chunk_size") or 16)
+        frame_url = refs["fixture_frame"].get("artifact_path") if isinstance(refs["fixture_frame"], Mapping) else None
+        segments = []
+        if frame_url:
+            for index in range(max(1, -(-horizon // chunk))):
+                segments.append(
+                    {
+                        "segment_index": index,
+                        "frame_urls": [frame_url],
+                        "certified_frame_count": None,
+                        "provenance": None,
+                        "status": "completed",
+                    }
+                )
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         if missing:
             return {
@@ -132,7 +153,7 @@ class SyntheticBackend:
                 "binary_success": None,
                 "progress_score": None,
                 "missing_reason": "synthetic_fixture_missing_label",
-                "horizon_actions": horizon_for(str(episode["task"])),
+                "horizon_actions": int(episode.get("horizon_actions") or horizon_for(str(episode["task"]))),
                 "artifact_refs": refs,
                 "timing": {"fixture_generation_ms": elapsed_ms, "source": "synthetic"},
                 "backend_metadata": {"label": SYNTHETIC_LABEL, "fixture_seed": fixture_seed},
@@ -142,8 +163,10 @@ class SyntheticBackend:
             "binary_success": success,
             "progress_score": progress,
             "missing_reason": None,
-            "horizon_actions": horizon_for(str(episode["task"])),
+            "horizon_actions": int(episode.get("horizon_actions") or horizon_for(str(episode["task"]))),
             "artifact_refs": refs,
             "timing": {"fixture_generation_ms": elapsed_ms, "source": "synthetic"},
             "backend_metadata": {"label": SYNTHETIC_LABEL, "fixture_seed": fixture_seed},
+            "segments": segments,
+            "n_segments": len(segments),
         }

@@ -12,7 +12,7 @@ export function RunLedgerPanel({
   onSelect: (run: Run) => void;
 }) {
   return (
-    <Panel title="Run ledger" eyebrow="Application ledger">
+    <Panel title="Run ledger">
       <label className="select-label" htmlFor="run-select">
         Inspect persisted run
       </label>
@@ -41,7 +41,7 @@ export function RunLedgerPanel({
         <DataValue label="Cancelled" value={formatCount(activeRun?.cancelled)} source="Explicit terminal records" />
         <DataValue label="Successes" value={formatCount(activeRun?.successes)} source="Evaluable positives" />
       </div>
-      <Note>
+      <Note summary="What counts as an episode">
         These are logical episodes, not request attempts: a transport retry creates an attempt, never a new
         statistical episode. The ledger exposes no separate submitted or excluded counter, so neither is
         derived by subtraction here.

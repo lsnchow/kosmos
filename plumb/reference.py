@@ -199,7 +199,7 @@ def reference_payload() -> Dict[str, Any]:
             "name": "AutoEval",
             "human_table": "Table 2",
             "simpler_table": "Table 3",
-            "note": "Published comparator data; not PLUMB outcomes.",
+            "note": "Published comparator data; not Nightshift outcomes.",
         },
         "trials_per_cell": REFERENCE_TRIALS_PER_CELL,
         "policy_ids": list(POLICY_IDS),

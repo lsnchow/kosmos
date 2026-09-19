@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional
 
 from .gates import GateLedger, GateStatus
 from .ledger import LeaseActiveError, Ledger
+from .gates import EXACT_TASK_PROMPTS
 from .records import (
     BACKENDS,
     RUN_MODES,
@@ -132,6 +133,11 @@ class RunService:
         judge_identity = dict(identity.get("judge") or {})
         variants = config.get("policy_variants") or {}
         starts = config.get("starts") or {}
+        # Free-text prompts arrive here as ordinary tasks whose id is not in the
+        # frozen registry. The instruction travels with the episode so the wall,
+        # the ledger and any backend can render what was actually asked for.
+        task_prompts = dict(config.get("task_prompts") or {})
+        horizons = dict(config.get("horizons") or {})
         for policy in config["policies"]:
             for task in config["tasks"]:
                 task_starts = starts.get(task) or []
@@ -158,7 +164,12 @@ class RunService:
                             "start_lineage_id": lineage,
                             "world_seed": world_seed,
                             "mode": episode_mode,
-                            "horizon_actions": horizon_for(task),
+                            "horizon_actions": int(horizons.get(task) or horizon_for(task)),
+                            "task_instruction": task_prompts.get(task, EXACT_TASK_PROMPTS.get(task)),
+                            # Whether a human score exists to compare against.
+                            # The badge on the tile reads this; it is a property
+                            # of the task, not a judgement about the rollout.
+                            "benchmark_task": task not in task_prompts,
                             "schema_version": 1,
                             "cohort": cohort,
                             "protocol_hash": protocol_hash,

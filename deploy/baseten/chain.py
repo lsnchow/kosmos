@@ -277,6 +277,35 @@ class StageRequest(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
 
+class FreeplayPayload(BaseModel):
+    """One unscored, operator-driven world-model call.
+
+    Free-play exists to answer "are those pre-recorded?" live, so it deliberately
+    skips the policy, the validity gate and the judge: the keypress becomes an
+    action chunk and goes straight to the world model.  That makes it the one
+    path where no learned policy is in the loop, and the on-screen copy says so.
+
+    Nothing here is scored, and ``seed`` is still mandatory for the same reason
+    it is in ``_world_setup``: defaulting it would replace the protocol's RNG
+    lineage, and a free-play frame a viewer cannot reproduce is worth less than
+    one they can.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1, max_length=128)
+    prompt: str = Field(min_length=1, max_length=4096)
+    compatibility_profile_id: str = Field(min_length=1, max_length=256)
+    domain: str = Field(min_length=1, max_length=256)
+    seed: int
+    conditioning_image: FramePayload
+    # Bridge 7-D rows, already compiled: free-play commands a constant direction
+    # rather than asking a policy for one, so there is nothing to compile.
+    actions: List[List[float]] = Field(min_length=1, max_length=64)
+    control_hz: float = Field(default=5.0, gt=0.0, le=1000.0)
+    source_state_lineage_id: Optional[str] = None
+
+
 class ResultStoreBindingPayload(BaseModel):
     """Secret-free object identity supplied by the durable application outbox."""
 
@@ -301,6 +330,10 @@ class RolloutRequest(BaseModel):
     world: StageRequest
     validity: StageRequest
     judge: StageRequest
+    # When set, the controller takes the unscored free-play path and ignores the
+    # policy, validity and judge payloads. The stage refs stay required so
+    # episode-identity matching is enforced on this path too.
+    freeplay: Optional[FreeplayPayload] = None
     result_store: Optional[ResultStoreBindingPayload] = None
 
     def matching_episode_requests(self) -> bool:
@@ -448,6 +481,11 @@ class RolloutResult(BaseModel):
     feedback_mode: Optional[str] = None
     physical_state_measured: bool = False
     world_calls: int = 0
+    # Populated only on the free-play path. The scored path deliberately returns
+    # hashes rather than pixels, because its frames are persisted by the
+    # application control plane from segment events; free-play has no such
+    # record, so its frames travel back with the result or not at all.
+    freeplay_frames: List[FramePayload] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -3264,6 +3302,107 @@ if CHAINS_RUNTIME_AVAILABLE:
                 }
             )
 
+        async def _run_freeplay(self, request: RolloutRequest, *, started: float) -> RolloutResult:
+            """One world-model call driven by an operator keypress.
+
+            No policy, no validity gate and no judge run here, so the result is
+            marked unscored: ``qualified`` stays False, ``binary_success`` and
+            ``validity`` stay None. Returning "valid" or a success flag from a
+            path that ran neither check would be the exact fabrication the rest
+            of this Chain refuses.
+            """
+
+            play = request.freeplay
+            assert play is not None  # guarded by the caller
+            if any(len(row) != 7 for row in play.actions):
+                return self._terminal(
+                    request, "failed", "freeplay_actions_must_be_7d_bridge_rows", started=started
+                )
+            try:
+                decode_frame(play.conditioning_image)
+            except ValueError as error:
+                return self._terminal(
+                    request, "failed", "freeplay_conditioning_frame_invalid: %s" % error, started=started
+                )
+
+            count = len(play.actions)
+            payload: Dict[str, Any] = {
+                "compatibility_profile_id": play.compatibility_profile_id,
+                "domain": play.domain,
+                "prompt": play.prompt,
+                "conditioning_image": play.conditioning_image.model_dump(),
+                "compiled_actions": [[float(value) for value in row] for row in play.actions],
+                "nominal_control_timestamps": [(index + 1) / play.control_hz for index in range(count)],
+                # Same derivation as a scored segment at offset 0, so a free-play
+                # frame is reproducible from the seed the operator was shown.
+                "seed": segment_world_seed(play.seed, 0),
+                "feedback_mode": "unqualified",
+                "request_id": "%s:freeplay" % request.episode_id,
+                "return_frames": True,
+            }
+            if play.source_state_lineage_id is not None:
+                payload["source_state_lineage_id"] = play.source_state_lineage_id
+
+            world_stage = await self._world.run_remote(
+                StageRequest(
+                    episode_id=request.episode_id,
+                    protocol_hash=request.protocol_hash,
+                    payload=payload,
+                )
+            )
+            timings = [world_stage.timing] if world_stage.timing is not None else []
+            if world_stage.status != "completed" or not world_stage.output:
+                return self._terminal(
+                    request,
+                    world_stage.status if world_stage.status != "completed" else "blocked",
+                    "stage_world_%s" % world_stage.status,
+                    started=started,
+                    stages=[world_stage],
+                    timings=timings,
+                    world_calls=1,
+                )
+            accumulated = _accumulate_segment_frames(world_stage.output, count)
+            if isinstance(accumulated, str):
+                return self._terminal(
+                    request, "failed", accumulated, started=started, stages=[world_stage],
+                    timings=timings, world_calls=1,
+                )
+            frames, conditioning_dropped = accumulated
+            timestamps = [(index + 1) / play.control_hz for index in range(len(frames))]
+            segment = SegmentResult(
+                index=0,
+                action_offset=0,
+                action_count=count,
+                policy_arm="freeplay_no_policy",
+                compiled_actions=[[float(value) for value in row] for row in play.actions],
+                generated_frame_pixel_hashes=[
+                    frame.pixels_sha256 for frame in frames if frame.pixels_sha256 is not None
+                ],
+                nominal_frame_timestamps=list(timestamps),
+                conditioning_frame_dropped=conditioning_dropped,
+                world_request_id=payload["request_id"],
+                feedback_mode="unqualified",
+                timings=list(timings),
+                status="completed",
+            )
+            result = self._terminal(
+                request,
+                "completed",
+                None,
+                started=started,
+                stages=[world_stage],
+                timings=timings,
+                segments=[segment],
+                executed=count,
+                horizon=count,
+                frames=frames,
+                timestamps=timestamps,
+                world_calls=1,
+                feedback_mode="unqualified",
+            )
+            result.freeplay_frames = list(frames)
+            return result
+
         async def run_remote(self, request: RolloutRequest) -> RolloutResult:
             """Run then conditionally persist every terminal result before return."""
 
@@ -3307,6 +3446,8 @@ if CHAINS_RUNTIME_AVAILABLE:
                     status="failed",
                     missing_reason="stage_request_identity_mismatch",
                 )
+            if request.freeplay is not None:
+                return await self._run_freeplay(request, started=started)
             try:
                 episode = EpisodeControlPayload.model_validate(request.policy.payload)
             except Exception as error:  # noqa: BLE001 - explicit caller failure

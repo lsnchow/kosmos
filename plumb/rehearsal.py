@@ -360,6 +360,11 @@ class RehearsalChainTransport:
         # has neither (it only supplies setup metadata).
         horizon = int(policy_payload.get("horizon_actions") or 0)
         operating_point = scoring_payload.get("operating_point") or {}
+        freeplay = model_input.get("freeplay")
+        if isinstance(freeplay, Mapping):
+            result = self._build_freeplay_result(run_id, episode_id, freeplay)
+            self._deliver_result(request_id, result_key, run_id, episode_id, result, webhook)
+            return
         payload = {"horizon_actions": horizon, "operating_point": operating_point}
         chunk = int((operating_point or {}).get("action_chunk_size") or 16)
         chunks = max(1, -(-horizon // chunk)) if horizon else 1
@@ -367,6 +372,17 @@ class RehearsalChainTransport:
         time.sleep(sum(timings.values()))
 
         result = self._build_result(run_id, episode_id, chunks, timings, payload)
+        self._deliver_result(request_id, result_key, run_id, episode_id, result, webhook)
+
+    def _deliver_result(
+        self,
+        request_id: str,
+        result_key: str,
+        run_id: str,
+        episode_id: str,
+        result: Mapping[str, Any],
+        webhook: str,
+    ) -> None:
         # A webhook is only a notification. Publish the result before trying
         # delivery so an intentionally dropped webhook remains recoverable.
         self._persist_result(result_key, result)
@@ -416,6 +432,62 @@ class RehearsalChainTransport:
                 with self._lock:
                     self.stats.webhooks_dropped += 1
 
+    def _build_freeplay_result(
+        self, run_id: str, episode_id: str, freeplay: Mapping[str, Any]
+    ) -> Dict[str, Any]:
+        """Simulate the Chain's unscored free-play branch.
+
+        Returns the frames inline as the real branch does, and keeps every
+        scored field null: no validity, no binary outcome, no judge status.
+        Filling any of them from a path that ran none of those stages is the
+        fabrication this transport exists to make impossible.
+        """
+
+        import base64
+
+        from .starts import _solid_png
+
+        actions = freeplay.get("actions") or []
+        count = len(actions) if isinstance(actions, (list, tuple)) else 0
+        time.sleep(self.profile.stage_seconds(1).get("world", 0.0))
+        frames: List[Dict[str, Any]] = []
+        for index in range(count):
+            # Drab and obviously synthetic, for the same reason as the segment
+            # placards: a rehearsal frame that looked like a real rollout would
+            # be the most misleading artifact this project could produce.
+            png = _solid_png(64, 64, 24, 24 + (index * 2) % 40, 32)
+            frames.append(
+                {
+                    "encoding": "png_base64",
+                    "data": base64.b64encode(png).decode("ascii"),
+                    "png_sha256": hashlib.sha256(png).hexdigest(),
+                    "nominal_timestamp": (index + 1) / 5.0,
+                    "height": 64,
+                    "width": 64,
+                }
+            )
+        return {
+            "run_id": run_id,
+            "episode_id": episode_id,
+            "protocol_hash": str(freeplay.get("protocol_hash") or ""),
+            "status": "completed",
+            "stages": {},
+            "stage_history": [],
+            "executed_actions": count,
+            "horizon_actions": count,
+            "segments": [],
+            "timings": [],
+            "frame_pixel_hashes": [],
+            "nominal_timestamps": [frame["nominal_timestamp"] for frame in frames],
+            "freeplay_frames": frames,
+            "validity": None,
+            "binary_success": None,
+            "judge_status": None,
+            "qualified": False,
+            "feedback_mode": "unqualified",
+            "world_calls": 1,
+            "transport": SIMULATED_TRANSPORT,
+        }
     def _result_path(self, request_id: str) -> Path:
         return self._result_dir / ("%s.json" % _safe(request_id))
 
@@ -706,6 +778,12 @@ def _validate_against_chain_contract(model_input: Mapping[str, Any]) -> Optional
         request = models["RolloutRequest"].model_validate(dict(model_input))
     except Exception as exc:
         return "RolloutRequest: %s" % _first_line(exc)
+    # Free-play takes the controller's own branch: no policy, no validity gate,
+    # no judge, and the world payload is built from the freeplay block rather
+    # than read via _world_setup. Validating the scored contract here would
+    # reject an envelope the Chain accepts.
+    if getattr(request, "freeplay", None) is not None:
+        return None
     try:
         models["EpisodeControlPayload"].model_validate(dict(request.policy.payload or {}))
     except Exception as exc:

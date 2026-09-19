@@ -40,12 +40,16 @@ const PAD_BOTTOM = 56;
 
 /**
  * Series identity is carried by hue *and* dash *and* a direct end label, so it
- * never depends on color alone. The two hues pass the dark-surface lightness
- * band, chroma floor, CVD separation and 3:1 contrast checks.
+ * never depends on color alone.
+ *
+ * The hues are the palette's own `--series-*` tokens rather than literals, so
+ * they cannot drift away from the stylesheet the way the previous pair did.
+ * Both clear 3:1 against the panel surface (lime 12.6:1, blue 9.9:1), which is
+ * asserted in styles.contrast.test.ts.
  */
 const SERIES = [
-  { key: "active" as const, label: "Active", color: "#d97706", dash: undefined },
-  { key: "desired" as const, label: "Desired", color: "#0284c7", dash: "10 8" },
+  { key: "active" as const, label: "Active", color: "var(--series-active)", dash: undefined },
+  { key: "desired" as const, label: "Desired", color: "var(--series-desired)", dash: "10 8" },
 ];
 
 function niceMax(values: number[]): number {
@@ -163,14 +167,14 @@ export function ReplicaChart({
                     cx={xFor(run[0].index)}
                     cy={yFor(run[0].value)}
                     r={6}
-                    fill={series.color}
+                    style={{ fill: series.color }}
                   />
                 ) : (
                   <polyline
                     key={runIndex}
                     points={points}
                     fill="none"
-                    stroke={series.color}
+                    style={{ stroke: series.color }}
                     strokeWidth={4}
                     strokeDasharray={series.dash}
                     strokeLinecap="round"
@@ -185,8 +189,7 @@ export function ReplicaChart({
                     cx={xFor(lastPoint.index)}
                     cy={yFor(lastPoint.value)}
                     r={7}
-                    fill={series.color}
-                    stroke="#0b1220"
+                    style={{ fill: series.color, stroke: "var(--surface-1)" }}
                     strokeWidth={2}
                   />
                   <text
@@ -219,7 +222,7 @@ export function ReplicaChart({
                 x2="25"
                 y1="6"
                 y2="6"
-                stroke={series.color}
+                style={{ stroke: series.color }}
                 strokeWidth="4"
                 strokeDasharray={series.dash}
                 strokeLinecap="round"

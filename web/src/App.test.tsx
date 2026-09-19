@@ -1,8 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
-import App from "./App";
-import { http, installEventSource, mockFetch } from "./test/harness";
+import { MemoryRouter } from "react-router-dom";
+import { AppDataProvider } from "./AppData";
+import { AppRoutes } from "./App";
+import { FakeEventSource, http, installEventSource, mockFetch } from "./test/harness";
 
 const PROTOCOL = {
   policies: ["OpenVLA", "OpenPiZero", "Octo", "MiniVLA", "SuSIE", "SuSIE_LL"],
@@ -209,90 +211,343 @@ function installRoutes() {
   });
 }
 
-async function renderConsole() {
+
+/**
+ * Pages mount under a router, so a test renders one route rather than the whole
+ * document. `MemoryRouter` keeps navigation in memory; `AppDataProvider` is the
+ * store every page reads from, and it holds the poll and the event stream, so
+ * it wraps the router rather than sitting inside it.
+ */
+async function renderAt(route: string, heading: RegExp) {
   installEventSource();
   const routes = installRoutes();
-  const view = render(<App />);
-  await screen.findByRole("heading", { name: /Measure the ruler before trusting the ranking/i });
-  await waitFor(() => expect(screen.getByText("irasim@c72b6da")).toBeInTheDocument());
+  const view = render(
+    <AppDataProvider>
+      <MemoryRouter initialEntries={[route]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </AppDataProvider>,
+  );
+  await screen.findByRole("heading", { level: 1, name: heading });
   return { ...view, ...routes };
 }
 
-describe("PLUMB console", () => {
-  it("renders every demo beat", async () => {
-    await renderConsole();
-    expect(screen.getByRole("link", { name: "Development review" })).toHaveAttribute("href", "/review");
-    expect(screen.getByRole("heading", { name: /Real or generated\?/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /The called shot/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Rollout viewport/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Full-matrix burst/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Cost–fidelity operating point/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /480p presentation rollout/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
+const overview = () => renderAt("/console", /Measure the ruler before trusting the ranking/i);
+const live = async () => {
+  const view = await renderAt("/live", /^Live run$/i);
+  // Wait on something the *episodes* produce, not on protocol data. The wall's
+  // tiles only exist once /api/runs/run-1/episodes has landed; waiting on a
+  // protocol field instead let the test proceed with an empty wall whenever the
+  // two responses resolved in the other order.
+  await waitFor(() => expect(document.querySelectorAll(".rollout-tile").length).toBe(12));
+  return view;
+};
+
+describe("Nightshift shell", () => {
+  it("gives every page exactly one h1 and marks the current one", async () => {
+    // Two h1s on one scrolling page read as two document titles. One page, one
+    // title, and the sidebar says which page you are on without relying on the
+    // lime rail to carry it.
+    await overview();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    const current = document.querySelector('[aria-current="page"]');
+    expect(current?.textContent).toMatch(/Overview/);
   });
 
-  it("reports the baseten backend when health advertises it", async () => {
-    await renderConsole();
-    await waitFor(() =>
-      expect(document.querySelector(".api-health")?.textContent ?? "").toMatch(
-        /synthetic, baseten/,
-      ),
-    );
-  });
-
-  it("has no axe violations on the main view", { timeout: 60_000 }, async () => {
-    const { container } = await renderConsole();
-    let results!: axe.AxeResults;
-    await act(async () => {
-      results = await axe.run(container, {
-      // jsdom has no asset server; don't wait for image/font preloads. All
-      // semantic rules below still run, with clock updates inside React act.
-      preload: false,
-      rules: {
-        // jsdom has no layout or stylesheet, so computed-colour checks cannot run
-        // here. Contrast is verified against the palette in styles.css instead.
-        "color-contrast": { enabled: false },
-        // The six clips are silent generated robot video with no speech track;
-        // a captions file would have nothing to transcribe.
-        "video-caption": { enabled: false },
-      },
-      });
-    });
-    const summary = results.violations.map(
-      (violation) => `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
-    );
-    expect(summary).toEqual([]);
-  });
-
-  it("never uses a phrase from the never-say list", async () => {
-    await renderConsole();
-    const text = document.body.textContent ?? "";
-    for (const phrase of [
-      "SOTA",
-      "solves",
-      "matches human performance",
-      "first ever",
-      "time to first token",
-      "tokens per second",
-    ]) {
-      expect(text.toLowerCase()).not.toContain(phrase.toLowerCase());
+  it("routes every sidebar link to a page that renders", async () => {
+    for (const [route, title] of [
+      ["/live", /^Live run$/i],
+      ["/results", /^Results$/i],
+      ["/evidence", /^Evidence$/i],
+      ["/cost", /^Cost$/i],
+      ["/clips", /^Clips$/i],
+    ] as const) {
+      const { unmount } = await renderAt(route, title);
+      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+      unmount();
     }
   });
 
+  it("polls the control plane without a manual refresh", async () => {
+    const { calls } = await overview();
+    const paths = calls.map((call) => call.url);
+    for (const path of ["/api/gates", "/api/sweeps", "/api/experiments", "/api/runs"]) {
+      expect(paths.some((url) => url.startsWith(path))).toBe(true);
+    }
+  });
+
+  it("links the third-party notices from the footer", async () => {
+    await overview();
+    const link = screen.getByRole("link", { name: /Third-party notices/i });
+    expect(link).toHaveAttribute("href", "/THIRD-PARTY-NOTICES.md");
+  });
+
+  it("has no free-text input anywhere, including the surface that calls the world model", async () => {
+    await overview();
+    const assertNoFreeText = (where: string) => {
+      expect(document.querySelectorAll("textarea"), where).toHaveLength(0);
+      expect(document.querySelectorAll("[contenteditable]"), where).toHaveLength(0);
+      const typed = [...document.querySelectorAll("input")].map((input) => input.type);
+      expect(typed.filter((type) => type !== "range"), where).toEqual([]);
+    };
+    assertNoFreeText("overview");
+
+    // Free-play is the only surface that dispatches to the world model directly.
+    fireEvent.click(screen.getByRole("button", { name: /Drive the world model/i }));
+    expect(await screen.findByRole("dialog", { name: /Free-play control/i })).toBeInTheDocument();
+    assertNoFreeText("free-play dialog");
+    expect(screen.getByText(/Fixed instruction, clamped actions, release to stop/i)).toBeInTheDocument();
+  });
+});
+
+describe("Nightshift pages render their beats", () => {
+  it("puts the claim, the called shot and the gates on the overview", async () => {
+    await overview();
+    expect(screen.getByRole("heading", { name: /The called shot/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
+    expect(screen.getByText(/Not qualified/i)).toBeInTheDocument();
+  });
+
+  it("keeps the live page in the script's beat order", async () => {
+    // SCRIPT.md runs wall -> controls -> burst -> dial and lands on the
+    // scoreboard. The order is the demo's, so it is asserted, not assumed.
+    await live();
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((node) => node.textContent ?? "");
+    const indexOf = (pattern: RegExp) => headings.findIndex((text) => pattern.test(text));
+    const wall = indexOf(/Rollout viewport/i);
+    const burst = indexOf(/Full-matrix burst/i);
+    const dial = indexOf(/Cost–fidelity operating point/i);
+    const scores = indexOf(/^Scoreboard$/i);
+    expect(wall).toBeGreaterThanOrEqual(0);
+    expect(burst).toBeGreaterThan(wall);
+    expect(dial).toBeGreaterThan(burst);
+    expect(scores).toBeGreaterThan(dial);
+  });
+
+  it("puts the scoreboard and the run ledger on results", async () => {
+    await renderAt("/results", /^Results$/i);
+    expect(await screen.findByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Run ledger/i })).toBeInTheDocument();
+  });
+
+  it("puts the gates and the imported smoke report on evidence", async () => {
+    await renderAt("/evidence", /^Evidence$/i);
+    expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Real model smoke evidence/i })).toBeInTheDocument();
+  });
+
+  it("puts the dial on cost", async () => {
+    await renderAt("/cost", /^Cost$/i);
+    expect(screen.getByRole("heading", { name: /Cost–fidelity operating point/i })).toBeInTheDocument();
+  });
+
+  it("puts the six-clip test and the 480p track on clips", async () => {
+    await renderAt("/clips", /^Clips$/i);
+    expect(screen.getByRole("heading", { name: /Real or generated\?/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /480p presentation rollout/i })).toBeInTheDocument();
+  });
+
   it("selects the hero episode from its explicit flag, not array position", async () => {
-    await renderConsole();
+    await renderAt("/results", /^Results$/i);
     // ep-1 is episodes[0]; the hero is ep-hero, chosen by presentation_track.
     expect(await screen.findByText("ep-hero")).toBeInTheDocument();
     expect(screen.getByText("480x480")).toBeInTheDocument();
   });
 
-  it("polls the control plane without a manual refresh", async () => {
-    const { calls } = await renderConsole();
-    const paths = calls.map((call) => call.url);
-    for (const path of ["/api/gates", "/api/sweeps", "/api/experiments", "/api/runs"]) {
-      expect(paths.some((url) => url.startsWith(path))).toBe(true);
+  it("never uses a phrase from the never-say list", async () => {
+    for (const [route, title] of [
+      ["/", /Evaluate a robot policy/i],
+      ["/console", /Measure the ruler/i],
+      ["/live", /^Live run$/i],
+      ["/results", /^Results$/i],
+      ["/evidence", /^Evidence$/i],
+      ["/cost", /^Cost$/i],
+      ["/clips", /^Clips$/i],
+    ] as const) {
+      const { unmount } = await renderAt(route, title);
+      const text = (document.body.textContent ?? "").toLowerCase();
+      for (const phrase of [
+        "SOTA",
+        "solves",
+        "matches human performance",
+        "first ever",
+        "time to first token",
+        "tokens per second",
+      ]) {
+        expect(text, `${route} says "${phrase}"`).not.toContain(phrase.toLowerCase());
+      }
+      unmount();
     }
+  });
+
+  it("routes /review to the development review tool", async () => {
+    // It arrived on main behind a `window.location.pathname` check in
+    // main.tsx, which a client-side navigation never re-evaluates. As a route
+    // it has to render from a link click and from a cold load alike.
+    await renderAt("/review", /Review visible evidence, one opaque clip at a time/i);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("has no axe violations on any page", { timeout: 120_000 }, async () => {
+    for (const [route, title] of [
+      ["/", /Evaluate a robot policy/i],
+      ["/console", /Measure the ruler/i],
+      ["/live", /^Live run$/i],
+      ["/results", /^Results$/i],
+      ["/evidence", /^Evidence$/i],
+      ["/cost", /^Cost$/i],
+      ["/clips", /^Clips$/i],
+    ] as const) {
+      const { container, unmount } = await renderAt(route, title);
+      let results!: axe.AxeResults;
+      // Ported from main: axe drives its own async passes, and the display
+      // clock ticks under it, so any state that lands mid-scan has to be
+      // flushed inside act() or React warns and the run races the tick.
+      await act(async () => {
+        results = await axe.run(container, {
+          // jsdom has no asset server; don't wait for image/font preloads. All
+          // the semantic rules below still run.
+          preload: false,
+          rules: {
+            // jsdom has no layout or stylesheet, so computed-colour checks
+            // cannot run here. Contrast is verified against the palette in
+            // styles.css instead.
+            "color-contrast": { enabled: false },
+            // The six clips are silent generated robot video with no speech
+            // track; a captions file would have nothing to transcribe.
+            "video-caption": { enabled: false },
+          },
+        });
+      });
+      expect(
+        results.violations.map((v) => `${route} ${v.id}: ${v.help} (${v.nodes.length} node(s))`),
+      ).toEqual([]);
+      unmount();
+    }
+  });
+});
+
+describe("Nightshift live page interactions", () => {
+  it("advances the Chain ladder when a real segment event lands", async () => {
+    await live();
+    const stages = screen.getByRole("heading", { name: /Chain stages/i }).closest(".panel") as HTMLElement;
+
+    // Before any segment event the world stage waits; it does not assume.
+    expect(within(stages).getByText(/No segment_completed event has arrived yet/)).toBeInTheDocument();
+    // The other three stages have records but not their own fields.
+    expect(within(stages).getAllByText("not reported")).toHaveLength(3);
+    expect(within(stages).getByText(/action horizon not reported/)).toBeInTheDocument();
+    expect(within(stages).getByText(/validity not reported/)).toBeInTheDocument();
+    expect(within(stages).getByText(/no binary outcome reported/)).toBeInTheDocument();
+
+    const source = FakeEventSource.latest();
+    expect(source?.url).toBe("/api/runs/run-1/events");
+    act(() =>
+      source?.emit("segment_completed", {
+        episode_id: "ep-1",
+        run_id: "run-1",
+        policy: "OpenVLA",
+        task: "close_drawer",
+        segment_index: 0,
+        frame_urls: ["run-1/ep-1/2.png"],
+        certified_frame_count: 14,
+        provenance: "live",
+      }),
+    );
+
+    // Both episode rows already carried 16 certified frames each before any event
+    // arrived; this event adds its own 14. One event, forty-six frames — the two
+    // counts keep separate subjects instead of being folded into one number.
+    expect(
+      within(stages).getByText("1 segment event · 46 certified frames accumulated"),
+    ).toBeInTheDocument();
+    expect(within(stages).getByRole("status")).toHaveTextContent("1 of 4 stages have reported");
+  });
+
+  it("reports the certified count as absent when a segment omits it", async () => {
+    await live();
+    const stages = screen.getByRole("heading", { name: /Chain stages/i }).closest(".panel") as HTMLElement;
+    act(() =>
+      FakeEventSource.latest()?.emit("segment_completed", {
+        episode_id: "ep-1",
+        run_id: "run-1",
+        policy: "OpenVLA",
+        task: "close_drawer",
+        segment_index: 0,
+        frame_urls: ["run-1/ep-1/2.png", "run-1/ep-1/3.png"],
+      }),
+    );
+    expect(
+      within(stages).getByText(
+        "1 segment event · 32 certified frames accumulated · 1 without a certified count",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("launches a benchmark task from a preset and claims a tile for it", async () => {
+    const { calls } = await live();
+    // The preset fills the input; submitting starts the rollout.
+    fireEvent.click(screen.getByRole("button", { name: "Close the drawer" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
+    const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
+    // A benchmark task goes through as a registry task id, not as free text.
+    expect(body.tasks).toEqual(["close_drawer"]);
+    expect(body.prompts ?? []).toEqual([]);
+  });
+
+  it("sends a typed task as a free-text prompt, not as a registry task", async () => {
+    const { calls } = await live();
+    fireEvent.change(screen.getByLabelText(/Task instruction/i), {
+      target: { value: "Put the spoon in the drawer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
+    const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
+    expect(body.prompts).toEqual(["Put the spoon in the drawer"]);
+    expect(body.tasks).toEqual([]);
+  });
+
+  it("says before submitting whether a task has a human score to compare against", async () => {
+    await live();
+    const input = screen.getByLabelText(/Task instruction/i);
+
+    fireEvent.change(input, { target: { value: "Close the drawer" } });
+    expect(screen.getByText(/Benchmark task\./)).toBeInTheDocument();
+
+    // A near-miss is not the benchmark task: the reference cell was measured
+    // against the exact string.
+    fireEvent.change(input, { target: { value: "close the drawer" } });
+    expect(screen.getByText(/Off-benchmark\./)).toBeInTheDocument();
+  });
+
+  it("blows a wall tile up to full screen and gives the focus back on close", async () => {
+    await live();
+    const expand = screen.getByRole("button", {
+      name: /Enlarge the persisted clip for OpenVLA on close_drawer/i,
+    });
+    expand.focus();
+    fireEvent.click(expand);
+
+    const dialog = screen.getByRole("dialog", { name: "OpenVLA · close_drawer" });
+    expect(within(dialog).getByText("run-1")).toBeInTheDocument();
+    expect(within(dialog).getByText("16 certified")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Take the controls/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "OpenVLA · close_drawer" })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(expand);
+  });
+
+  it("hands a tile straight to free-play, which is the stage path", async () => {
+    await live();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Open free-play control for OpenVLA on close_drawer/i }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: /Free-play control/i });
+    expect(dialog).toHaveAccessibleName(/OpenVLA · close_drawer/);
   });
 });
 
@@ -301,8 +556,8 @@ describe("PLUMB console", () => {
  * empty sweep list, null telemetry and no clip or called-shot route. The console
  * has to degrade by saying so, not by filling the gaps with zeros.
  */
-describe("PLUMB console against the current backend responses", () => {
-  async function renderAgainstToday() {
+describe("Nightshift against the current backend responses", () => {
+  async function renderTodayAt(route: string, heading: RegExp) {
     installEventSource();
     const routes = mockFetch({
       "/api/health": { status: "ok", version: "0.1.0", qualified: false, available_backends: ["synthetic"] },
@@ -331,22 +586,27 @@ describe("PLUMB console against the current backend responses", () => {
       "/api/clips/sixclip": http(404, { detail: "Not Found" }),
       "/api/calledshot": http(404, { detail: "Not Found" }),
     });
-    const view = render(<App />);
-    await screen.findByRole("heading", { name: /Measure the ruler/i });
+    const view = render(
+      <AppDataProvider>
+        <MemoryRouter initialEntries={[route]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AppDataProvider>,
+    );
+    await screen.findByRole("heading", { level: 1, name: heading });
     return { ...view, ...routes };
   }
 
   it("does not report a load error when only the additive routes are missing", async () => {
-    await renderAgainstToday();
     // The clip and called-shot routes 404 here; the core control plane did not
     // fail, so the console must not display a load error over the whole page.
+    await renderTodayAt("/results", /^Results$/i);
     await waitFor(() => expect(screen.getByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument());
     expect(document.querySelector(".error-banner")).toBeNull();
-    expect(screen.queryByText(/No route double/)).not.toBeInTheDocument();
   });
 
   it("recovers the called shot from protocol.reference and marks it pending", async () => {
-    await renderAgainstToday();
+    await renderTodayAt("/console", /Measure the ruler/i);
     expect(await screen.findByText("92%")).toBeInTheDocument();
     expect(screen.getByText("4%")).toBeInTheDocument();
     expect(screen.getByText("pending")).toBeInTheDocument();
@@ -354,7 +614,7 @@ describe("PLUMB console against the current backend responses", () => {
   });
 
   it("explains the empty sweep instead of rendering an unreachable slider", async () => {
-    await renderAgainstToday();
+    await renderTodayAt("/cost", /^Cost$/i);
     expect(
       await screen.findByText(/No independent real-model cost-fidelity sweep has completed\./),
     ).toBeInTheDocument();
@@ -362,15 +622,13 @@ describe("PLUMB console against the current backend responses", () => {
   });
 
   it("shows no hero rollout rather than relabelling a 256p episode as 480p", async () => {
-    await renderAgainstToday();
-    expect(
-      await screen.findByText(/No episode declares/),
-    ).toBeInTheDocument();
+    await renderTodayAt("/clips", /^Clips$/i);
+    expect(await screen.findByText(/No episode declares/)).toBeInTheDocument();
     expect(screen.getByText(/is not promoted here and relabelled 480p/)).toBeInTheDocument();
   });
 
   it("explains the missing six-clip panel rather than showing stand-in clips", async () => {
-    await renderAgainstToday();
+    await renderTodayAt("/clips", /^Clips$/i);
     expect(
       await screen.findByText(/No six-clip panel has been published by the API\./),
     ).toBeInTheDocument();
@@ -378,7 +636,7 @@ describe("PLUMB console against the current backend responses", () => {
   });
 
   it("invents no cost, queue depth or replica count", async () => {
-    await renderAgainstToday();
+    await renderTodayAt("/live", /^Live run$/i);
     await screen.findByRole("heading", { name: /Full-matrix burst/i });
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
     expect(screen.getByText(/No replica counts have been reported/)).toBeInTheDocument();

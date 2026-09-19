@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import logging
 import os
 import threading
 import time
+import zlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -37,6 +39,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from plumb.artifacts import ArtifactStore
@@ -103,6 +106,32 @@ class RunConfig(BaseModel):
     seed: int = Field(default=20260919, ge=0, le=2**31 - 1)
     idempotency_key: Optional[str] = Field(default=None, max_length=200)
     operating_point_id: Optional[str] = Field(default=None, max_length=200)
+    #: Free-text task strings. Every policy here is language-conditioned, so a
+    #: task string is already the system's primary input -- this exposes it
+    #: rather than adding a capability. A run carrying these is forced into the
+    #: `exploration` cohort, which the lineage validator keeps disjoint from
+    #: every scored cohort, so a typed prompt can never land in a primary cell.
+    prompts: List[str] = Field(default_factory=list, max_length=8)
+
+
+#: Actions per chunk, and chunks per free-prompt rollout. Five chunks of sixteen
+#: is eighty actions: long enough to show an intent developing, short enough that
+#: the tile finishes while the presenter is still talking over the wall.
+PROMPT_CHUNK_ACTIONS = 16
+PROMPT_CHUNKS = 5
+
+
+def custom_task_id(prompt: str) -> str:
+    """A stable task id for a free-text prompt.
+
+    Derived from the prompt so the same words resolve to the same task, which is
+    what lets the ledger's idempotency and the wall's slot keying behave exactly
+    as they do for a benchmark task. The `custom:` prefix is load-bearing: every
+    consumer that needs to know whether a cell has human ground truth tests it.
+    """
+
+    digest = hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()[:10]
+    return "custom:%s" % digest
 
 
 class FreeplayInput(BaseModel):
@@ -298,6 +327,30 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
     return backend, missing
 
 
+
+class _SinglePageApp(StaticFiles):
+    """Static files that fall back to ``index.html`` for client-side routes.
+
+    The console moved from one scrolling page to six routed pages, so a reload
+    on ``/results`` asks this mount for a file that does not exist. Plain
+    ``StaticFiles`` answers 404, which would turn a refresh mid-demo into a
+    blank page. API routes are unaffected: they are declared on the app and
+    match before this mount is consulted.
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as error:
+            if error.status_code != 404:
+                raise
+            # A missing asset is a real 404 -- only extensionless paths, which is
+            # what a route looks like, are handed to the client router.
+            if "." in path.rsplit("/", 1)[-1]:
+                raise
+            return await super().get_response("index.html", scope)
+
+
 def create_app(
     data_dir: Optional[Path] = None,
     *,
@@ -337,7 +390,7 @@ def create_app(
         yield
         pool.shutdown(wait=True)
 
-    app = FastAPI(title="PLUMB", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Nightshift", version="0.2.0", lifespan=lifespan)
     app.state.service = service
     app.state.data_dir = root
     app.state.store = store
@@ -741,14 +794,29 @@ def create_app(
                     "gates": gates(),
                 },
             )
-        if not config.policies or not config.tasks:
+        # A free-text prompt becomes a task whose id encodes the prompt, so the
+        # rest of the pipeline treats it exactly like a benchmark task. There is
+        # no second code path: same planner, same backend, same ledger.
+        prompt_text = {custom_task_id(text): text.strip() for text in config.prompts if text.strip()}
+        tasks = list(config.tasks) + [task for task in prompt_text if task not in config.tasks]
+
+        if not config.policies or not tasks:
             raise HTTPException(422, "At least one policy and task is required")
-        if len(set(config.policies)) != len(config.policies) or len(set(config.tasks)) != len(config.tasks):
+        if len(set(config.policies)) != len(config.policies) or len(set(tasks)) != len(tasks):
             raise HTTPException(422, "Duplicate policies/tasks are not allowed")
-        if set(config.policies) - set(POLICIES) or set(config.tasks) - set(TASKS):
+        if set(config.policies) - set(POLICIES) or set(tasks) - set(TASKS) - set(prompt_text):
             raise HTTPException(422, "Unknown policy or task")
 
         payload = config.model_dump(exclude_none=True)
+        payload.pop("prompts", None)
+        if prompt_text:
+            payload["tasks"] = tasks
+            payload["task_prompts"] = prompt_text
+            # Forced, not defaulted. The caller does not get to put a typed
+            # prompt in a scored cohort, and the ledger records which cohort it
+            # actually ran in rather than which one was asked for.
+            payload["cohort"] = "exploration"
+            payload["horizons"] = {task: PROMPT_CHUNK_ACTIONS * PROMPT_CHUNKS for task in prompt_text}
         if document is not None and document.frozen:
             payload.setdefault("protocol_hash", document.sha256)
             if document.scenario_manifest_hash:
@@ -1043,10 +1111,35 @@ def create_app(
                     "commanded_chunk": {"rows": len(chunk), "direction": body.direction},
                 },
             )
+        # Free-play is unscored, but the Chain still requires a protocol hash on
+        # the envelope, and an unscored frame should record which world
+        # configuration produced it. Refuse with a named blocker rather than
+        # letting the Chain answer with a bare 400.
+        protocol_hash = document.sha256 if (document is not None and document.frozen) else None
+        if not protocol_hash:
+            raise HTTPException(
+                503,
+                {
+                    "reason": (
+                        "Free-play needs a frozen protocol. The world model is configured by it, so an "
+                        "unscored frame still has to record which configuration produced it."
+                    ),
+                    "missing": [protocol_reason or "no frozen protocol.json is loaded"],
+                    "commanded_chunk": {"rows": len(chunk), "direction": body.direction},
+                },
+            )
         started = time.perf_counter()
         try:
             outcome = baseten_backend.freeplay_step(
-                session_id=session_id, task=body.task, actions=chunk, resolution=480
+                session_id=session_id,
+                task=body.task,
+                actions=chunk,
+                protocol_hash=protocol_hash,
+                # Derived from the session and step so a free-play frame is
+                # reproducible, and so holding a key does not redraw the same
+                # noise every chunk. Not a protocol seed: nothing here is scored.
+                seed=zlib.crc32(("%s:%d" % (session_id, session["steps"])).encode("utf-8")),
+                resolution=480,
             )
         except Exception as exc:
             raise HTTPException(502, {"reason": "world-model generation failed", "detail": str(exc)})
@@ -1061,8 +1154,14 @@ def create_app(
             "frame_count": int(outcome.get("frame_count") or 0),
             "commanded_rows": len(chunk),
             "latency_ms": (time.perf_counter() - started) * 1000.0,
-            "resolution": 480,
+            # What was asked for, and separately what the frames measurably are.
+            # Reporting the request as though it were the result is how a 64px
+            # rehearsal frame would end up captioned "480p" on stage.
+            "requested_resolution": outcome.get("requested_resolution"),
+            "frame_height": outcome.get("frame_height"),
+            "frame_width": outcome.get("frame_width"),
             "backend": "baseten",
+            "protocol_hash": protocol_hash,
             "qualified": False,
             "scored": False,
             "reason": "Unscored free-play. No policy, no language model, no validity gate, no judge.",
@@ -1134,13 +1233,16 @@ def create_app(
                 raise HTTPException(404, "Development review UI is not built")
             return FileResponse(index, media_type="text/html", headers={"X-Content-Type-Options": "nosniff"})
 
-        app.mount("/", StaticFiles(directory=str(frontend), html=True), name="dashboard")
+        # _SinglePageApp is what makes the other six routes survive a reload;
+        # /review keeps its own handler above because that one also sets
+        # nosniff, which the static mount does not.
+        app.mount("/", _SinglePageApp(directory=str(frontend), html=True), name="dashboard")
     else:
 
         @app.get("/")
         def root_status() -> dict:
             return {
-                "service": "PLUMB",
+                "service": "Nightshift",
                 "dashboard": "Run npm --prefix web install && npm --prefix web run build",
                 "docs": "/docs",
             }

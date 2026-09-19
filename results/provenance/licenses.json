@@ -1,0 +1,1809 @@
+{
+  "authenticated": false,
+  "discipline": [
+    "Only a license file that was retrieved and hashed at the pinned revision produces license_status='verified'. No identifier is written from memory, from a model card, or from a host's label.",
+    "local_use and redistribution are independent verdicts; the primary matrix needs the first.",
+    "A row with no pinned immutable revision is refused rather than read at a mutable branch."
+  ],
+  "evidence_path": "results/provenance/licenses.json",
+  "executed": true,
+  "generated_at": "2026-09-19T11:14:20.805712+00:00",
+  "host": "Kevins-MacBook-Pro-2.local",
+  "kind": "plumb_license_resolution",
+  "resolutions": [
+    {
+      "attempted_urls": [
+        "https://huggingface.co/api/models/nvidia/Cosmos3-Nano/revision/e59a53c25979a090fa8706c9acc0c254a6e89b92"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "card_declares_other_and_names_the_license_off_repo",
+        "retrieved_a_license_file": false,
+        "retrieved_at": "2026-09-19T11:14:18.709856+00:00",
+        "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "openmdw1.1-license",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "other",
+        "card_license_link": "https://openmdw.ai/license/1-1/",
+        "card_license_name": "openmdw1.1-license",
+        "error": null,
+        "gated": false,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": true,
+        "status": 200
+      },
+      "name": "cosmos3-nano",
+      "notes": [
+        "The card sets license='other' and names 'openmdw1.1-license' at e59a53c25979a090fa8706c9acc0c254a6e89b92. That name is recorded verbatim and stays advertised_unverified: a card is metadata about a license, not the license.",
+        "license_link 'https://openmdw.ai/license/1-1/' is off-repo. An external page is mutable and is not a license file at the pinned revision, so it was recorded and not followed; read it and record the result by hand to finish this row.",
+        "local_use and redistribution are independent verdicts. PLUMB runs these bytes locally and redistributes nothing, so an open redistribution term does not block the primary matrix."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "openmdw1.1-license",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "card_declares_other_and_names_the_license_off_repo",
+          "retrieved_a_license_file": false,
+          "retrieved_at": "2026-09-19T11:14:18.709856+00:00",
+          "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "card_declares_other_and_names_the_license_off_repo",
+      "redistribution": "local_use_only",
+      "repo_id": "nvidia/Cosmos3-Nano",
+      "repo_type": "model",
+      "revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "OpenMDW-1.1",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "cosmos3-edge",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan cosmos3-edge --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "OpenMDW-1.1",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "nvidia/Cosmos3-Edge",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "gated_terms_required",
+      "local_use": "requires_accepted_terms",
+      "local_use_permitted": false,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "cosmos-guardrail",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan cosmos-guardrail --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "gated_terms_required",
+        "local_use": "requires_accepted_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "nvidia/Cosmos-1.0-Guardrail",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "unresolved",
+      "local_use": "unresolved",
+      "local_use_permitted": false,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "irasim-bridge-archive",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan irasim-bridge-archive --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "unresolved",
+        "local_use": "unresolved",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "lf-robot-opensource.bytetos.com/opensource_IRASim_v1/bridge_checkpoints_data.tar.gz",
+      "repo_type": "url",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "CreativeML Open RAIL++-M",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "sdxl-vae",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan sdxl-vae --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "CreativeML Open RAIL++-M",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "stabilityai/stable-diffusion-xl-base-1.0",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [
+        "https://huggingface.co/api/models/openvla/openvla-7b/revision/47a0ec7fc4ec123775a391911046cf33cf9ed83f"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+        "retrieved_a_license_file": false,
+        "retrieved_at": "2026-09-19T11:14:18.779906+00:00",
+        "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "mit",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": false,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": true,
+        "status": 200
+      },
+      "name": "openvla-7b",
+      "notes": [
+        "The card advertises 'mit' at 47a0ec7fc4ec123775a391911046cf33cf9ed83f but no license file was retrieved. A card is metadata about a license, not the license, so the status stays advertised_unverified.",
+        "local_use and redistribution are independent verdicts. PLUMB runs these bytes locally and redistributes nothing, so an open redistribution term does not block the primary matrix."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+          "retrieved_a_license_file": false,
+          "retrieved_at": "2026-09-19T11:14:18.779906+00:00",
+          "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+      "redistribution": "local_use_only",
+      "repo_id": "openvla/openvla-7b",
+      "repo_type": "model",
+      "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "octo-small",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan octo-small --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "rail-berkeley/octo-small",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "octo-base",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan octo-base --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "rail-berkeley/octo-base",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "unresolved",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "minivla-vq-bridge",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan minivla-vq-bridge --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "unresolved",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "Stanford-ILIAD/minivla-vq-bridge-prismatic",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "absent_cardData_null",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "minivla-pretrain-vq",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan minivla-pretrain-vq --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "absent_cardData_null",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "Stanford-ILIAD/pretrain_vq",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "open-pi-zero",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan open-pi-zero --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "allenzren/open-pi-zero",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [
+        "https://huggingface.co/api/models/google/paligemma-3b-pt-224/revision/35e4f46485b4d07967e7e9935bc3786aad50687c"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "license_metadata_requires_accepted_terms",
+        "retrieved_a_license_file": false,
+        "retrieved_at": "2026-09-19T11:14:18.850981+00:00",
+        "revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "gated_terms_required",
+      "local_use": "requires_accepted_terms",
+      "local_use_permitted": false,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "gemma",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": true,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": true,
+        "status": 200
+      },
+      "name": "paligemma-official",
+      "notes": [
+        "google/paligemma-3b-pt-224 refused the license request without accepted terms. No tool here can accept them; a human must."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "license_metadata_requires_accepted_terms",
+          "retrieved_a_license_file": false,
+          "retrieved_at": "2026-09-19T11:14:18.850981+00:00",
+          "revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "gated_terms_required",
+        "local_use": "requires_accepted_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "license_metadata_requires_accepted_terms",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "google/paligemma-3b-pt-224",
+      "repo_type": "model",
+      "revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+      "revision_overridden": true,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [
+        "https://huggingface.co/api/models/leo009/paligemma-3b-pt-224/revision/39996beb6fb17c5d16a50d3ef8f7a96ad9d03986"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+        "retrieved_a_license_file": false,
+        "retrieved_at": "2026-09-19T11:14:18.934315+00:00",
+        "revision": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "gemma",
+      "license_status": "advertised_unverified",
+      "local_use": "requires_accepted_terms",
+      "local_use_permitted": false,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "gemma",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": false,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": true,
+        "status": 200
+      },
+      "name": "paligemma-mirror-candidate",
+      "notes": [
+        "The card advertises 'gemma' at 39996beb6fb17c5d16a50d3ef8f7a96ad9d03986 but no license file was retrieved. A card is metadata about a license, not the license, so the status stays advertised_unverified.",
+        "local_use and redistribution are independent verdicts. PLUMB runs these bytes locally and redistributes nothing, so an open redistribution term does not block the primary matrix."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "gemma",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+          "retrieved_a_license_file": false,
+          "retrieved_at": "2026-09-19T11:14:18.934315+00:00",
+          "revision": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "requires_accepted_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "card_advertises_a_license_but_no_license_file_was_retrieved",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "leo009/paligemma-3b-pt-224",
+      "repo_type": "model",
+      "revision": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+      "revision_overridden": true,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "unresolved",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "susie-subgoal",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan susie-subgoal --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "unresolved",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "kvablack/susie",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "susie-low-level",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan susie-low-level --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "patreya/gcbc-bridge",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "Apache-2.0",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "qwen2.5-vl-7b-instruct",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan qwen2.5-vl-7b-instruct --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "Apache-2.0",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "Apache-2.0",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "vjepa2-vitl-fpc64-256",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan vjepa2-vitl-fpc64-256 --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "Apache-2.0",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "facebook/vjepa2-vitl-fpc64-256",
+      "repo_type": "model",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "Apache-2.0",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "bridge-orig-lerobot",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan bridge-orig-lerobot --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "Apache-2.0",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "local_use_only"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "local_use_only",
+      "repo_id": "IPEC-COMMUNITY/bridge_orig_lerobot",
+      "repo_type": "dataset",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "unresolved",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "auto-eval",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan auto-eval --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "unresolved",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "zhouzypaul/auto_eval",
+      "repo_type": "dataset",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [
+        "https://api.github.com/repos/openvla/openvla/license?ref=c8f03f48af692657d3060c19588038c7220e9af9",
+        "https://raw.githubusercontent.com/openvla/openvla/c8f03f48af692657d3060c19588038c7220e9af9/NOTICE",
+        "https://raw.githubusercontent.com/openvla/openvla/c8f03f48af692657d3060c19588038c7220e9af9/NOTICE.txt"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": "LICENSE",
+        "license_file_sha256": "c4ee2ba5958af03d74b1d3dfa174e3749171d689fb4c23cc170749c05ae3eeb5",
+        "reason": null,
+        "retrieved_a_license_file": true,
+        "retrieved_at": "2026-09-19T11:14:19.315517+00:00",
+        "revision": "c8f03f48af692657d3060c19588038c7220e9af9",
+        "source_url": "https://api.github.com/repos/openvla/openvla/license?ref=c8f03f48af692657d3060c19588038c7220e9af9",
+        "spdx": "MIT"
+      },
+      "license": "MIT",
+      "license_status": "verified",
+      "local_use": "permitted_by_license",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "MIT",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": "MIT",
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": false,
+        "status": 200
+      },
+      "name": "code-openvla",
+      "notes": [
+        "Redistribution is permitted with notices; preserve the upstream license and NOTICE files."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": "LICENSE",
+          "license_file_sha256": "c4ee2ba5958af03d74b1d3dfa174e3749171d689fb4c23cc170749c05ae3eeb5",
+          "reason": null,
+          "retrieved_a_license_file": true,
+          "retrieved_at": "2026-09-19T11:14:19.315517+00:00",
+          "revision": "c8f03f48af692657d3060c19588038c7220e9af9",
+          "source_url": "https://api.github.com/repos/openvla/openvla/license?ref=c8f03f48af692657d3060c19588038c7220e9af9",
+          "spdx": "MIT"
+        },
+        "license_status": "verified",
+        "local_use": "permitted_by_license",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": null,
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/openvla/openvla",
+      "repo_type": "git",
+      "revision": "c8f03f48af692657d3060c19588038c7220e9af9",
+      "revision_overridden": false,
+      "spdx_listed": true,
+      "verified": true
+    },
+    {
+      "attempted_urls": [
+        "https://api.github.com/repos/zhouzypaul/auto_eval/license?ref=3ea3ff44c6950433cfbcb4294a3deaa616533745",
+        "https://raw.githubusercontent.com/zhouzypaul/auto_eval/3ea3ff44c6950433cfbcb4294a3deaa616533745/NOTICE",
+        "https://raw.githubusercontent.com/zhouzypaul/auto_eval/3ea3ff44c6950433cfbcb4294a3deaa616533745/NOTICE.txt"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": "LICENSE",
+        "license_file_sha256": "8cfd8b80d66c39a9bcbb33b64d4c33a6565b27f36f209063fcad8bb943526d66",
+        "reason": null,
+        "retrieved_a_license_file": true,
+        "retrieved_at": "2026-09-19T11:14:19.674008+00:00",
+        "revision": "3ea3ff44c6950433cfbcb4294a3deaa616533745",
+        "source_url": "https://api.github.com/repos/zhouzypaul/auto_eval/license?ref=3ea3ff44c6950433cfbcb4294a3deaa616533745",
+        "spdx": "MIT"
+      },
+      "license": "MIT",
+      "license_status": "verified",
+      "local_use": "permitted_by_license",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "MIT",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": "MIT",
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": false,
+        "status": 200
+      },
+      "name": "code-auto-eval",
+      "notes": [
+        "Redistribution is permitted with notices; preserve the upstream license and NOTICE files."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": "LICENSE",
+          "license_file_sha256": "8cfd8b80d66c39a9bcbb33b64d4c33a6565b27f36f209063fcad8bb943526d66",
+          "reason": null,
+          "retrieved_a_license_file": true,
+          "retrieved_at": "2026-09-19T11:14:19.674008+00:00",
+          "revision": "3ea3ff44c6950433cfbcb4294a3deaa616533745",
+          "source_url": "https://api.github.com/repos/zhouzypaul/auto_eval/license?ref=3ea3ff44c6950433cfbcb4294a3deaa616533745",
+          "spdx": "MIT"
+        },
+        "license_status": "verified",
+        "local_use": "permitted_by_license",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": null,
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/zhouzypaul/auto_eval",
+      "repo_type": "git",
+      "revision": "3ea3ff44c6950433cfbcb4294a3deaa616533745",
+      "revision_overridden": false,
+      "spdx_listed": true,
+      "verified": true
+    },
+    {
+      "attempted_urls": [
+        "https://api.github.com/repos/allenzren/open-pi-zero/license?ref=c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+        "https://raw.githubusercontent.com/allenzren/open-pi-zero/c3df7fb062175c16f69d7ca4ce042958ea238fb7/NOTICE",
+        "https://raw.githubusercontent.com/allenzren/open-pi-zero/c3df7fb062175c16f69d7ca4ce042958ea238fb7/NOTICE.txt"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": "LICENSE",
+        "license_file_sha256": "b09a282d0dfa3d993af15b9b193648b423dda8ae5749dfb6bd3090e07cab0367",
+        "reason": null,
+        "retrieved_a_license_file": true,
+        "retrieved_at": "2026-09-19T11:14:20.016026+00:00",
+        "revision": "c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+        "source_url": "https://api.github.com/repos/allenzren/open-pi-zero/license?ref=c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+        "spdx": "MIT"
+      },
+      "license": "MIT",
+      "license_status": "verified",
+      "local_use": "permitted_by_license",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "MIT",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": "MIT",
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": false,
+        "status": 200
+      },
+      "name": "code-open-pi-zero",
+      "notes": [
+        "Redistribution is permitted with notices; preserve the upstream license and NOTICE files."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": "LICENSE",
+          "license_file_sha256": "b09a282d0dfa3d993af15b9b193648b423dda8ae5749dfb6bd3090e07cab0367",
+          "reason": null,
+          "retrieved_a_license_file": true,
+          "retrieved_at": "2026-09-19T11:14:20.016026+00:00",
+          "revision": "c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+          "source_url": "https://api.github.com/repos/allenzren/open-pi-zero/license?ref=c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+          "spdx": "MIT"
+        },
+        "license_status": "verified",
+        "local_use": "permitted_by_license",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": null,
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/allenzren/open-pi-zero",
+      "repo_type": "git",
+      "revision": "c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+      "revision_overridden": false,
+      "spdx_listed": true,
+      "verified": true
+    },
+    {
+      "attempted_urls": [
+        "https://api.github.com/repos/bytedance/IRASim/license?ref=c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+        "https://raw.githubusercontent.com/bytedance/IRASim/c72b6dade6fcd65971e0aa8ab49ea39b15108c90/NOTICE",
+        "https://raw.githubusercontent.com/bytedance/IRASim/c72b6dade6fcd65971e0aa8ab49ea39b15108c90/NOTICE.txt"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": "LICENSE",
+        "license_file_sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+        "reason": null,
+        "retrieved_a_license_file": true,
+        "retrieved_at": "2026-09-19T11:14:20.414063+00:00",
+        "revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+        "source_url": "https://api.github.com/repos/bytedance/IRASim/license?ref=c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+        "spdx": "Apache-2.0"
+      },
+      "license": "Apache-2.0",
+      "license_status": "verified",
+      "local_use": "permitted_by_license",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": true,
+        "card_license": "Apache-2.0",
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": "Apache-2.0",
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": false,
+        "status": 200
+      },
+      "name": "code-irasim",
+      "notes": [
+        "Redistribution is permitted with notices; preserve the upstream license and NOTICE files."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "Apache-2.0",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": "LICENSE",
+          "license_file_sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+          "reason": null,
+          "retrieved_a_license_file": true,
+          "retrieved_at": "2026-09-19T11:14:20.414063+00:00",
+          "revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+          "source_url": "https://api.github.com/repos/bytedance/IRASim/license?ref=c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+          "spdx": "Apache-2.0"
+        },
+        "license_status": "verified",
+        "local_use": "permitted_by_license",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": null,
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/bytedance/IRASim",
+      "repo_type": "git",
+      "revision": "c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+      "revision_overridden": false,
+      "spdx_listed": true,
+      "verified": true
+    },
+    {
+      "attempted_urls": [
+        "https://api.github.com/repos/NVIDIA/cosmos-framework/license?ref=c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+        "https://raw.githubusercontent.com/NVIDIA/cosmos-framework/c23e51f2f157ae3e51cfcd86ebfb5464850894f2/NOTICE",
+        "https://raw.githubusercontent.com/NVIDIA/cosmos-framework/c23e51f2f157ae3e51cfcd86ebfb5464850894f2/NOTICE.txt"
+      ],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": "LICENSE",
+        "license_file_sha256": "6bd3fdb9356edb6e4c1f00ad9cd6639a1cf06ca0a415a5071fd70d68799209e6",
+        "reason": null,
+        "retrieved_a_license_file": true,
+        "retrieved_at": "2026-09-19T11:14:20.805610+00:00",
+        "revision": "c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+        "source_url": "https://api.github.com/repos/NVIDIA/cosmos-framework/license?ref=c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+        "spdx": "OpenMDW-1.1"
+      },
+      "license": "OpenMDW-1.1",
+      "license_status": "verified",
+      "local_use": "permitted_by_license",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": false,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": true,
+        "siblings_listed": false,
+        "status": 200
+      },
+      "name": "code-cosmos-framework",
+      "notes": [
+        "Redistribution is permitted with notices; preserve the upstream license and NOTICE files.",
+        "'OpenMDW-1.1' is not an SPDX-listed identifier; it is the name the license text gives itself."
+      ],
+      "notice_files": [
+        {
+          "bytes": 1714,
+          "path": "NOTICE",
+          "sha256": "64b759bfdb3ccc2c0c4f95a419c4576ad5c23aeab5e041a582a147c2a1688220",
+          "source_url": "https://raw.githubusercontent.com/NVIDIA/cosmos-framework/c23e51f2f157ae3e51cfcd86ebfb5464850894f2/NOTICE"
+        }
+      ],
+      "plan_update": {
+        "license": "OpenMDW-1.1",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": "LICENSE",
+          "license_file_sha256": "6bd3fdb9356edb6e4c1f00ad9cd6639a1cf06ca0a415a5071fd70d68799209e6",
+          "reason": null,
+          "retrieved_a_license_file": true,
+          "retrieved_at": "2026-09-19T11:14:20.805610+00:00",
+          "revision": "c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+          "source_url": "https://api.github.com/repos/NVIDIA/cosmos-framework/license?ref=c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+          "spdx": "OpenMDW-1.1"
+        },
+        "license_status": "verified",
+        "local_use": "permitted_by_license",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": null,
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/NVIDIA/cosmos-framework",
+      "repo_type": "git",
+      "revision": "c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+      "revision_overridden": false,
+      "spdx_listed": false,
+      "verified": true
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "code-octo",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan code-octo --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/octo-models/octo",
+      "repo_type": "git",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": null,
+      "license_status": "unresolved",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "code-openvla-mini",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan code-openvla-mini --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": null,
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "unresolved",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "prohibited_pending_resolution"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "prohibited_pending_resolution",
+      "repo_id": "github.com/Stanford-ILIAD/openvla-mini",
+      "repo_type": "git",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    },
+    {
+      "attempted_urls": [],
+      "evidence": {
+        "evidence_path": "results/provenance/licenses.json",
+        "license_file_path": null,
+        "license_file_sha256": null,
+        "reason": "no_pinned_immutable_revision",
+        "retrieved_a_license_file": false,
+        "retrieved_at": null,
+        "revision": null,
+        "source_url": null,
+        "spdx": null
+      },
+      "license": "MIT",
+      "license_status": "advertised_unverified",
+      "local_use": "permitted_local_only_no_express_terms",
+      "local_use_permitted": true,
+      "metadata": {
+        "card_data_present": null,
+        "card_license": null,
+        "card_license_link": null,
+        "card_license_name": null,
+        "error": null,
+        "gated": null,
+        "host_reported_spdx": null,
+        "license_file_names": [],
+        "reached": false,
+        "siblings_listed": false,
+        "status": null
+      },
+      "name": "code-susie",
+      "notes": [
+        "A license read at a mutable branch is not evidence about a pinned commit. Run 'python -m cluster.download_assets --from-plan code-susie --resolve-revision', review the commit, record it as this entry's revision, then re-run this tool."
+      ],
+      "notice_files": [],
+      "plan_update": {
+        "license": "MIT",
+        "license_evidence": {
+          "evidence_path": "results/provenance/licenses.json",
+          "license_file_path": null,
+          "license_file_sha256": null,
+          "reason": "no_pinned_immutable_revision",
+          "retrieved_a_license_file": false,
+          "retrieved_at": null,
+          "revision": null,
+          "source_url": null,
+          "spdx": null
+        },
+        "license_status": "advertised_unverified",
+        "local_use": "permitted_local_only_no_express_terms",
+        "redistribution": "permitted_with_notices"
+      },
+      "reason": "no_pinned_immutable_revision",
+      "redistribution": "permitted_with_notices",
+      "repo_id": "github.com/kvablack/susie",
+      "repo_type": "git",
+      "revision": null,
+      "revision_overridden": false,
+      "spdx_listed": null,
+      "verified": false
+    }
+  ],
+  "revision_override_note": "These rows were resolved at a commit supplied on the command line, not at a revision the plan pins. Review the commit and record it in cluster/asset_plan.py before treating it as a pin.",
+  "revision_overrides": {
+    "paligemma-mirror-candidate": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+    "paligemma-official": "35e4f46485b4d07967e7e9935bc3786aad50687c"
+  },
+  "schema_version": 1,
+  "summary": {
+    "assets": 27,
+    "blocker_cleared_by_verification": "no_retrieved_license_file_evidence",
+    "local_use_permitted": [
+      "auto-eval",
+      "bridge-orig-lerobot",
+      "code-auto-eval",
+      "code-cosmos-framework",
+      "code-irasim",
+      "code-octo",
+      "code-open-pi-zero",
+      "code-openvla",
+      "code-openvla-mini",
+      "code-susie",
+      "cosmos3-edge",
+      "cosmos3-nano",
+      "minivla-pretrain-vq",
+      "minivla-vq-bridge",
+      "octo-base",
+      "octo-small",
+      "open-pi-zero",
+      "openvla-7b",
+      "qwen2.5-vl-7b-instruct",
+      "sdxl-vae",
+      "susie-low-level",
+      "susie-subgoal",
+      "vjepa2-vitl-fpc64-256"
+    ],
+    "redistribution_open": [
+      "auto-eval",
+      "code-openvla-mini",
+      "cosmos-guardrail",
+      "irasim-bridge-archive",
+      "minivla-pretrain-vq",
+      "minivla-vq-bridge",
+      "paligemma-mirror-candidate",
+      "paligemma-official",
+      "susie-subgoal"
+    ],
+    "requires_accepted_terms": [
+      "cosmos-guardrail",
+      "paligemma-mirror-candidate",
+      "paligemma-official"
+    ],
+    "still_missing_license_evidence": [
+      "auto-eval",
+      "bridge-orig-lerobot",
+      "code-octo",
+      "code-openvla-mini",
+      "code-susie",
+      "cosmos-guardrail",
+      "cosmos3-edge",
+      "cosmos3-nano",
+      "irasim-bridge-archive",
+      "minivla-pretrain-vq",
+      "minivla-vq-bridge",
+      "octo-base",
+      "octo-small",
+      "open-pi-zero",
+      "openvla-7b",
+      "paligemma-mirror-candidate",
+      "paligemma-official",
+      "qwen2.5-vl-7b-instruct",
+      "sdxl-vae",
+      "susie-low-level",
+      "susie-subgoal",
+      "vjepa2-vitl-fpc64-256"
+    ],
+    "unresolved_reasons": {
+      "auto-eval": "no_pinned_immutable_revision",
+      "bridge-orig-lerobot": "no_pinned_immutable_revision",
+      "code-octo": "no_pinned_immutable_revision",
+      "code-openvla-mini": "no_pinned_immutable_revision",
+      "code-susie": "no_pinned_immutable_revision",
+      "cosmos-guardrail": "no_pinned_immutable_revision",
+      "cosmos3-edge": "no_pinned_immutable_revision",
+      "cosmos3-nano": "card_declares_other_and_names_the_license_off_repo",
+      "irasim-bridge-archive": "no_pinned_immutable_revision",
+      "minivla-pretrain-vq": "no_pinned_immutable_revision",
+      "minivla-vq-bridge": "no_pinned_immutable_revision",
+      "octo-base": "no_pinned_immutable_revision",
+      "octo-small": "no_pinned_immutable_revision",
+      "open-pi-zero": "no_pinned_immutable_revision",
+      "openvla-7b": "card_advertises_a_license_but_no_license_file_was_retrieved",
+      "paligemma-mirror-candidate": "card_advertises_a_license_but_no_license_file_was_retrieved",
+      "paligemma-official": "license_metadata_requires_accepted_terms",
+      "qwen2.5-vl-7b-instruct": "no_pinned_immutable_revision",
+      "sdxl-vae": "no_pinned_immutable_revision",
+      "susie-low-level": "no_pinned_immutable_revision",
+      "susie-subgoal": "no_pinned_immutable_revision",
+      "vjepa2-vitl-fpc64-256": "no_pinned_immutable_revision"
+    },
+    "verified": 5,
+    "verified_assets": [
+      "code-auto-eval",
+      "code-cosmos-framework",
+      "code-irasim",
+      "code-open-pi-zero",
+      "code-openvla"
+    ]
+  }
+}

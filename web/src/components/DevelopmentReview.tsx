@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EmptyState, Note, Panel, StatusPill } from "./Primitives";
+import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 
 const REVIEW_ROOT = "/api/development-review";
 const REVIEW_SESSION_STORAGE_KEY = "plumb:development-review:session-v1";
@@ -418,7 +418,7 @@ export function DevelopmentReview() {
         </header>
 
         {!session ? (
-          <Panel title="Start a review session" eyebrow="Your own saved drafts only">
+          <Panel title="Start a review session" action={<SourceChip>your own saved drafts only</SourceChip>}>
             {setupBusy && <p className="text-pretty text-sm text-[var(--text-muted)]" id="sets-loading" role="status">{resuming ? "Resuming your saved development review session…" : "Loading development review sets…"}</p>}
             {!setupBusy && sets.length === 0 && !setupError && (
               <EmptyState>No development review sets are available yet. Return when the coordinator has assigned one.</EmptyState>
@@ -450,15 +450,18 @@ export function DevelopmentReview() {
               </form>
             )}
             <FormError id="session-error">{setupError}</FormError>
-            <Note>No placeholder reviewer, rating, or calibration status is created when no session has been started.</Note>
+            <Note summary="What is recorded before you start">
+              No placeholder reviewer, rating, or calibration status is created when no session has been
+              started.
+            </Note>
           </Panel>
         ) : clips.length === 0 ? (
-          <Panel title="Review session" eyebrow="Development-only">
+          <Panel title="Review session" action={<SourceChip>development only</SourceChip>}>
             <EmptyState>Your session has no assigned opaque clips. No rating form is shown.</EmptyState>
           </Panel>
         ) : currentClip ? (
           <section className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
-            <Panel title={`Clip ${clipIndex + 1} of ${clips.length}`} eyebrow="Development review only" action={<StatusPill status="pending">saved drafts {savedDraftCount} / {total}</StatusPill>}>
+            <Panel title={`Clip ${clipIndex + 1} of ${clips.length}`} action={<StatusPill status="pending">saved drafts {savedDraftCount} / {total}</StatusPill>}>
               <p className="mb-4 break-all text-sm text-[var(--text-muted)]">{clipName(currentClip, clipIndex)}</p>
               <section aria-labelledby="review-task-heading" className="mb-5">
                 <h3 className="mb-2 text-balance text-lg font-semibold text-[var(--text-strong)]" id="review-task-heading">Task and rubric</h3>
@@ -486,7 +489,8 @@ export function DevelopmentReview() {
               </section>
             </Panel>
 
-            <Panel title="Your draft" eyebrow="Only visible evidence" action={<StatusPill status="pending">{saving ? "saving" : "unsent or saved"}</StatusPill>}>
+            <Panel title="Your draft" action={<StatusPill status="pending">{saving ? "saving" : "unsent or saved"}</StatusPill>}>
+              <p className="mb-4 text-pretty text-[var(--text-dim)]">Rate only visible evidence.</p>
               <form onSubmit={(event) => { event.preventDefault(); void saveDraft(false); }} className="grid gap-4" noValidate>
                 <fieldset className="grid gap-4">
                   <legend className="mb-2 text-balance font-semibold">Observed labels</legend>
@@ -511,7 +515,10 @@ export function DevelopmentReview() {
                 {saveStatus && <p className="text-sm text-emerald-200" role="status">{saveStatus}</p>}
                 <div className="flex flex-wrap gap-3"><button className="button button-quiet" type="button" disabled={clipIndex === 0} aria-describedby={clipIndex === 0 ? "previous-help" : undefined} onClick={() => navigate(-1)}>Previous</button><button className="button button-quiet" type="button" disabled={clipIndex === clips.length - 1} aria-describedby={clipIndex === clips.length - 1 ? "next-help" : undefined} onClick={() => navigate(1)}>Next</button><button className="button button-secondary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save draft"}</button><button className="button button-primary" type="button" disabled={saving || clipIndex === clips.length - 1} aria-describedby={clipIndex === clips.length - 1 ? "next-help" : undefined} onClick={() => void saveDraft(true)}>Save and next</button>{clipIndex === 0 && <p className="self-center text-sm text-[var(--text-muted)]" id="previous-help">This is the first assigned clip.</p>}{clipIndex === clips.length - 1 && <p className="self-center text-sm text-[var(--text-muted)]" id="next-help">This is the final assigned clip.</p>}</div>
               </form>
-              <Note>Nothing on this page is a calibration decision or Gate D evidence. The server returns only this reviewer's own drafts.</Note>
+              <Note summary="What this page is not">
+                Nothing on this page is a calibration decision or Gate D evidence. The server returns only
+                this reviewer&apos;s own drafts.
+              </Note>
             </Panel>
           </section>
         ) : null}

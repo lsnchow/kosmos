@@ -21,6 +21,29 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia;
 }
 
+// framer-motion's `useInView` drives the landing page's scroll reveals. jsdom
+// has no viewport to intersect with, so the stub reports everything visible —
+// which is the state assertions should run against anyway.
+if (!globalThis.IntersectionObserver) {
+  globalThis.IntersectionObserver = class {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds: ReadonlyArray<number> = [];
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback(
+        [{ isIntersecting: true, target } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    }
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class {
     observe() {}

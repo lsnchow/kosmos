@@ -1,4 +1,4 @@
-import { Eye, Film, Pause, Play } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { useState } from "react";
 import { api, artifactUrl, type SixClipResponse } from "../lib/api";
 import { formatCount, formatRateAsPercent, pickNumber, pickString } from "../lib/format";
@@ -49,13 +49,12 @@ export function SixClipPanel({
   return (
     <Panel
       title="Real or generated?"
-      eyebrow="Audience test · one of six is a real robot"
       className="sixclip-panel"
       action={<SourceChip>{revealed ? "revealed" : "provenance sealed"}</SourceChip>}
       id="sixclip"
     >
       {clips.length === 0 ? (
-        <EmptyState icon={<Film aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="film" />}>
           {pickString(data?.reason) ??
             "No six-clip panel has been published by the API."}{" "}
           No stand-in clips are shown, because a generated clip labelled as the test would make the test
@@ -70,9 +69,9 @@ export function SixClipPanel({
               onClick={() => setPlaying((prior) => !prior)}
             >
               {playing ? (
-                <Pause aria-hidden="true" className="size-4" />
+                <Glyph name="pause" />
               ) : (
-                <Play aria-hidden="true" className="size-4" />
+                <Glyph name="play" />
               )}
               {playing ? "Pause clips" : "Play clips"}
             </button>
@@ -82,7 +81,7 @@ export function SixClipPanel({
               onClick={() => void reveal()}
               disabled={revealing || revealed}
             >
-              <Eye aria-hidden="true" className="size-4" />
+              <Glyph name="eye" />
               {revealed ? "Revealed" : revealing ? "Revealing…" : "Reveal which is real"}
             </button>
           </div>
@@ -158,7 +157,7 @@ export function SixClipPanel({
           </div>
         </>
       )}
-      <Note>
+      <Note summary="How this test is run">
         Clip order is randomized by the server and the real clip's identity stays sealed until reveal. A
         result here is an audience observation, not a measurement of the world model.
       </Note>
