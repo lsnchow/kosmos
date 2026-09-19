@@ -158,6 +158,15 @@ describe("<CloudDiagnosticPanel />", () => {
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 
+  it("truncates only the visible history identifier while retaining its full accessible name and title", async () => {
+    const requestId = "cloud-e2dd4f395307440bae93300840adc632";
+    install(STATUS, [{ ...COMPLETED, request_id: requestId }]);
+    render(<CloudDiagnosticPanel />);
+    const row = await screen.findByRole("button", { name: `Open cloud diagnostic ${requestId}, completed` });
+    const visible = row.querySelector(`[title="${requestId}"]`);
+    expect(visible).toHaveTextContent("cloud-e2dd…40adc632");
+  });
+
   it("has no axe violations", async () => {
     install();
     const { container } = render(<CloudDiagnosticPanel />);

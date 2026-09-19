@@ -1,5 +1,24 @@
 # PLUMB continuation — current entrypoint
 
+## Current: Baseten diagnostic E2E verified
+
+Use http://127.0.0.1:8787/live#cloud-diagnostic. Baseten model3mzlenow,
+deploymentq929yoj is live in its production environment under team33/q8grpdw,
+profileplumb-api. Actual H100 inference, warm repeat, rejected malformed input,
+valid recovery, localhost process restart/readback, browser/mobile QA, and
+scale-to-zero wake all passed. See docs/BASETEN-MVP.md and HANDOFF.md first.
+The new Kosmos frontend was merged through origin/main2d41a65 as01ee13e.
+All earlier access/deployment-pending notes below are historical.
+
+Start with `.venv/bin/python scripts/serve_baseten_mvp.py --model-id 3mzlenow
+--deployment-id q929yoj --profile plumb-api --timeout-seconds 600` (one line).
+It already runs in LOCAL tmuxplumb-live, port8787, data/live-integrated.
+Max1/min0 H100 replicas,60s idle scale-down. Organization SSH is disabled;
+do not change shared settings. Secrets remain in the CLI credential store.
+1356 Python tests passed/6skipped;255 frontend tests and build passed.
+This is real policy-action inference only. Generated rollouts/automatic success
+scoring are not qualified; all gates stay not_run and judge adapters disabled.
+
 ## New priority: run the MVP on Baseten, Team 33
 
 Lucas supplied working Baseten access and requested the full MVP running there.

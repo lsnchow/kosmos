@@ -103,6 +103,11 @@ function actionText(values: number[] | undefined): string {
   return values ? `[${values.map((value) => value.toFixed(5)).join(", ")}]` : "not reported";
 }
 
+function visibleRequestId(requestId: string | undefined): string {
+  if (!requestId) return "request id not reported";
+  return requestId.length > 22 ? `${requestId.slice(0, 10)}…${requestId.slice(-8)}` : requestId;
+}
+
 /**
  * A one-fixture cloud smoke request, intentionally separate from study and
  * synthetic task controls. It has no completion score or browser-side retry.
@@ -226,6 +231,7 @@ export function CloudDiagnosticPanel() {
   return (
     <Panel
       title="Cloud diagnostic"
+      className="scroll-mt-24"
       id="cloud-diagnostic"
       action={<SourceChip>{status?.policy ?? "policy not reported"} · diagnostic only</SourceChip>}
     >
@@ -313,16 +319,17 @@ export function CloudDiagnosticPanel() {
       <section className="mt-4" aria-labelledby="cloud-history-heading">
         <h3 className="text-balance text-base font-medium" id="cloud-history-heading">Saved diagnostic history</h3>
         {requests.length === 0 ? <EmptyState>No cloud diagnostic server record exists yet.</EmptyState> : (
-          <ol className="mt-3 grid gap-2">
+          <ol className="mt-3 grid min-w-0 gap-2">
             {requests.map((item) => (
-              <li key={item.request_id ?? `${item.status}-${requests.indexOf(item)}`}>
+              <li className="min-w-0" key={item.request_id ?? `${item.status}-${requests.indexOf(item)}`}>
                 <button
                   type="button"
-                  className="button button-secondary w-full justify-between text-left"
+                  className="button button-secondary min-w-0 w-full justify-between overflow-hidden text-left"
                   aria-pressed={item.request_id === selectedId}
+                  aria-label={item.request_id ? `Open cloud diagnostic ${item.request_id}, ${statusLabel(item.status)}` : undefined}
                   onClick={() => setSelectedId(item.request_id)}
                 >
-                  <span className="truncate">{item.request_id ?? "request id not reported"}</span>
+                  <span className="min-w-0 truncate" title={item.request_id}>{visibleRequestId(item.request_id)}</span>
                   <StatusPill status={pillStatus(statusLabel(item.status))}>{statusLabel(item.status)}</StatusPill>
                 </button>
               </li>
@@ -335,6 +342,7 @@ export function CloudDiagnosticPanel() {
         This panel exposes only persisted server readiness and one fixed-fixture native-action request. A completed
         record shows that the server reported completion; it does not establish robot success, world fidelity,
         policy quality, calibration, or any qualified Baseten deployment claim.
+        The cloud model scales down when idle; a request may include a cold start before inference begins.
       </Note>
     </Panel>
   );

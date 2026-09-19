@@ -1,5 +1,17 @@
 # PLUMB cluster operations — handoff for num2
 
+## Current Baseten managed inference
+
+Model3mzlenow / deploymentq929yoj, team33/q8grpdw, profileplumb-api is the
+verified diagnostic MVP. Use docs/BASETEN-MVP.md. Actual cloud H100 calls and
+cold wake passed; isolated child runtime avoids Truss/ML dependency collisions.
+Latest GitHub frontend is merged. LOCAL plumb-live serves localhost8787; b10
+retains operator CLI context. Max1/min0 replicas,60s idle scale-down. Older
+failed/superseded versions are retained inactive; do not reactivate them.
+Organization SSH is disabled (provider400); no setting was changed to bypass
+that. GPU/credit quotas were not modified. Managed model inference works
+without SSH. This deployment's production label does not qualify any gate.
+
 ## NEW Baseten access — LOCAL tmux `b10`
 
 Baseten API-key profile `plumb-api` is configured and verified. Use it explicitly

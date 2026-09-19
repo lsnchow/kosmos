@@ -30,6 +30,12 @@ matrix. It exercises real persistence, cancellation, event delivery, artifact
 serving, and analysis, but its images/labels are not learned-model or robot results.
 The console does not fabricate Baseten queue depth, cost, or qualification.
 
+The real Baseten policy-action MVP is a separate, verified flow at
+[/live#cloud-diagnostic](http://127.0.0.1:8787/live#cloud-diagnostic).
+See [Baseten MVP operation and evidence](docs/BASETEN-MVP.md) for the deployed
+identity and startup command. It does not turn synthetic runs into real rollouts
+or enable uncalibrated judge scoring.
+
 ```bash
 .venv/bin/plumb run --starts 50 --data-dir data
 .venv/bin/plumb reference

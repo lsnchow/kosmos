@@ -1,5 +1,50 @@
 # PLUMB execution handoff — implementation in progress
 
+## Baseten diagnostic MVP verified — localhost E2E is live
+
+Open http://127.0.0.1:8787/live#cloud-diagnostic and use **Run cloud model**.
+The Kosmos landing/frontend changes were merged through origin/main2d41a65;
+merge01ee13e preserves both the latest frontend and this ML/backend work.
+
+Actual Baseten model **3mzlenow**, team **33/q8grpdw**, profile **plumb-api**:
+deployment **q929yoj** (`mvp-gcbc-v6-isolated`) is the tested production
+environment target. Its HTTP/Truss process is isolated from a persistent ML
+venv child (JAX0.4.20/Flax0.7.5/TF2.15.0/protobuf4.25.8/CUDA12.2/cuDNN8.9).
+The cloud response verifies NVIDIA H10080GB, pinned checkpoint/source hashes,
+and strict changed parameter restore. No CPU fallback or judge adapter is used.
+
+Verified real requests, with raw evidence under data/live-integrated/cloud-diagnostics/:
+- cloud-e2dd4f395307440bae93300840adc632: real browser request, finite7-D action,
+  15.381s client request /13.369s first model invocation (includes compilation).
+- cloud-repeat-20260919-01: exact warm-repeat action,0.565s client /0.0368s model.
+- cloud-recovery-20260919-01: succeeds after intentionally malformed cloud PNG
+  request was rejected; same loaded worker.0.00883s model invocation.
+- cloud-cold-20260919-01: verified wake from SCALED_TO_ZERO/0replicas;
+  31.900s client /14.869s load /2.769s invocation. Cold-worker physical action
+  differs by at most5.59e-7 from the first worker; no bitwise cold-repeat claim.
+
+Actual API process restart, browser reload, saved-report readback, duplicate-ID
+idempotency, invalid local POST rejection, and desktop/390px mobile checks all
+passed; no JS errors or horizontal overflow. Current API PID34177 in LOCAL
+tmuxplumb-live (recheck PID before any restart). Startup:
+`.venv/bin/python scripts/serve_baseten_mvp.py --model-id 3mzlenow --deployment-id q929yoj --profile plumb-api --timeout-seconds 600`.
+Data root is data/live-integrated. Full verification:1356 Python passed/6skipped;
+255 frontend passed, typecheck/build passed. Existing npm moderate advisories
+and >500kB bundle warning remain follow-up work, not hidden test failures.
+
+Deployment max1/min0,60s idle scale-down; all earlier attempts are inactive
+or failed, not deleted. Evidence/config/failure receipts live in
+data/baseten-mvp-evidence/. Billing credits/cost are not established by quota.
+Organization SSH is disabled; managed inference did not require enabling it.
+Never print/read CLI credential values or change shared quotas/defaults.
+Read docs/BASETEN-MVP.md for operation, measurements and failure semantics.
+
+This is a **real cloud policy-action diagnostic**, not a generated video rollout,
+success score, calibrated judge, or completed scientific study. Synthetic task
+controls now say so explicitly. Gates A–F remain not_run; biased judge adapters
+remain disabled. Local durable storage is verified, not exactly-once recovery
+of a remote output lost before localhost received it. Preserve this boundary.
+
 ## NEW: Baseten Team 33 access configured — MVP deployment priority
 
 Lucas's side conversation explicitly requests getting the full MVP running on

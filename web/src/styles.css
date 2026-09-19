@@ -446,6 +446,7 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-6) max(var(--space-4), env(safe-area-inset-right)) var(--space-8) max(var(--space-4), env(safe-area-inset-left)); min-width: 0; }
 .page:focus { outline: none; }
 .page-stack { display: grid; gap: var(--space-3); min-width: 0; }
+.page-stack > * { min-width: 0; }
 .page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-8); margin-bottom: 0; }
 .page-header-main { display: grid; gap: var(--space-2); min-width: 0; }
 .page-lede { max-width: 62ch; color: var(--text-muted); font-size: var(--fs-2xs); line-height: var(--leading-normal); }
@@ -1156,10 +1157,9 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
  * once and then never again. They used to be printed under every figure; now
  * they sit behind a one-character control that shows them on hover or focus.
  *
- * The body is positioned, not conditionally rendered, so the text is always in
- * the DOM for a screen reader and for `aria-describedby`. `visibility` rather
- * than `display` is what hides it, so focus can still reach the trigger and
- * the tooltip can still be measured.
+ * A closed tooltip must not create an off-screen min-content width on a narrow
+ * viewport. It remains in the DOM for its trigger relationship, but is not
+ * rendered until hover or focus exposes it.
  * ------------------------------------------------------------------------- */
 
 .infotip { position: relative; display: inline-flex; flex: none; }
@@ -1197,8 +1197,7 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
   letter-spacing: 0;
   text-align: left;
   text-transform: none;
-  visibility: hidden;
-  opacity: 0;
+  display: none;
 }
 /*
  * `:focus-within`, not `:focus-visible`. A focus ring is the right thing to
@@ -1209,8 +1208,8 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
  * dismissible / hoverable / persistent requirements of WCAG 1.4.13.
  */
 .infotip:hover .infotip-body,
-.infotip:focus-within .infotip-body { visibility: visible; opacity: 1; }
-.infotip-dismissed .infotip-body { visibility: hidden; opacity: 0; }
+.infotip:focus-within .infotip-body { display: block; }
+.infotip-dismissed .infotip-body { display: none; }
 /* Near the right edge the body would overflow the panel; flip it to the left. */
 .telemetry > .metric:nth-child(n + 4) .infotip-body,
 .burst-metrics > .metric:last-child .infotip-body { right: 0; left: auto; }
@@ -1355,6 +1354,7 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
   .page { padding-right: var(--space-3); padding-left: var(--space-3); }
   .topbar { gap: var(--space-2); }
   .api-health { display: none; }
+  .infotip-body { position: fixed; right: var(--space-3); bottom: var(--space-3); left: var(--space-3); width: auto; max-width: none; }
 }
 
 /*

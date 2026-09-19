@@ -1,5 +1,24 @@
 # Team 33 Baseten access — MVP priority
 
+## MVP outcome verified — 2026-09-19
+
+The managed-inference diagnostic is deployed and localhost E2E works. Use
+http://127.0.0.1:8787/live#cloud-diagnostic and docs/BASETEN-MVP.md.
+Model3mzlenow / deploymentq929yoj belongs to team33/q8grpdw and is the model's
+production target. It is a real, explicitly unqualified SuSIE_LL action model,
+not the full world-model evaluation pipeline.
+
+Verified: real browser request, exact warm repeat, malformed-input rejection
+and subsequent healthy request, persisted result/reload, API process restart,
+idempotency, mobile layout, and cold wake from zero replicas. One H100 maximum,
+zero minimum,60s idle scale-down. Earlier failed versions are retained inactive.
+The cloud ML child has an isolated pinned runtime; no weights are on the laptop.
+All scientific gates and disabled judge adapters remain unchanged.
+
+Remaining account unknowns: credits/expiry and reconciled cost. Training quota
+does not answer those. Organization SSH is disabled; no shared setting was
+changed, and SSH was unnecessary for the completed managed-inference path.
+
 ## Verified configuration update — 2026-09-19
 
 Lucas explicitly requested configuration in LOCAL tmux `b10`.
@@ -54,30 +73,33 @@ Do not interrupt work already running in the main conversation.
   describe `baseten train capacity describe`; inspect the installed CLI version
   first because this repo previously validated Truss 0.18.30, not every newer
   CLI surface. Do not change organization/team quotas.
-- [ ] Choose the compute route from actual entitlements: managed inference for
+- [x] Choose the compute route from actual entitlements: managed inference for
   a persistent model endpoint if available; Training Jobs with SSH for bounded
   runtime setup/debugging otherwise. Verify networking before treating an SSH
   training container as an externally callable application server.
-- [ ] Scope an explicit **unqualified cloud diagnostic MVP**, separate from the
+- [x] Scope an explicit **unqualified cloud diagnostic MVP**, separate from the
   full six-policy/five-task scientific study. One supported policy, one task,
   one actual request, persistent artifacts, and a visible dashboard result are
   the first integration milestone. That alone is not a full evaluated rollout.
-- [ ] Reuse `deploy/baseten/DEPLOY.md`, `chain.py`, existing outbox/callback/result
+- [x] Reuse `deploy/baseten/DEPLOY.md`, `chain.py`, existing outbox/callback/result
   store code and the current dashboard. First establish one bounded cloud-native
   model smoke with pinned public-runtime dependencies and hash-bound assets.
   Alliance wheel builds and timings do not automatically transfer to Baseten.
-- [ ] Plan a topology within the verified two-H100 limit. Do not push all
+- [x] Plan a bounded topology: one H100 was used, despite the larger training allowance. Do not push all
   existing GPU Chainlets unchanged. Start with one GPU and account for peak
   memory; use the second only for a measured need. Sequential stages and
   separate incompatible runtimes are options, not an assumed working layout.
-- [ ] Complete cloud wiring: endpoint/auth, externally reachable authenticated
+- [x] Complete bounded MVP cloud wiring: pinned endpoint/auth and private durable
+  localhost result/readback are verified. Synchronous inference requires no
+  callback; the following callback/remote-store options remain for the full Chain:
+  externally reachable authenticated
   callback if used, private durable result storage/readback, timeout/error
   behavior, and dashboard connection. Keep credentials server-side.
-- [ ] Demonstrate actual request -> model output -> saved artifact -> UI,
+- [x] Demonstrate actual request -> model output -> saved artifact -> UI,
   including one failed-request case and restart/readback. If world-model
   feedback is not yet credible, show the real policy diagnostic and clearly
   labelled recorded clips; do not present them as a successful closed-loop run.
-- [ ] Run only a bounded smoke before larger use; record Team 33 attribution,
+- [x] Run only a bounded smoke before larger use; record Team 33 attribution,
   actual GPU count, runtime, latency scope and billing observations. Configure
   lifecycle/idle shutdown for newly created resources. Do not stop unrelated jobs.
 - [ ] Continue judge development separately. Existing semantic and format-only
@@ -102,6 +124,7 @@ Do not interrupt work already running in the main conversation.
   silently substitute a different model for the frozen judge.
   [Model APIs](https://docs.baseten.co/inference/model-apis/overview).
 
-Access verification and deployment remain TODO. No paid job, endpoint, account
-setting, credential configuration, or existing main-thread work was changed by
-this note. The only workspace addition from this side conversation is this file.
+The historical side conversation only configured access. The main continuation
+subsequently created and verified the bounded deployment described above.
+The full Chain, generated-policy rollouts, calibrated scores and study remain
+separate work; do not infer their completion from the checked MVP items.
