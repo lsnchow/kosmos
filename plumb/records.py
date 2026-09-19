@@ -408,6 +408,11 @@ def normalise_backend_result(
     ):
         if name in raw and raw[name] is not None:
             normalised[name] = str(raw[name])
+    if "segments" in raw and raw["segments"] is not None:
+        values = raw["segments"]
+        if not isinstance(values, (list, tuple)):
+            raise ValueError("backend segments must be a list")
+        normalised["segments"] = [dict(item) for item in values if isinstance(item, Mapping)]
     for name in ("platform_request_ids", "attempt_ids"):
         if name in raw and raw[name] is not None:
             values = raw[name]

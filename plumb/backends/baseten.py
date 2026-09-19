@@ -876,6 +876,10 @@ class BasetenChainBackend:
                 else str(chain_result.get("parity_status") or self.settings.parity_status)
             ),
             "platform_request_ids": list(request_ids or []),
+            # Per-segment frames drive the console's rollout wall. They are
+            # carried verbatim from the Chain so the tile shows exactly what was
+            # persisted, with the certified frame count the Chain reported.
+            "segments": _chain_segments(chain_result),
             "world_identity": {
                 **dict(chain_result.get("world_identity") or {}),
                 "transport": self.transport_kind,
@@ -1215,6 +1219,31 @@ def _chain_segment_count(chain_result: Mapping[str, Any]) -> Optional[int]:
     if isinstance(segments, (list, tuple)):
         return len(segments)
     return None
+
+
+def _chain_segments(chain_result: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Normalise the Chain's per-segment records for the console's wall."""
+
+    raw = chain_result.get("segments")
+    if not isinstance(raw, (list, tuple)):
+        return []
+    segments: List[Dict[str, Any]] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, Mapping):
+            continue
+        urls = entry.get("frame_urls")
+        segments.append(
+            {
+                "segment_index": int(entry.get("index", index)),
+                "frame_urls": [str(item) for item in urls] if isinstance(urls, (list, tuple)) else [],
+                # None, not a guess: a segment that did not report a certified
+                # count must be shown as unreported rather than assumed to be 16.
+                "certified_frame_count": entry.get("certified_frame_count"),
+                "provenance": entry.get("provenance"),
+                "status": entry.get("status"),
+            }
+        )
+    return segments
 
 
 def _chain_gpu_seconds(chain_result: Mapping[str, Any], nested_key: str) -> Optional[float]:

@@ -124,6 +124,11 @@ class RehearsalStats:
         return dict(self.__dict__)
 
 
+def _safe(value: str) -> str:
+    cleaned = "".join(c if c.isalnum() or c in "-_." else "-" for c in str(value)).strip("-.")
+    return (cleaned or "unnamed")[:120]
+
+
 def _deterministic_unit(*parts: Any) -> float:
     """A stable pseudo-random value in [0, 1) derived from *parts*.
 
@@ -379,6 +384,33 @@ class RehearsalChainTransport:
                 with self._lock:
                     self.stats.webhooks_dropped += 1
 
+    def _segment_frames(self, run_id: str, episode_id: str, index: int, chunk: int) -> List[str]:
+        """Persist one segment's frames and return their artifact URLs.
+
+        The frames are deliberately drab, labelled placards rather than anything
+        resembling a robot: a rehearsal frame that looked like a generated
+        rollout would be the single most misleading artifact this project could
+        produce.  They exist so the wall's accumulation, deduplication and
+        provenance-badging can be exercised.
+        """
+
+        from .starts import _solid_png
+
+        directory = self.artifacts_dir / _safe(run_id) / _safe(episode_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        urls: List[str] = []
+        for offset in range(min(chunk, 4)):
+            seed = hashlib.sha256(
+                ("%s|%s|%d|%d" % (run_id, episode_id, index, offset)).encode("utf-8")
+            ).digest()
+            path = directory / ("segment-%04d-frame-%02d.png" % (index, offset))
+            if not path.exists():
+                shade = 40 + (seed[0] % 60)
+                path.write_bytes(_solid_png(64, 64, shade, shade + (seed[1] % 20), shade + (seed[2] % 40)))
+            relative = path.resolve().relative_to(self.artifacts_dir.parent.resolve()).as_posix()
+            urls.append("/api/artifacts/%s" % relative)
+        return urls
+
     def _build_result(
         self,
         run_id: str,
@@ -400,7 +432,16 @@ class RehearsalChainTransport:
             # Deliberately the Chain's nested shape: a list of stage timings and
             # a gpu_seconds accounting object, with no flat aliases. If the
             # consumer only reads flat names, this rehearsal fails loudly.
-            "segments": [{"index": index, "status": "completed"} for index in range(chunks)],
+            "segments": [
+                {
+                    "index": index,
+                    "status": "completed",
+                    "frame_urls": self._segment_frames(run_id, episode_id, index, chunk),
+                    "certified_frame_count": chunk,
+                    "provenance": "qualitative",
+                }
+                for index in range(chunks)
+            ],
             "executed_actions": executed,
             "horizon_actions": int(payload.get("horizon_actions") or executed),
             "timings": [

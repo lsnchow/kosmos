@@ -816,6 +816,31 @@ class Ledger:
             )
             self._set_attempt_terminal(connection, run_id, episode_id, "completed", result=result)
             mode = str(row["mode"] or "")
+            # One segment_completed event per persisted segment. The console's
+            # rollout wall accumulates frames from these; emitting them from the
+            # same transaction that finalises the episode means a tile can never
+            # show frames for an episode the ledger did not commit.
+            for segment in result.get("segments") or ():
+                if not isinstance(segment, Mapping):
+                    continue
+                self._append_event(
+                    connection,
+                    run_id,
+                    "segment_completed",
+                    {
+                        "episode_id": episode_id,
+                        "policy": row["policy"],
+                        "task": row["task"],
+                        "run_id": run_id,
+                        "segment_index": segment.get("segment_index"),
+                        "frame_urls": list(segment.get("frame_urls") or []),
+                        # Null rather than a default: an unreported certified
+                        # count must show as unreported, never as an assumed 16.
+                        "certified_frame_count": segment.get("certified_frame_count"),
+                        "provenance": segment.get("provenance"),
+                        "status": segment.get("status"),
+                    },
+                )
             self._append_event(
                 connection,
                 run_id,

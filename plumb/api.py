@@ -63,6 +63,10 @@ TILE_SLOTS = 12
 #: Spec section 7 asks for one-second telemetry where it is supported.
 TELEMETRY_INTERVAL_SECONDS = 1.0
 
+#: How many recent events to replay to a newly connected stream, so a reload
+#: rebuilds the wall rather than starting blank.
+SEGMENT_REPLAY_EVENTS = 400
+
 #: Snapshots to keep sending after a run reaches a terminal status.  The old
 #: implementation broke immediately, so the telemetry strip froze the instant a
 #: burst finished -- exactly when a stage audience is looking at it.  A bounded
@@ -785,7 +789,9 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
         require_run(run_id)
 
         async def snapshots():
-            last_sequence = 0
+            # Replay recent segment events so a client that connects mid-run (or
+            # reloads) rebuilds its wall instead of starting empty.
+            last_sequence = max(0, _latest_sequence(service, run_id) - SEGMENT_REPLAY_EVENTS)
             terminal_snapshots = 0
             while not await request.is_disconnected():
                 run = require_run(run_id)
@@ -1015,6 +1021,14 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
 
 
 # --------------------------------------------------------------------- helpers
+
+
+def _latest_sequence(service: RunService, run_id: str) -> int:
+    try:
+        events = service.list_events(run_id, after=0)
+    except Exception:  # pragma: no cover - a missing run is handled by the caller
+        return 0
+    return max((int(event.get("sequence") or 0) for event in events), default=0)
 
 
 def _terminal_tail_interval() -> float:
