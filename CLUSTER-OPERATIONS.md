@@ -9,6 +9,10 @@ harness runtime field. Preserve its raw report/log. Retry938946 COMPLETED0:0
 with three actual production241fb native calls and exact reset/repeat. The new
 release and report locations are in HANDOFF.md. Do not repeat this successful
 check or mutate either release; neither check is a qualified policy evaluation.
+Both jobs are terminal; no new allocation is intentionally left running. Recheck
+live scheduler state before any future submission. The live local app is now
+LOCAL tmux `plumb-live`, port8787, using the merged main source; older plumb-api
+and PID65815 references below are historical. See HANDOFF.md for restart/data.
 
 Production241fb source and environment are separate from the old tested37951
 ones: `/scratch/lchow432/plumb/source-octo-autoeval241fb` and

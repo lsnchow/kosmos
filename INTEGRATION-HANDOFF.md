@@ -1,10 +1,12 @@
 # Parallel-branch integration handoff
 
-UPDATE2026-09-19: these original merge instructions have been executed in
+UPDATE2026-09-19: merge3832de3 is pushed to origin/main and the normal workspace
+is on main. These original merge instructions have been executed in
 `/Users/lucas/Desktop/tax_stuff/htn26-integration` against newer main634a796.
 Read HANDOFF.md's first section for current verification, deliberate adapter/
 distillation namespaces, lifecycle fixes and new production241fb GPU evidence.
 The conflict list and unmerged status below are historical, not current work.
+Live app8787 runs the merged source in LOCAL tmux plumb-live with copied data.
 
 The tested num2 continuation is on **`num2-verified-continuation`**, based on
 `425a6dd`. Its implementation commit is `f5eddee`. The 212-pass test result and

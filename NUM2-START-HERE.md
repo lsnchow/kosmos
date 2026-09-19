@@ -1,14 +1,19 @@
 # Start message for a new chat named num2
 
 NEWEST ENTRYPOINT (2026-09-19 late morning): read the new first section of
-HANDOFF.md before the historical instructions below. The active integration
-worktree is `/Users/lucas/Desktop/tax_stuff/htn26-integration`, branch
-`integrate-num2-runtime`, merging main634a796 and num2dd8a12f. It has passed the
+HANDOFF.md before the historical instructions below. Merge3832de3 is delivered
+to origin/main and the normal workspace is on main. The separate integration
+worktree `/Users/lucas/Desktop/tax_stuff/htn26-integration` retains rehearsal
+data and the deploy-validation venv. The merge preserves634a796 and dd8a12f.
+It has passed the
 combined tests (1,149passed/6skipped) and corrected full1,500 simulated transport
 rehearsal. Production241fb Octo GPU smoke938946 also completed successfully,
-unqualified; failed harness938918 remains preserved. Merge delivery is next.
+unqualified; failed harness938918 remains preserved. Local app8787 runs merged
+source in tmux plumb-live using data/live-integrated. All14 reports/5clips work.
 Allocation937277 EXPIRED; never treat the old running/cancellation text below as
-live state. Preserve original API/data and all failed diagnostic reports.
+live state. Original API65815 was gracefully replaced; original data and all
+failed diagnostic reports are preserved. Full scientific scope is NOT complete;
+read the explicit remaining inputs/access/fidelity blockers in HANDOFF.md.
 
 Continue implementing PLUMB in /Users/lucas/Desktop/tax_stuff/htn26.
 Current tested branch: num2-verified-continuation. Kevin concurrently advanced

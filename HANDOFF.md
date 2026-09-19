@@ -3,9 +3,12 @@
 ## Integrated continuation — 2026-09-19 late morning
 
 This section supersedes the branch, process, test and allocation snapshots below.
-Work is in `/Users/lucas/Desktop/tax_stuff/htn26-integration`, branch
-`integrate-num2-runtime`: newer main `634a796` and num2 `dd8a12f` are integrated
-without discarding either history. Root is completing verification and delivery.
+**Delivered:** merge commit `3832de3` is pushed to origin/main. It preserves both
+parents: newer main `634a796` and num2 `dd8a12f`. The normal workspace
+`/Users/lucas/Desktop/tax_stuff/htn26` is now on main at this integration.
+The integration worktree `/Users/lucas/Desktop/tax_stuff/htn26-integration`
+retains the full rehearsal data and separate deploy-validation environment.
+The older num2 branch and all diagnostic evidence are preserved.
 
 The merged production backend, protocol/artifact/annotation UI and Training Jobs
 path remain intact. Older source-profile adapters are deliberately isolated in
@@ -69,10 +72,30 @@ Original eight-H100 allocation937277 expired TIMEOUT at09:11 EDT. It is not
 running or awaiting cancellation. Model inference remains scheduler-only, with
 bounded one-H100 jobs; all weights remain on clusters.
 
-The integrated preview is on127.0.0.1:8788 in LOCAL tmux
-`plumb-integration-preview`, using a copied data directory `data/live-integrated`.
-Original API8787 and original data remain untouched pending final cutover.
-Preview health, all report/media links, and blocked real backend were verified.
+**Live app:** http://127.0.0.1:8787 in LOCAL tmux `plumb-live`, PID89195 at
+cutover. It runs the merged source from the normal workspace and uses
+`/Users/lucas/Desktop/tax_stuff/htn26/data/live-integrated`, a copied/migrated
+data directory. The original data directory's database and evidence remain
+untouched; the old idle API65815 was gracefully stopped after checking no active
+runs. Health, all19 report/media URLs (14 diagnostics/5 videos), and blocked real
+backend were verified. Both938918failure and938946success are visible, unscored.
+No live Baseten submission or cloud spending was enabled. Frontend production
+dependency audit reports zero vulnerabilities; three moderate dev-dependency
+advisories remain, with no forced dependency upgrades applied.
+
+To restart this exact local service after inspecting the current listener:
+
+```bash
+cd /Users/lucas/Desktop/tax_stuff/htn26
+PLUMB_DATA_DIR=/Users/lucas/Desktop/tax_stuff/htn26/data/live-integrated \
+  .venv/bin/python -m uvicorn plumb.api:create_app --factory --host 127.0.0.1 --port 8787
+```
+
+Tests were run in the integration worktree with the normal workspace's .venv.
+The Chain SDK validation venv is `.venv-deploy` in the integration worktree;
+it is excluded from git. Source staging is refreshed with
+`python deploy/baseten/stage_packages.py`. Never upload model/data directories
+as deployment source. No automatic long-running monitor remains after delivery.
 
 Still not done: acceptable causal world-model fidelity; remaining source-native
 policy/state/gripper/execution-prefix certification; real matched panels and
