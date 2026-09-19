@@ -2,10 +2,10 @@
  * The four pillar sections, the limits block, and the footer.
  *
  * Every pillar has the same shape — heading, body, action, three numbered
- * sub-items, one figure — so there is one component rather than four. The
- * differences between them live in `PILLARS`, which means a fifth pillar is a
- * data edit and not a new file, and it means no pillar can quietly acquire a
- * layout the others do not have.
+ * sub-items — so there is one component rather than four. The differences
+ * between them live in `PILLARS`, which means a fifth pillar is a data edit and
+ * not a new file, and it means no pillar can quietly acquire a layout the
+ * others do not have.
  */
 import type { ReactNode } from "react";
 import {
@@ -18,54 +18,11 @@ import {
   CONSOLE_PATH,
   LIVE_PATH,
 } from "./content";
-import { ConsoleFigure } from "./figures/ConsoleFigure";
-import { EvidenceFigure } from "./figures/EvidenceFigure";
-import { MatrixFigure } from "./figures/MatrixFigure";
-import { ReliabilityFigure } from "./figures/ReliabilityFigure";
-import { FigPanel, PillButton, Reveal, SectionCard, useFigureInView } from "./Pieces";
+import { PillButton, Reveal, SectionCard } from "./Pieces";
 
 type Pillar = (typeof PILLARS)[number];
 
-/** One caption per figure, naming the constants it draws from. */
-const FIGURE_CAPTIONS: Record<Pillar["figure"], string> = {
-  matrix: "Evaluation matrix, filling",
-  reliability: "Published rates · 95% Wilson intervals",
-  evidence: "Provenance ledger",
-  console: "Console tile wall · queue depth",
-};
-
-function FigureFor({ kind, play }: { kind: Pillar["figure"]; play: boolean }) {
-  switch (kind) {
-    case "matrix":
-      return <MatrixFigure play={play} />;
-    case "reliability":
-      return <ReliabilityFigure play={play} />;
-    case "evidence":
-      return <EvidenceFigure play={play} />;
-    case "console":
-      return <ConsoleFigure play={play} />;
-  }
-}
-
-/**
- * The figure's own viewport gate.
- *
- * Split out so each figure owns one `useInView` on the panel that contains it,
- * rather than the section inheriting a single gate and starting a figure that
- * is still two screens away.
- */
-function PillarFigure({ pillar, index }: { pillar: Pillar; index: number }) {
-  const { ref, play } = useFigureInView();
-  return (
-    <div ref={ref}>
-      <FigPanel index={index} caption={FIGURE_CAPTIONS[pillar.figure]}>
-        <FigureFor kind={pillar.figure} play={play} />
-      </FigPanel>
-    </div>
-  );
-}
-
-function PillarSection({ pillar, index }: { pillar: Pillar; index: number }) {
+function PillarSection({ pillar }: { pillar: Pillar }) {
   return (
     <SectionCard id={pillar.id}>
       <div className="pillar-head">
@@ -97,8 +54,6 @@ function PillarSection({ pillar, index }: { pillar: Pillar; index: number }) {
           </ul>
         </Reveal>
       </div>
-
-      <PillarFigure pillar={pillar} index={index} />
     </SectionCard>
   );
 }
@@ -106,8 +61,8 @@ function PillarSection({ pillar, index }: { pillar: Pillar; index: number }) {
 export function Pillars() {
   return (
     <>
-      {PILLARS.map((pillar, index) => (
-        <PillarSection key={pillar.id} pillar={pillar} index={index + 1} />
+      {PILLARS.map((pillar) => (
+        <PillarSection key={pillar.id} pillar={pillar} />
       ))}
     </>
   );

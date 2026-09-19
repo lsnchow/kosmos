@@ -41,8 +41,7 @@ export const PROTOCOL_PATH = "/api/protocol";
  *
  * The order is an argument and not a menu: the matrix is worthless if it does
  * not repeat (02), a repeatable number is worthless if you cannot trace it
- * (03), and none of it matters if you cannot watch it happen (04). Each pillar
- * owns exactly one figure, and `figure` names the component that draws it.
+ * (03), and none of it matters if you cannot watch it happen (04).
  *
  * Every `items` entry is a claim already made elsewhere in this file or in the
  * build spec. Nothing here is new marketing.
@@ -57,7 +56,6 @@ export const PILLARS = [
     headline: "Six policies, five tasks, fifty rollouts — and not one robot arm.",
     body: "The full 6 × 5 × 50 matrix runs as recurring inference. Every episode is a row in a transactional ledger with its own artifacts, so a run that dies halfway resumes instead of restarting.",
     cta: { label: "Open the console", href: CONSOLE_PATH },
-    figure: "matrix" as const,
     items: [
       { key: "1.1", title: "1,500 episodes a run", body: "The same matrix the published work scored by hand." },
       { key: "1.2", title: "Four steps, four hardware profiles", body: "Policy, world model, validity gate, judge — autoscaled independently." },
@@ -72,7 +70,6 @@ export const PILLARS = [
     headline: "Four numbers about the instrument, published before any finding.",
     body: "Three prior systems already automate this with world models. All three report accuracy. None reports precision — whether the answer repeats. These four are the product, the way a multimeter ships with a tolerance rather than a paper.",
     cta: { label: "See the report", href: RESULTS_PATH },
-    figure: "reliability" as const,
     items: [
       { key: "2.1", title: "Wilson intervals on every rate", body: "Never a bare percentage. Every number carries its n." },
       { key: "2.2", title: "Cluster bootstrap on tasks", body: "On tasks, not episodes — the unit that actually varies." },
@@ -87,7 +84,6 @@ export const PILLARS = [
     headline: "Every figure carries its citation, or it reads “not yet measured”.",
     body: "Published numbers arrive with their table. Numbers we measured arrive with their run id and artifact hash. There is no third category, and nothing is estimated to fill a gap in the layout.",
     cta: { label: "Read the record", href: EVIDENCE_PATH },
-    figure: "evidence" as const,
     items: [
       { key: "3.1", title: "Provenance on every artifact", body: "Immutable, content-addressed, served from the run that made it." },
       { key: "3.2", title: "Coverage and missing-outcome bounds", body: "Horowitz–Manski bounds beside complete-case rates." },
@@ -102,7 +98,6 @@ export const PILLARS = [
     headline: "Watch fifteen hundred rollouts land in a minute.",
     body: "Twelve live tiles, a gate view, queue telemetry, and a cost sweep that stays empty until real sweep evidence exists. Nothing on this surface is fabricated to look busy.",
     cta: { label: "Start a live run", href: LIVE_PATH },
-    figure: "console" as const,
     items: [
       { key: "4.1", title: "Server-sent events, not polling", body: "Reconnects on drop; the tile wall accumulates frames in order." },
       { key: "4.2", title: "Cancel mid-matrix", body: "Cancellation is tracked through the outbox and the ledger alike." },

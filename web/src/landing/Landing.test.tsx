@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Landing } from "./Landing";
-import { BURST_TARGET, CALLED_SHOT, FOUR_NUMBERS, PENDING, PILLARS, PRODUCT } from "./content";
+import { LIMITS, PILLARS, PRODUCT } from "./content";
 
 function renderLanding() {
   return render(
@@ -45,61 +45,44 @@ describe("landing page", () => {
     for (const href of toLive) expect(href).toBe("/live");
   });
 
-  it("renders all four pillars, numbered, each with its figure", () => {
+  it("renders all four pillars with their number, claim and sub-items", () => {
     renderLanding();
     for (const pillar of PILLARS) {
       const section = document.querySelector(`#${pillar.id}`) as HTMLElement;
       expect(section).toBeTruthy();
       expect(within(section).getByRole("heading", { level: 2 })).toHaveTextContent(pillar.headline);
-      // Three sub-items, and the figure panel that belongs to the pillar.
+      expect(within(section).getByText(pillar.number)).toBeInTheDocument();
       for (const item of pillar.items) {
         expect(within(section).getByText(item.title)).toBeInTheDocument();
+        expect(within(section).getByText(item.key)).toBeInTheDocument();
       }
-      expect(section.querySelector(".fig-panel")).toBeTruthy();
+      expect(within(section).getByRole("link", { name: new RegExp(pillar.cta.label, "i") })).toHaveAttribute(
+        "href",
+        pillar.cta.href,
+      );
     }
   });
 
-  it("numbers the figure panels FIG.1 through FIG.4", () => {
+  it("carries no figure panels", () => {
+    // The four FIG.N data panels were removed. This asserts they are gone
+    // rather than merely unstyled — an orphaned panel with no CSS would still
+    // render its markup and would not show up in a visual check.
     renderLanding();
-    for (let index = 1; index <= PILLARS.length; index += 1) {
-      expect(screen.getByText(`FIG.${index}`)).toBeInTheDocument();
-    }
+    expect(document.querySelectorAll(".fig-panel")).toHaveLength(0);
+    expect(document.querySelectorAll("svg.reliability-plot")).toHaveLength(0);
+    expect(document.querySelectorAll(".matrix-cell, .console-tile, .evidence-row")).toHaveLength(0);
+    expect(screen.queryByText(/^FIG\.\d$/)).not.toBeInTheDocument();
   });
 
-  it("shows no value for a number the instrument has not produced", () => {
-    // The whole pitch is that an evaluator without error bars is not an
-    // instrument. A landing page that invented a split-half correlation to fill
-    // the panel would be making the exact mistake it accuses three prior systems
-    // of, so every unmeasured figure renders as the pending string.
-    renderLanding();
-    const section = document.querySelector("#reliability") as HTMLElement;
-    for (const number of FOUR_NUMBERS) {
-      expect(within(section).getByText(number.title)).toBeInTheDocument();
-    }
-    // One per unmeasured number in FIG.2's pending list.
-    expect(within(section).getAllByText(PENDING).length).toBeGreaterThanOrEqual(
-      FOUR_NUMBERS.length,
-    );
-  });
-
-  it("prints the called shot's published rates inside the evidence ledger", () => {
-    renderLanding();
-    const section = document.querySelector("#evidence") as HTMLElement;
-    expect(within(section).getByText("92%")).toBeInTheDocument();
-    expect(within(section).getByText("4%")).toBeInTheDocument();
-    expect(within(section).getByText(CALLED_SHOT.source)).toBeInTheDocument();
-  });
-
-  it("labels the burst figures a target rather than a receipt", () => {
-    renderLanding();
-    expect(screen.getAllByText(BURST_TARGET.status).length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("keeps the limits on the page at full weight", () => {
+  it("keeps every limit on the page at full weight", () => {
+    // With the figures gone this block is the only place the page states a
+    // caveat about itself, so it is checked in full rather than sampled.
     renderLanding();
     const section = document.querySelector("#limits") as HTMLElement;
-    expect(within(section).getByText("Not qualified yet")).toBeInTheDocument();
-    expect(within(section).getByText(/share a backbone lineage/)).toBeInTheDocument();
+    for (const limit of LIMITS) {
+      expect(within(section).getByText(limit.title)).toBeInTheDocument();
+      expect(within(section).getByText(limit.body)).toBeInTheDocument();
+    }
   });
 
   it("has exactly one h1 and skips no heading level", () => {
@@ -147,20 +130,4 @@ describe("landing page", () => {
     }
   });
 
-  it("draws the full matrix in FIG.1", () => {
-    renderLanding();
-    const section = document.querySelector("#evaluate") as HTMLElement;
-    // Six policies against five tasks.
-    expect(section.querySelectorAll(".matrix-cell")).toHaveLength(30);
-    // Fifty rollouts a cell.
-    expect(section.querySelectorAll(".matrix-cell")[0].querySelectorAll(".matrix-dot")).toHaveLength(
-      50,
-    );
-  });
-
-  it("draws twelve console tiles in FIG.4", () => {
-    renderLanding();
-    const section = document.querySelector("#console") as HTMLElement;
-    expect(section.querySelectorAll(".console-tile")).toHaveLength(12);
-  });
 });

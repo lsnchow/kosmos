@@ -1,12 +1,11 @@
 /**
  * The parts every landing section reuses: the scroll reveal, the section frame,
- * the figure panel and the hero's dream wall.
+ * the button and the two-tone heading.
  *
  * `Reveal` is one component rather than a `motion.div` per section because the
  * reduced-motion decision has to be made in exactly one place. Under that
  * preference the content is rendered at its final position with no transform at
- * all — not a faster animation, none. `useFigureInView` extends the same rule to
- * the four data figures: reduced motion gets the final frame, not a slow one.
+ * all — not a faster animation, none.
  */
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
@@ -52,22 +51,7 @@ export function Reveal({ children, className, from = { y: 40 }, delay = 0, durat
   );
 }
 
-/**
- * The gate every figure draws through.
- *
- * Returns `play: true` only when the element is on screen *and* motion is
- * allowed. A figure that reads `false` must render its completed state, because
- * the figure is the evidence — an empty chart under reduced motion would hide
- * the one thing the panel exists to show.
- */
-export function useFigureInView() {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
-  const reduced = useReducedMotion() ?? false;
-  return { ref, play: inView && !reduced, reduced };
-}
-
-/** The small mono label that opens a section or names a figure. */
+/** The small mono label that opens a section. */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <p className={cn("m-0 font-mono text-xs uppercase tracking-[0.18em] text-fg-dim", className)}>
@@ -115,37 +99,6 @@ export function SectionCard({
     <section id={id} className={cn("section-card", className)}>
       {children}
     </section>
-  );
-}
-
-/**
- * A labelled figure panel.
- *
- * `FIG.n` sits in the corner in mono at the dimmest ink on the page, the way a
- * plate is numbered in a paper. The caption is not decoration: every figure on
- * this page draws real constants from `content.ts`, and the caption says which.
- */
-export function FigPanel({
-  index,
-  caption,
-  children,
-  className,
-}: {
-  index: number;
-  caption: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <figure className={cn("fig-panel", className)}>
-      <figcaption className="fig-panel-label">
-        <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">
-          FIG.{index}
-        </span>
-        <span className="font-mono text-xs text-fg-dim">{caption}</span>
-      </figcaption>
-      <div className="fig-panel-body">{children}</div>
-    </figure>
   );
 }
 
