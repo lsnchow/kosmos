@@ -17,6 +17,28 @@ import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
  * Per-tile provenance. Without it a replayed clip and a live one are the same
  * pixels, which is the single easiest way for this demo to mislead somebody.
  */
+/** Ids at or below this length are already readable and are shown whole. */
+const SHORT_ID_MAX = 16;
+/** How much of a hash is kept. Eight hex characters, as `git --oneline` does. */
+const HASH_PREFIX = 8;
+
+/**
+ * An identifier abbreviated the way a shell abbreviates one: the semantic
+ * prefix in full, then the first eight characters of the hash.
+ * `episode-8d1f0deeb7434058bc1bc10b585f8b67` becomes `episode-8d1f0dee`.
+ *
+ * Short ids are returned untouched — abbreviating `ep-77` to `77` would throw
+ * away the half that says what kind of thing it is, which is the opposite of
+ * the point. Nothing is invented for an id that was never reported.
+ */
+function shortId(id: string | undefined): string {
+  if (!id) return "episode id unreported";
+  if (id.length <= SHORT_ID_MAX) return id;
+  const cut = id.lastIndexOf("-");
+  if (cut <= 0) return id.slice(0, HASH_PREFIX);
+  return `${id.slice(0, cut + 1)}${id.slice(cut + 1, cut + 1 + HASH_PREFIX)}`;
+}
+
 export function ProvenanceBadge({ slot }: { slot: TileSlot }) {
   const mixed = provenanceIsMixed(slot);
   if (!slot.provenance) {
@@ -176,8 +198,15 @@ function RolloutTile({
           { label: "Segments", value: formatCount(slot.segmentCount), valueClassName: "tabular-nums" },
         ]}
       />
+      {/*
+        * A short id, the way a shell prints one. This was the full 40-character
+        * episode hash under each of twelve tiles — 480 characters of identifier
+        * on one screen, none of it readable at that size and none of it
+        * typed by anyone. The `title` still carries the full run and episode,
+        * and the viewer prints them in full, so nothing is lost but the noise.
+        */}
       <p className="tile-id truncate" title={`run ${slot.runId ?? "unreported"} · episode ${slot.episodeId ?? "unreported"}`}>
-        {slot.episodeId ?? "episode id unreported"}
+        {shortId(slot.episodeId)}
         {slot.episodeIds.length > 1 ? ` · ${slot.episodeIds.length} episodes` : ""}
       </p>
     </article>

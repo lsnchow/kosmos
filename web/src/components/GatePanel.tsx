@@ -28,6 +28,7 @@ export function GatePanel({ gates }: { gates: Gate[] }) {
       ) : (
         <ol className="gate-list">
           {ordered.map((gate, index) => {
+            const marker = pickString(gate.id) ?? index + 1;
             const name = pickString(gate.name, gate.id) ?? `Gate ${index + 1}`;
             const reason = pickString(
               gate.reason,
@@ -40,8 +41,12 @@ export function GatePanel({ gates }: { gates: Gate[] }) {
               <li key={`${name}-${index}`} className="gate-row">
                 <div>
                   <div className="gate-name">
-                    <span className="gate-index">{pickString(gate.id) ?? index + 1}</span>
-                    {name}
+                    <span className="gate-index">{marker}</span>
+                    {/* The API returns no separate name for these gates, so
+                        `name` falls back to the id and the row read "A  A".
+                        The badge already carries the id; print the name only
+                        when it says something the badge does not. */}
+                    {name === String(marker) ? null : name}
                   </div>
                   <p className="text-pretty">{reason ?? "No evidence reason recorded."}</p>
                 </div>

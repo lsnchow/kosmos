@@ -96,8 +96,14 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
       {gapPoints !== undefined && (
         <p className="calledshot-gap">
           <Glyph name="target" />
-          The simulator and the real robot disagree by{" "}
-          <b className="tabular-nums">{gapPoints.toFixed(0)} percentage points</b> on this one cell.
+          {/* One span, not three bare nodes: .calledshot-gap is a flex row, so
+              every top-level child became a flex item and the `gap` meant to
+              separate the glyph from the sentence was opening columns inside
+              the sentence itself. */}
+          <span>
+            The simulator and the real robot disagree by{" "}
+            <b className="tabular-nums">{gapPoints.toFixed(0)} percentage points</b> on this one cell.
+          </span>
         </p>
       )}
 

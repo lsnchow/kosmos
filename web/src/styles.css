@@ -432,15 +432,21 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .sidebar-hint { color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
 .sidebar-link-active .sidebar-hint { color: var(--accent-ink); opacity: 0.78; }
 
-.page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-8) max(var(--space-5), env(safe-area-inset-right)) var(--space-8) max(var(--space-5), env(safe-area-inset-left)); min-width: 0; }
+/*
+ * Density. The rhythm was built for a card dashboard — 2 rem page padding,
+ * 1 rem between every panel, 1 rem inside them — and a terminal is not that:
+ * it fills its rows. Each step comes in one notch, which recovers roughly a
+ * panel of vertical space per page without anything touching anything else.
+ */
+.page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-6) max(var(--space-4), env(safe-area-inset-right)) var(--space-8) max(var(--space-4), env(safe-area-inset-left)); min-width: 0; }
 .page:focus { outline: none; }
-.page-stack { display: grid; gap: var(--space-4); min-width: 0; }
-.page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4) var(--space-8); margin-bottom: var(--space-2); }
+.page-stack { display: grid; gap: var(--space-3); min-width: 0; }
+.page-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-8); margin-bottom: 0; }
 .page-header-main { display: grid; gap: var(--space-2); min-width: 0; }
 .page-lede { max-width: 62ch; color: var(--text-muted); font-size: var(--fs-2xs); line-height: var(--leading-normal); }
 .page-header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .page-header-actions p { margin: 0; color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
-.split-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-4); align-items: start; min-width: 0; }
+.split-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-3); align-items: start; min-width: 0; }
 
 .topbar .nav-toggle { display: none; }
 
@@ -489,8 +495,8 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
  * grid is at its tightest. Left-inlaid is the other standard TUI form and has
  * no collision at any width.
  */
-.panel { position: relative; min-width: 0; border: 1px solid var(--line-2); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-5) var(--space-4) var(--space-4); }
-.panel-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2) var(--space-4); min-height: 0; margin-bottom: var(--space-3); }
+.panel { position: relative; min-width: 0; border: 1px solid var(--line-2); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-4) var(--space-3-5) var(--space-3-5); }
+.panel-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2) var(--space-4); min-height: 0; margin-bottom: var(--space-2); }
 .panel-heading .eyebrow { margin-bottom: var(--space-1); color: var(--text-muted); }
 .panel-heading > h2 {
   position: absolute;
@@ -727,7 +733,7 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 
 /* --- Telemetry ----------------------------------------------------------- */
 
-.telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3-5) var(--space-4); align-items: start; margin: var(--space-4) 0; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-inset); padding: var(--space-4); }
+.telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3) var(--space-4); align-items: start; margin: var(--space-3) 0; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-inset); padding: var(--space-3-5); }
 .telemetry-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--accent); font-family: var(--font-display); font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; grid-column: 1 / -1; }
 .telemetry .metric strong { font-size: var(--fs-xl); }
 .freshness { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.45; grid-column: 1 / -1; border-top: 1px solid var(--line-1); padding-top: var(--space-3); }
@@ -768,7 +774,7 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 .burst-progress { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 0; overflow: hidden; }
 .burst-progress-label { flex: none; color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; }
 .burst-progress .cell-bar { min-width: 0; overflow: hidden; }
-.burst-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: var(--space-4) 0; }
+.burst-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: var(--space-3) 0; }
 
 .chart-figure { margin: 0; }
 .replica-chart { display: block; width: 100%; height: auto; }
@@ -913,7 +919,8 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 /* Backend status strings are long snake_case tokens; let the pill wrap. */
 .calledshot-cell .status-pill { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .calledshot-source { color: var(--text-dim) !important; font-family: var(--font-sans) !important; text-transform: none !important; letter-spacing: 0 !important; line-height: 1.45; }
-.calledshot-gap { display: flex; align-items: flex-start; gap: var(--space-1-5); margin: var(--space-3-5) 0 0; color: var(--caution-text); font-size: var(--fs-2xs); line-height: 1.5; }
+.calledshot-gap { display: flex; align-items: flex-start; gap: var(--space-2); margin: var(--space-3) 0 0; color: var(--caution-text); font-size: var(--fs-2xs); line-height: 1.5; }
+.calledshot-gap > .glyph { margin-top: 0.15em; }
 .calledshot-gap b { color: var(--text-strong); }
 .prereg-row { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-3-5); border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3) var(--space-3-5); color: var(--text-muted); font-size: var(--fs-3xs); }
 .prereg-row a { display: block; color: var(--accent-bright); overflow-wrap: anywhere; }
