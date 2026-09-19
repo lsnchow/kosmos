@@ -1,5 +1,21 @@
 # Next: real development review, not more weak-label training
 
+## Ready now
+
+SSH was reauthenticated. The complete v2 evidence is mirrored locally and its
+actual export audit is `data/judge-teacher-v2-evidence/export-audit-939753.json`:
+zero accepted labels and no training dataset created.
+
+The16 blank, unassigned packets have now been generated. Open
+`data/live-integrated/review/pilot-review-v1/INDEX.md`; all272 video/frame URLs
+were checked successfully. The review data were hash-verified and copied
+without reencoding. Model and adapter weights remain cluster-only.
+
+Keep `data/private/judge-pilot-review-v1-resolver.json` private (mode0600); it
+contains source identities. Actual reviewers/labels still need to be supplied.
+The access/transfer instructions below describe the completed preparation and
+remain useful for a future fresh review set; do not overwrite these packets.
+
 The experimental adapter exists and reloads; see [the v1 report](JUDGE-PILOT-V1.md).
 The v2 prompt/selection diagnostic then reported75/80 schema-valid samples but
 **0/16 clips with a unique three-vote semantic mode**. All16 abstained. No v2

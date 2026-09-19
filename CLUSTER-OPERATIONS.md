@@ -1,5 +1,13 @@
 # PLUMB cluster operations — handoff for num2
 
+## Access restored — latest continuation
+
+User reauthenticated; Trillium BatchMode SSH now works. Scheduler check showed
+no user jobs running. Completed model jobs were not repeated. Source review
+media23MB and the full v2 raw report bundle were mirrored locally; no model or
+adapter weights were copied. Actual development-review packets are ready; see
+HANDOFF.md's newest section. Earlier expired-session notes below are historical.
+
 ## Latest — actual pilot and v2 diagnostic, SSH expired
 
 Teacher939423 COMPLETED0:0 (5m34s), optimizer training939451 COMPLETED0:0

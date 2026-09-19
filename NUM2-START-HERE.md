@@ -1,5 +1,11 @@
 # Start message for a new chat named num2
 
+CURRENT: SSH restored by user. Actual16 blank development-review packets now
+exist at data/live-integrated/review/pilot-review-v1/INDEX.md; all272 media URLs
+checked200. Actual v2 export audit refused all16 (no labels/dataset). Read the
+new HANDOFF first section. Next needs real human review, not another GPU rerun.
+Keep private resolver data/private/judge-pilot-review-v1-resolver.json private.
+
 CURRENT BLOCKER: Trillium SSH expired after experiments completed. One Duo push
 timed out; user must reauthenticate locally with `ssh trillium-gpu`. Read the
 NEW first HANDOFF section and docs/JUDGE-REVIEW-NEXT.md. V2 returned75/80 valid

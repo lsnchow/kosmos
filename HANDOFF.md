@@ -1,5 +1,31 @@
 # PLUMB execution handoff — implementation in progress
 
+## Access restored; actual development-review packets ready
+
+User reauthenticated Trillium. BatchMode SSH works again; latest scheduler
+check showed no user jobs running. No completed GPU experiment was repeated.
+The full v2 raw bundle is now mirrored at
+`data/judge-teacher-v2-evidence/judge-teacher-v2-diagnostic/`.
+The exporter was run against actual mirrored evidence and wrote
+`data/judge-teacher-v2-evidence/export-audit-939753.json`:0 accepted train,
+0 accepted validation, no dataset created. Its expected blocked exit2 is not
+a tooling failure; do not relax the label rule.
+
+The23MB source review media were mirrored without model weights. Actual16
+opaque, blank, unassigned development-review packets are now published:
+`data/live-integrated/review/pilot-review-v1/INDEX.md` and
+`data/live-integrated/review/pilot-review-v1/blank-worksheets.jsonl`.
+All272 localhost video/frame URLs returned200. Every label field remains blank.
+Coordinator-only resolver: `data/private/judge-pilot-review-v1-resolver.json`,
+mode0600, outside the served root; never give it to reviewers. Byte hashes were
+verified before publication. Source mirror: `data/judge-pilot-v1-review-source`.
+
+Next dependency is actual human development review, not SSH/setup. Obtain real
+reviewer identities/independence before recording labels; no names or labels
+have been invented. These16 already-used clips are not fresh held-out Gate-D
+data. The existing trained adapter remains experimental and disabled for
+production scoring. Older SSH-blocker/packets-pending notes below are history.
+
 ## Latest execution boundary — v2 completed, SSH reauthentication needed
 
 The actual v1 adapter is trained and its saved reload is verified. Teacher-v2
