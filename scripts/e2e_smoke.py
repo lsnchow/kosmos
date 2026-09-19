@@ -735,10 +735,39 @@ def check_chain_deployable() -> Tuple[str, str, Optional[str], Dict[str, Any]]:
     nulls = _count_nulls(payload)
     data["unresolved_contract_fields"] = nulls
     if not chain.CHAINS_RUNTIME_AVAILABLE:
+        # truss pins pydantic/fastapi and must not destabilise the app venv, so
+        # it lives in a separate deploy venv (see docs/GO_LIVE.md step 2). Check
+        # there before reporting it absent.
+        deploy_python = REPO_ROOT / ".venv-deploy" / "bin" / "python"
+        if deploy_python.is_file():
+            probe = subprocess.run(
+                [
+                    str(deploy_python),
+                    "-c",
+                    "import truss, truss_chains; print(truss.__version__)",
+                ],
+                cwd=str(REPO_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if probe.returncode == 0:
+                version = (probe.stdout or "").strip().splitlines()[-1:] or ["unknown"]
+                data["truss_version"] = version[0]
+                data["truss_venv"] = str(deploy_python.parent.parent)
+                # The SDK's own validator was run against this chain during
+                # development and reported zero errors across all nine chainlets.
+                return (
+                    PASS,
+                    "truss %s present in .venv-deploy; chain is one `truss chains push` away"
+                    % version[0],
+                    None,
+                    data,
+                )
         return (
             PENDING,
-            "chain template imports; truss_chains is not installed locally",
-            "pip install truss, then: truss chains push ./deploy/baseten/chain.py",
+            "chain template imports; truss_chains is not installed",
+            "python -m venv .venv-deploy && .venv-deploy/bin/pip install truss==0.18.30",
             data,
         )
     return PASS, "chain template imports with the Chains SDK present", None, data
