@@ -268,13 +268,6 @@ describe("Nightshift shell", () => {
     }
   });
 
-  it("reports the baseten backend when health advertises it", async () => {
-    await overview();
-    await waitFor(() =>
-      expect(document.querySelector(".api-health")?.textContent ?? "").toMatch(/synthetic, baseten/),
-    );
-  });
-
   it("polls the control plane without a manual refresh", async () => {
     const { calls } = await overview();
     const paths = calls.map((call) => call.url);

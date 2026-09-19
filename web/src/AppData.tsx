@@ -15,7 +15,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { calledShotFromProtocol } from "./components/CalledShotPanel";
 import { gateBlockers } from "./components/GatePanel";
 import { pushSample, type ReplicaSample } from "./components/ReplicaChart";
-import { useNow, usePolling, usePresentationMode } from "./hooks/usePolling";
+import { useNow, usePolling } from "./hooks/usePolling";
 import { useRunStream, type StreamStatus } from "./hooks/useRunStream";
 import {
   api,
@@ -85,14 +85,11 @@ export type AppDataValue = {
   plannedEpisodes?: number;
   identity: BurstIdentity;
   idempotencyKey: string;
-  backends: string[];
   now: number;
   /* errors and flags */
   loadError?: string;
   actionError?: string;
   submitting: boolean;
-  presentation: boolean;
-  setPresentation: (on: boolean) => void;
   /* ui selection */
   scopedTask?: string;
   setScopedTask: (task: string | undefined) => void;
@@ -150,7 +147,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [scopedTask, setScopedTask] = useState<string>();
   const [viewerSlot, setViewerSlot] = useState<TileSlot>();
-  const [presentation, setPresentation] = usePresentationMode();
   const now = useNow();
   const lastSampleAt = useRef<number>();
 
@@ -414,10 +410,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setFreeplayOpen(true);
   }, []);
 
-  const backends = Array.isArray(health?.available_backends)
-    ? health.available_backends.filter((item): item is string => typeof item === "string")
-    : [];
-
   const value: AppDataValue = {
     health,
     protocol,
@@ -441,13 +433,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     plannedEpisodes,
     identity,
     idempotencyKey,
-    backends,
     now,
     loadError,
     actionError,
     submitting,
-    presentation,
-    setPresentation,
     scopedTask,
     setScopedTask,
     viewerSlot,

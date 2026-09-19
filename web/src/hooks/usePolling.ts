@@ -94,31 +94,3 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
-const PRESENTATION_STORAGE_KEY = "plumb.presentation";
-
-/**
- * Presentation mode raises the whole type scale for a projector. It is a
- * display setting: it changes no number, label, or qualification.
- */
-export function usePresentationMode(): [boolean, (next: boolean) => void] {
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(PRESENTATION_STORAGE_KEY) === "on";
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.dataset.presentation = enabled ? "on" : "off";
-    try {
-      window.localStorage.setItem(PRESENTATION_STORAGE_KEY, enabled ? "on" : "off");
-    } catch {
-      // A blocked storage quota must not stop the mode from applying.
-    }
-  }, [enabled]);
-
-  return [enabled, setEnabled];
-}

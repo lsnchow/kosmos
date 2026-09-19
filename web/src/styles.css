@@ -307,22 +307,6 @@
   font-synthesis: none;
 }
 
-/*
- * Presentation mode. A display setting only: it changes no number, no label and
- * no qualification. Every step lands at 20 px or above, because on a 1080p stage
- * feed nothing smaller reads from row five.
- */
-html[data-presentation="on"] {
-  --fs-3xs: 1.25rem;
-  --fs-2xs: 1.375rem;
-  --fs-xs: 1.375rem;
-  --fs-sm: 1.4375rem;
-  --fs-md: 1.5rem;
-  --fs-lg: 1.5rem;
-  --fs-xl: 2rem;
-  --fs-2xl: 2.375rem;
-  --fs-3xl: 2.875rem;
-}
 
 * { box-sizing: border-box; }
 
@@ -1363,12 +1347,6 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
  * Presentation mode on a projector wants fewer, larger tiles rather than the
  * same twelve shrunk; the slot count is unchanged, only the columns.
  */
-html[data-presentation="on"] .rollout-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-html[data-presentation="on"] .telemetry { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-html[data-presentation="on"] .chart-tick { font-size: 30px; }
-html[data-presentation="on"] .chart-series-label { font-size: 36px; }
-html[data-presentation="on"] table { white-space: normal; }
-html[data-presentation="on"] .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* Nothing existed between 760px and the 320px floor, where a 2-up tile grid
    leaves roughly 155px per tile. One column is honest at that width. */

@@ -45,9 +45,6 @@ function shouldBoot(): boolean {
 export function AppShell() {
   const {
     health,
-    backends,
-    presentation,
-    setPresentation,
     refresh,
     loadError,
     actionError,
@@ -107,17 +104,7 @@ export function AppShell() {
           <span className="api-health">
             <span className={cn("health-dot", health ? "health-known" : "health-pending")} />
             API {pickString(health?.status) ?? "checking"}
-            {backends.length > 0 && <span className="backend-list">· {backends.join(", ")}</span>}
           </span>
-          <button
-            type="button"
-            className={cn("button", presentation ? "button-primary" : "button-quiet")}
-            onClick={() => setPresentation(!presentation)}
-            aria-pressed={presentation}
-          >
-            <Glyph name="present" />
-            Presentation mode
-          </button>
           <button type="button" className="button button-quiet" onClick={() => void refresh()}>
             <Glyph name="refresh" />
             Refresh

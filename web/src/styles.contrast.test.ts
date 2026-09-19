@@ -240,20 +240,10 @@ describe("palette contrast", () => {
   });
 });
 
-describe("type scale and presentation mode", () => {
+describe("type scale", () => {
   it("keeps every step of the scale", () => {
     for (const step of ["3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"]) {
       expect(tokens[`--fs-${step}`]).toBeDefined();
-    }
-  });
-
-  it("re-declares every step in presentation mode at 20 px or above", () => {
-    const block = /html\[data-presentation="on"\]\s*\{([\s\S]*?)\n\}/.exec(css);
-    expect(block).not.toBeNull();
-    const declared = [...(block?.[1].matchAll(/(--fs-[a-z0-9]+)\s*:\s*([\d.]+)rem/g) ?? [])];
-    expect(declared.length).toBe(9);
-    for (const [, , rem] of declared) {
-      expect(Number(rem) * 16).toBeGreaterThanOrEqual(20);
     }
   });
 
