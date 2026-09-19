@@ -1,7 +1,7 @@
-import { Play, Square } from "lucide-react";
+import { CellBar, Glyph } from "./Terminal";
 import type { Run, Telemetry } from "../lib/api";
-import { formatCount, formatUsd, isTerminalStatus, pickNumber } from "../lib/format";
-import { DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
+import { formatCount, formatUsd, isTerminalStatus, pickNumber, formatCountPair} from "../lib/format";
+import { InfoTip, DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 import { ReplicaChart, type ReplicaSample } from "./ReplicaChart";
 
 /**
@@ -63,7 +63,6 @@ export function BurstPanel({
   return (
     <Panel
       title="Full-matrix burst"
-      eyebrow="Elastic scale-up · separately timed"
       className="burst-panel"
       action={<SourceChip>key {idempotencyKey}</SourceChip>}
       id="burst"
@@ -76,12 +75,12 @@ export function BurstPanel({
           aria-describedby={disabledReason ? "burst-disabled-reason" : undefined}
           onClick={onLaunch}
         >
-          <Play aria-hidden="true" className="size-5" />
+          <Glyph name="play" />
           {submitting ? "Submitting…" : `Run ${formatCount(plannedEpisodes, "the full matrix of")} episodes`}
         </button>
         {active && (
           <button type="button" className="button button-danger" onClick={onCancel}>
-            <Square aria-hidden="true" className="size-4" />
+            <Glyph name="stop" />
             Cancel run
           </button>
         )}
@@ -89,8 +88,24 @@ export function BurstPanel({
       </div>
       {disabledReason && (
         <p className="burst-disabled" id="burst-disabled-reason">
-          Button disabled: {disabledReason}. Repeat submissions carry the same derived idempotency key, so the
-          ledger returns the existing run instead of starting a second one.
+          Disabled: {disabledReason}.
+          <InfoTip label="why the button is disabled">
+            Repeat submissions carry the same derived idempotency key, so the ledger returns the existing run
+            instead of starting a second one.
+          </InfoTip>
+        </p>
+      )}
+
+      {/*
+        * The donor's footer bar. It is aria-hidden and carries no number of its
+        * own: the count it draws is already stated, exactly once, by the
+        * "Rollouts completed" metric below it. A bar that also printed the
+        * figure would be a second place for the same fact to go stale.
+        */}
+      {completed !== undefined && total !== undefined && total > 0 && (
+        <p className="burst-progress" aria-hidden="true">
+          <span className="burst-progress-label">tasks</span>
+          <CellBar value={completed / total} width={40} tone="good" />
         </p>
       )}
 
@@ -100,7 +115,7 @@ export function BurstPanel({
           value={
             completed === undefined
               ? "—"
-              : `${formatCount(completed)}${total === undefined ? "" : ` / ${formatCount(total)}`}`
+              : formatCountPair(completed, total)
           }
           source="Application ledger · logical episodes"
           size="large"
@@ -128,7 +143,7 @@ export function BurstPanel({
         }
       />
 
-      <Note>
+      <Note summary="How cost and counts are derived">
         Estimated USD is an allocation-ledger estimate against timestamped account prices, not settled
         billing. Completed counts are logical episodes from the application ledger and do not grow with
         transport retries. The scale-up is timed separately from the run so a cold start is not hidden inside

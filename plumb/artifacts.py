@@ -518,7 +518,7 @@ def _render_leaderboard(
     proto = dict(protocol or {})
 
     lines: List[str] = []
-    lines.append("# PLUMB leaderboard")
+    lines.append("# Nightshift leaderboard")
     lines.append("")
     lines.append("Generated %s." % utc_now())
     lines.append("")
@@ -591,7 +591,7 @@ def _render_leaderboard(
 
     lines.append("## Published reference (AutoEval Table 2 / Table 3)")
     lines.append("")
-    lines.append("These are the paper's real-robot and simulator results, not PLUMB outcomes.")
+    lines.append("These are the paper's real-robot and simulator results, not Nightshift outcomes.")
     lines.append("")
     lines.append("| Policy | open_drawer | close_drawer | to_basket | to_sink | fold_cloth | total /250 |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")

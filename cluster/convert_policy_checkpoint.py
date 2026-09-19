@@ -82,7 +82,7 @@ FLATTEN_SEPARATOR = "."
 #: Mirrors ``plumb.policies.minivla.KNOWN_LICENSE_STATUSES``.  Duplicated rather
 #: than imported to keep this cluster tool free of the inference package; the
 #: test suite asserts the two stay equal.
-ADAPTER_KNOWN_LICENSE_STATUSES = ("declared", "advertised_unverified", "absent_cardData_null", "unresolved")
+ADAPTER_KNOWN_LICENSE_STATUSES = ("declared", "verified", "advertised_unverified", "absent_cardData_null", "unresolved")
 
 #: Mirrors ``plumb.policies.minivla.MINIVLA_VQ_REDISTRIBUTION``.
 ADAPTER_PROHIBITED_REDISTRIBUTION = "prohibited_pending_resolution"

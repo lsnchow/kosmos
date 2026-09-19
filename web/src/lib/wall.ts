@@ -19,7 +19,7 @@ import {
   type Provenance,
   type SegmentCompletedEvent,
 } from "./api";
-import { pickNumber, pickString } from "./format";
+import { pickNumber, pickString, pickBoolean} from "./format";
 
 export const WALL_SLOT_COUNT = 12;
 
@@ -45,6 +45,10 @@ export type TileSlot = {
   episodeIds: string[];
   status?: string;
   resolution?: string;
+  /** What was actually asked for. A free-text task has no registry entry. */
+  instruction?: string;
+  /** Whether a published human score exists for this task. */
+  benchmark?: boolean;
   /** Accumulated frame URLs, in arrival order, already resolved to fetchable URLs. */
   frames: string[];
   /** Sum of server-certified frame counts. Undefined when no segment reported one. */
@@ -160,6 +164,10 @@ export function applyEpisodes(state: WallState, episodes: Episode[]): WallState 
       episodeId: episodeId ?? current.episodeId,
       status: pickString(episode.status, current.status),
       resolution: pickString(episode.resolution, current.resolution),
+      instruction: pickString(episode.task_instruction, current.instruction),
+      // `undefined` is not `false`: a record that never reported the flag must
+      // not be shown as off-benchmark, which is a claim about the task.
+      benchmark: pickBoolean(episode.benchmark_task) ?? current.benchmark,
       episodeIds: [...current.episodeIds],
     };
     if (episodeId && !merged.episodeIds.includes(episodeId)) merged.episodeIds.push(episodeId);
@@ -176,6 +184,11 @@ export function applyEpisodes(state: WallState, episodes: Episode[]): WallState 
       if (unseen.length > 0) {
         merged.seenSegments.push(rowSegmentId);
         merged.frames.push(...unseen);
+        // The server reported how many segments produced these frames. Reading
+        // it here keeps a polled row consistent with a streamed one, which
+        // otherwise showed frames against a segment count of zero.
+        const reported = pickNumber(episode.n_segments);
+        if (reported !== undefined) merged.segmentCount = Math.max(merged.segmentCount, reported);
         const certified = pickNumber(episode.certified_frame_count);
         if (certified === undefined) {
           merged.segmentsMissingCertifiedCount += 1;
@@ -193,6 +206,87 @@ export function applyEpisodes(state: WallState, episodes: Episode[]): WallState 
   }
 
   return changed ? next : state;
+}
+
+/**
+ * Claim a slot for a rollout that has been requested but has not yet persisted
+ * anything.
+ *
+ * Without this the tile would not appear until its first segment landed, which
+ * for a five-chunk rollout is seconds of a stage beat with nothing on screen.
+ * The slot is real, keyed the same way as every other, and carries no frames
+ * and no counts -- it claims a position, not a result. `applyEpisodes` merges
+ * into it by the same `(policy, task)` key when the records arrive.
+ */
+export function reserveSlot(
+  state: WallState,
+  claim: { policy: string; task: string; instruction?: string; benchmark?: boolean; runId?: string },
+): WallState {
+  const key = identityKey(claim.policy, claim.task);
+  if (state.byKey[key] !== undefined) return state;
+
+  // The viewport is twelve slots and is usually full, so a requested rollout
+  // takes the front and pushes the rest back. It is the one the reader just
+  // asked for; making them hunt for it, or silently dropping it into the
+  // overflow count, would both be wrong. Whatever falls off the end is recorded
+  // as overflow exactly as it would have been otherwise.
+  const next = cloneWall(state);
+  const reserved: TileSlot = {
+    slot: 0,
+    key,
+    policy: claim.policy,
+    task: claim.task,
+    runId: claim.runId,
+    instruction: claim.instruction,
+    benchmark: claim.benchmark,
+    status: "generating",
+    episodeIds: [],
+    frames: [],
+    segmentsMissingCertifiedCount: 0,
+    segmentCount: 0,
+    provenanceCounts: {},
+    seenSegments: [],
+  };
+  const kept = next.slots.filter((slot): slot is TileSlot => slot !== undefined);
+  const displaced = kept.length >= next.slots.length ? kept[kept.length - 1] : undefined;
+  const ordered = [reserved, ...kept].slice(0, next.slots.length);
+
+  next.slots = next.slots.map((_, index) => ordered[index]);
+  next.byKey = {};
+  next.byEpisode = {};
+  ordered.forEach((slot, index) => {
+    if (!slot) return;
+    slot.slot = index;
+    next.byKey[slot.key] = index;
+    for (const episodeId of slot.episodeIds) next.byEpisode[episodeId] = index;
+  });
+  if (displaced && !next.overflowKeys.includes(displaced.key)) next.overflowKeys.push(displaced.key);
+  return next;
+}
+
+/**
+ * Re-key a reserved slot onto the task id the server actually assigned.
+ *
+ * The optimistic tile is claimed before the request is sent, so its task id is
+ * the browser's guess. The server derives its own from a SHA-256 of the prompt,
+ * which a browser cannot compute synchronously — so the two ids differ, and
+ * without this the arriving episodes would claim a *second* slot (or land in
+ * overflow on a full wall) and the rollout would appear twice or not at all.
+ */
+export function adoptTaskId(state: WallState, policy: string, fromTask: string, toTask: string): WallState {
+  if (fromTask === toTask) return state;
+  const fromKey = identityKey(policy, fromTask);
+  const index = state.byKey[fromKey];
+  if (index === undefined) return state;
+  const current = state.slots[index];
+  if (!current) return state;
+
+  const next = cloneWall(state);
+  const toKey = identityKey(policy, toTask);
+  delete next.byKey[fromKey];
+  next.byKey[toKey] = index;
+  next.slots[index] = { ...current, key: toKey, task: toTask };
+  return next;
 }
 
 /** Append one persisted segment's frames to its slot. Idempotent per segment id. */

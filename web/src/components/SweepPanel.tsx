@@ -1,4 +1,4 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { useEffect, useState } from "react";
 import type { SweepPoint, SweepResponse } from "../lib/api";
 import {
@@ -46,12 +46,11 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
   return (
     <Panel
       title="Cost–fidelity operating point"
-      eyebrow="Precomputed sweep · no generation on drag"
       className="sweep-panel"
       action={<SourceChip>{pickString(sweeps.status) ?? "status not reported"}</SourceChip>}
     >
       {points.length === 0 ? (
-        <EmptyState icon={<SlidersHorizontal aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="sliders" />}>
           {pickString(sweeps.reason) ??
             "No persisted sweep points are available."}{" "}
           The slider will not generate, estimate, or imply a cheaper setting that was never measured.
@@ -98,7 +97,7 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
           </ol>
           {firstFailure >= 0 && (
             <p className="sweep-break" role="note">
-              <TriangleAlert aria-hidden="true" className="size-4" />
+              <Glyph name="alert" />
               Preregistered tolerances first fail at point {firstFailure + 1} of {points.length} (
               {pointLabel(points[firstFailure], firstFailure)}). Cheaper than that point, the ranking is not
               supported.
@@ -178,7 +177,7 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
           )}
         </>
       )}
-      <Note>
+      <Note summary="How cost per point is measured">
         {points.length > 0 && pickString(sweeps.reason) ? `${sweeps.reason} ` : ""}
         Every point keeps its fixed task horizon beside its cost, so a shorter task cannot read as a saving.
         Cost is an allocation-ledger estimate until billing reconciliation. Only a held-out-confirmed

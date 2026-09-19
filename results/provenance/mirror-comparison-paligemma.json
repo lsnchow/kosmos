@@ -1,0 +1,211 @@
+{
+  "asset": "paligemma",
+  "byte_identity": "proven",
+  "discipline": [
+    "A matching byte length is recorded but never counts as identity: two different files of equal length are trivial to produce. Only a match against a hash retrieved from the official repository counts.",
+    "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+    "byte_identity is computed from the per-file verdicts and may only be 'proven' when every requested file matched a hash retrieved from the official repository."
+  ],
+  "executed": true,
+  "files": [
+    {
+      "identity_channel": "official_lfs_sha256",
+      "matched": true,
+      "mirror_bytes": 17549604,
+      "mirror_git_blob_sha1": "b5417a3df00aa905283786668ddd84407b4e3e44",
+      "mirror_sha256": "ef6773c135b77b834de1d13c75a4c98ab7a3684ffd602d1831e1f1bf5467c563",
+      "official_bytes": 17549604,
+      "official_git_blob_sha1": "419d3c8c8da378e1f551d4348a5c2ca7616153d6",
+      "official_sha256": "ef6773c135b77b834de1d13c75a4c98ab7a3684ffd602d1831e1f1bf5467c563",
+      "path": "tokenizer.json",
+      "reason": null,
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_lfs_sha256",
+      "matched": true,
+      "mirror_bytes": 4264023,
+      "mirror_git_blob_sha1": "d01979f998ed726397f09fab75cc0cc60eece099",
+      "mirror_sha256": "8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6",
+      "official_bytes": 4264023,
+      "official_git_blob_sha1": "22ad048d392b4f5191be7cec47d03eb3cdb360f4",
+      "official_sha256": "8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6",
+      "path": "tokenizer.model",
+      "reason": null,
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_git_blob_sha1",
+      "matched": true,
+      "mirror_bytes": 39968,
+      "mirror_git_blob_sha1": "960dcec0bccc6e594d865eceb63c8078e164cfb2",
+      "mirror_sha256": "3259402b1d1802e02417d7bff75a889ec61d359d15be6050a957b307c48edbbe",
+      "official_bytes": 39968,
+      "official_git_blob_sha1": "960dcec0bccc6e594d865eceb63c8078e164cfb2",
+      "official_sha256": null,
+      "path": "tokenizer_config.json",
+      "reason": "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_git_blob_sha1",
+      "matched": true,
+      "mirror_bytes": 24,
+      "mirror_git_blob_sha1": "ff9246e420971b10c510b39a0de289132c2bf23f",
+      "mirror_sha256": "7d0bad90030d638a4bf89a82e91206e25f1fbe0012f14bca21666a64b643bc49",
+      "official_bytes": 24,
+      "official_git_blob_sha1": "ff9246e420971b10c510b39a0de289132c2bf23f",
+      "official_sha256": null,
+      "path": "added_tokens.json",
+      "reason": "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_git_blob_sha1",
+      "matched": true,
+      "mirror_bytes": 607,
+      "mirror_git_blob_sha1": "0c18fdd94629ea652e2ef36ed9a422474ad0a8e8",
+      "mirror_sha256": "5ef37093ae4236587b6e8266acb815b46e2db8ce656c66552bfa574d32880405",
+      "official_bytes": 607,
+      "official_git_blob_sha1": "0c18fdd94629ea652e2ef36ed9a422474ad0a8e8",
+      "official_sha256": null,
+      "path": "special_tokens_map.json",
+      "reason": "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_git_blob_sha1",
+      "matched": true,
+      "mirror_bytes": 699,
+      "mirror_git_blob_sha1": "28cf2b54fa2e3de2f07c11fb13a29c6541ca913b",
+      "mirror_sha256": "ae5e5f748a642ae71344facf4012b1607852db13f080e42cd12b5db4e75ca7e8",
+      "official_bytes": 699,
+      "official_git_blob_sha1": "28cf2b54fa2e3de2f07c11fb13a29c6541ca913b",
+      "official_sha256": null,
+      "path": "preprocessor_config.json",
+      "reason": "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+      "size_matched": true,
+      "verdict": "identical"
+    },
+    {
+      "identity_channel": "official_git_blob_sha1",
+      "matched": true,
+      "mirror_bytes": 1027,
+      "mirror_git_blob_sha1": "b89393ba09b432265173f688b8a41a2c3c9e3e4c",
+      "mirror_sha256": "e00c72cdff16296bf1229c3267b99f5247d8c740cae84336866338d64fa7918f",
+      "official_bytes": 1027,
+      "official_git_blob_sha1": "b89393ba09b432265173f688b8a41a2c3c9e3e4c",
+      "official_sha256": null,
+      "path": "config.json",
+      "reason": "A git blob SHA-1 is a content hash the Hub publishes for regular files. SHA-1 is not collision-resistant against a determined adversary, so a match here is treated as identity of the retrieved content together with an exact byte-length match, and the channel is recorded per file rather than hidden.",
+      "size_matched": true,
+      "verdict": "identical"
+    }
+  ],
+  "files_compared": 7,
+  "files_matched": 7,
+  "generated_at": "2026-09-19T11:16:22.655604+00:00",
+  "host": "Kevins-MacBook-Pro-2.local",
+  "kind": "plumb_mirror_byte_comparison",
+  "license": {
+    "governing_license": "Gemma Terms of Use",
+    "governing_license_note": "The Gemma Terms of Use still govern these weights regardless of which host supplied the bytes. A mirror changes the delivery path, not the license: proven byte identity removes the gated *download* dependency, never the license obligation.",
+    "note": "This report says nothing about accepted terms. It compares bytes. Byte identity would remove the gated download, never the licence obligation, and no tool here accepts a licence.",
+    "terms_accepted": false
+  },
+  "mirror_repo_id": "leo009/paligemma-3b-pt-224",
+  "mirror_revision": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+  "official_metadata": {
+    "error": null,
+    "files": {
+      "added_tokens.json": {
+        "git_blob_sha1": "ff9246e420971b10c510b39a0de289132c2bf23f",
+        "has_hash": true,
+        "lfs_sha256": null,
+        "path": "added_tokens.json",
+        "size": 24
+      },
+      "config.json": {
+        "git_blob_sha1": "b89393ba09b432265173f688b8a41a2c3c9e3e4c",
+        "has_hash": true,
+        "lfs_sha256": null,
+        "path": "config.json",
+        "size": 1027
+      },
+      "preprocessor_config.json": {
+        "git_blob_sha1": "28cf2b54fa2e3de2f07c11fb13a29c6541ca913b",
+        "has_hash": true,
+        "lfs_sha256": null,
+        "path": "preprocessor_config.json",
+        "size": 699
+      },
+      "special_tokens_map.json": {
+        "git_blob_sha1": "0c18fdd94629ea652e2ef36ed9a422474ad0a8e8",
+        "has_hash": true,
+        "lfs_sha256": null,
+        "path": "special_tokens_map.json",
+        "size": 607
+      },
+      "tokenizer.json": {
+        "git_blob_sha1": "419d3c8c8da378e1f551d4348a5c2ca7616153d6",
+        "has_hash": true,
+        "lfs_sha256": "ef6773c135b77b834de1d13c75a4c98ab7a3684ffd602d1831e1f1bf5467c563",
+        "path": "tokenizer.json",
+        "size": 17549604
+      },
+      "tokenizer.model": {
+        "git_blob_sha1": "22ad048d392b4f5191be7cec47d03eb3cdb360f4",
+        "has_hash": true,
+        "lfs_sha256": "8986bb4f423f07f8c7f70d0dbe3526fb2316056c17bae71b1ea975e77a168fc6",
+        "path": "tokenizer.model",
+        "size": 4264023
+      },
+      "tokenizer_config.json": {
+        "git_blob_sha1": "960dcec0bccc6e594d865eceb63c8078e164cfb2",
+        "has_hash": true,
+        "lfs_sha256": null,
+        "path": "tokenizer_config.json",
+        "size": 39968
+      }
+    },
+    "gated": true,
+    "reached": true,
+    "repo_id": "google/paligemma-3b-pt-224",
+    "revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+    "status": 200
+  },
+  "official_repo_id": "google/paligemma-3b-pt-224",
+  "official_revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+  "plan_update": {
+    "blocker": null,
+    "mirror_evidence": {
+      "byte_identity": "proven",
+      "evidence_path": "results/provenance/mirror-comparison-paligemma.json",
+      "files_compared": 7,
+      "files_matched": 7,
+      "governing_license": "Gemma Terms of Use",
+      "mirror_revision": "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986",
+      "official_repo_id": "google/paligemma-3b-pt-224",
+      "official_revision": "35e4f46485b4d07967e7e9935bc3786aad50687c",
+      "unproven_reasons": []
+    },
+    "mirror_of": null
+  },
+  "report_path": "results/provenance/mirror-comparison-paligemma.json",
+  "requested_files": [
+    "tokenizer.json",
+    "tokenizer.model",
+    "tokenizer_config.json",
+    "added_tokens.json",
+    "special_tokens_map.json",
+    "preprocessor_config.json",
+    "config.json"
+  ],
+  "schema_version": 1,
+  "unproven_reasons": []
+}

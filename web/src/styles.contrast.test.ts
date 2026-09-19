@@ -1,0 +1,361 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+/**
+ * The contrast ratios in the header of `styles.css` are a claim about the
+ * palette, so they are checked the way every other number on this project is
+ * checked: computed, not eyeballed.
+ *
+ * Two things are asserted. First, each ink clears the ratio the comment block
+ * documents, against every surface text sits on. Second, the comment block
+ * actually contains those numbers, so it cannot quietly drift away from the
+ * tokens beneath it — which is exactly how the previous sheet ended up quoting
+ * ratios measured against a background it no longer used.
+ */
+/*
+ * The sheet is read off disk rather than imported. Vitest resolves a CSS import
+ * to an empty string by default (`css: false`), and jsdom has no cascade to
+ * inspect, so the declarations themselves are the only thing to assert on.
+ */
+const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "styles.css"), "utf8");
+
+function rootTokens(source: string): Record<string, string> {
+  const block = /:root\s*\{([\s\S]*?)\n\}/.exec(source.replace(/\/\*[\s\S]*?\*\//g, ""));
+  if (!block) throw new Error("styles.css has no :root block");
+  const tokens: Record<string, string> = {};
+  for (const match of block[1].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    tokens[match[1]] = match[2].trim();
+  }
+  return tokens;
+}
+
+const tokens = rootTokens(css);
+
+function channel(value: number): number {
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+export function relativeLuminance(hex: string): number {
+  const cleaned = hex.trim().replace("#", "");
+  const full =
+    cleaned.length === 3
+      ? cleaned
+          .split("")
+          .map((part) => part + part)
+          .join("")
+      : cleaned;
+  if (!/^[0-9a-f]{6}$/i.test(full)) throw new Error(`Not a hex colour: ${hex}`);
+  const [r, g, b] = [0, 2, 4].map((offset) => channel(parseInt(full.slice(offset, offset + 2), 16) / 255));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(a: string, b: string): number {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Hue angle in degrees, 0-360. Undefined for a neutral, so callers must only
+ * ask it of a colour they already know is chromatic.
+ */
+export function hueAngle(hex: string): number {
+  const cleaned = hex.trim().replace("#", "");
+  const full =
+    cleaned.length === 3
+      ? cleaned
+          .split("")
+          .map((part) => part + part)
+          .join("")
+      : cleaned;
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(full.slice(offset, offset + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const chroma = max - min;
+  if (chroma === 0) return 0;
+  let hue: number;
+  if (max === r) hue = ((g - b) / chroma) % 6;
+  else if (max === g) hue = (b - r) / chroma + 2;
+  else hue = (r - g) / chroma + 4;
+  hue *= 60;
+  return hue < 0 ? hue + 360 : hue;
+}
+
+/** Shortest distance between two hue angles, 0-180. */
+export function hueSeparation(a: string, b: string): number {
+  const delta = Math.abs(hueAngle(a) - hueAngle(b)) % 360;
+  return delta > 180 ? 360 - delta : delta;
+}
+
+function colour(token: string): string {
+  const value = tokens[token];
+  if (value === undefined) throw new Error(`styles.css declares no ${token}`);
+  return value;
+}
+
+/** Every surface a text node actually sits on, darkest to lightest. */
+const TEXT_SURFACES = ["--surface-0", "--surface-1", "--surface-2", "--surface-3"] as const;
+
+/**
+ * The documented floor for each ink, measured against `--surface-3` — the
+ * lightest of the surfaces above, so every figure is a worst case.
+ */
+const DOCUMENTED: Record<string, number> = {
+  "--text-strong": 13.1,
+  "--text": 10.3,
+  "--text-muted": 6.4,
+  "--text-dim": 5.5,
+  "--accent": 9.7,
+  "--accent-bright": 11.9,
+  "--good": 9.7,
+  "--bad": 7.0,
+  "--caution-text": 11.5,
+  "--caution-strong": 13.4,
+  "--caution": 10.1,
+  "--info": 7.4,
+};
+
+/**
+ * Tokens that are legitimately used as a `color:` without meeting the 4.5:1 ink
+ * bar, each with the reason and the pair it *is* measured against.
+ */
+const INK_EXCEPTIONS: Record<string, { against: string; minimum: number; why: string }> = {
+  "--accent-ink": {
+    against: "--accent",
+    minimum: 4.5,
+    why: "the field colour, knocked out of the mint fill on .skip-link",
+  },
+};
+
+describe("palette contrast", () => {
+  it("declares the surfaces and inks the comment block measures", () => {
+    for (const token of [...TEXT_SURFACES, ...Object.keys(DOCUMENTED)]) {
+      expect(colour(token)).toMatch(/^#[0-9a-f]{3,6}$/i);
+    }
+  });
+
+  it.each(Object.entries(DOCUMENTED))(
+    "%s clears its documented ratio on every text-bearing surface",
+    (token, documented) => {
+      const floor = contrastRatio(colour(token), colour("--surface-3"));
+      expect(floor).toBeGreaterThanOrEqual(documented);
+      for (const surface of TEXT_SURFACES) {
+        expect(contrastRatio(colour(token), colour(surface))).toBeGreaterThanOrEqual(documented);
+      }
+    },
+  );
+
+  it("keeps every documented ratio in the comment block, so the comment cannot drift", () => {
+    const normalized = css.replace(/\s+/g, " ");
+    // The header must name the surface it measured against; the previous sheet's
+    // numbers were void precisely because that surface changed underneath them.
+    expect(normalized).toContain("--surface-3");
+    for (const [token, documented] of Object.entries(DOCUMENTED)) {
+      expect(normalized).toContain(`${token} ${documented.toFixed(1)}:1`);
+    }
+  });
+
+  it("holds WCAG AA for body text on every surface", () => {
+    for (const token of ["--text-strong", "--text", "--text-muted", "--text-dim"]) {
+      for (const surface of TEXT_SURFACES) {
+        expect(contrastRatio(colour(token), colour(surface))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("holds the 3:1 non-text minimum for the one line that is a control's only affordance", () => {
+    for (const surface of TEXT_SURFACES) {
+      expect(contrastRatio(colour("--line-interactive"), colour(surface))).toBeGreaterThanOrEqual(3);
+    }
+    // The focus ring has to be visible against the page it outlines.
+    expect(contrastRatio(colour("--accent-bright"), colour("--surface-0"))).toBeGreaterThanOrEqual(3);
+    // Danger and caution hairlines group content; they are not sole affordances,
+    // but a red hairline that cannot be seen is not a warning.
+    expect(contrastRatio(colour("--danger-line"), colour("--surface-0"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps ink legible on every accent fill", () => {
+    expect(contrastRatio(colour("--accent-ink"), colour("--accent"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colour("--accent-ink"), colour("--accent-bright"))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps brand and caution apart, so they are never read as the same state", () => {
+    /*
+     * A status-heavy console cannot use one hue for "this is Nightshift" and
+     * "this number is not qualified". That was a real bug once: a single amber
+     * carried both.
+     *
+     * This used to be asserted as `contrastRatio(accent, caution) > 1.1`, which
+     * is the wrong instrument. Contrast ratio is a function of luminance alone,
+     * so it cannot see hue at all — it passes two greys a shade apart and fails
+     * two obviously different hues that happen to sit at the same lightness.
+     * The palette now pairs a mint with an amber at 9.7:1 and 10.1:1, which no
+     * one could mistake for each other and which that check scored at 1.05.
+     *
+     * Hue separation is what the rule always meant. Thirty degrees is well
+     * inside "these are different colours" and still catches the original bug,
+     * where the separation was zero.
+     */
+    expect(colour("--accent")).not.toBe(colour("--caution"));
+    expect(colour("--accent")).not.toBe(colour("--caution-text"));
+    expect(hueSeparation(colour("--accent"), colour("--caution"))).toBeGreaterThanOrEqual(30);
+    expect(hueSeparation(colour("--accent"), colour("--caution-text"))).toBeGreaterThanOrEqual(30);
+    // Both must actually be chromatic; two neutrals would pass a hue test by
+    // accident, since hueAngle() reports 0 for anything with no chroma.
+    for (const token of ["--accent", "--caution"]) {
+      const hex = colour(token).replace("#", "");
+      const [r, g, b] = [0, 2, 4].map((o) => parseInt(hex.slice(o, o + 2), 16));
+      expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeGreaterThan(24);
+    }
+  });
+
+  it("uses no ink anywhere in the sheet that fails 4.5:1 on --surface-3", () => {
+    const failures: string[] = [];
+    const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    for (const match of withoutComments.matchAll(/(?<![a-z-])color\s*:\s*var\((--[a-z0-9-]+)\)/g)) {
+      const token = match[1];
+      const exception = INK_EXCEPTIONS[token];
+      if (exception) {
+        const ratio = contrastRatio(colour(token), colour(exception.against));
+        if (ratio < exception.minimum) {
+          failures.push(`${token} vs ${exception.against} is ${ratio.toFixed(2)}:1 (${exception.why})`);
+        }
+        continue;
+      }
+      const ratio = contrastRatio(colour(token), colour("--surface-3"));
+      if (ratio < 4.5) failures.push(`color: var(${token}) is ${ratio.toFixed(2)}:1 on --surface-3`);
+    }
+
+    // Literal hex inks bypass the token system entirely, so there must be none.
+    for (const match of withoutComments.matchAll(/(?<![a-z-])color\s*:\s*(#[0-9a-f]{3,8})/gi)) {
+      failures.push(`hard-coded ink ${match[1]} — inks belong to the token system`);
+    }
+
+    expect(failures).toEqual([]);
+  });
+});
+
+describe("type scale", () => {
+  it("keeps every step of the scale", () => {
+    for (const step of ["3xs", "2xs", "xs", "sm", "md", "lg", "xl", "2xl", "3xl"]) {
+      expect(tokens[`--fs-${step}`]).toBeDefined();
+    }
+  });
+
+  it("sets every compared figure in the mono face with tabular figures", () => {
+    // The scoreboard, the telemetry strip and the ledger are read down a column.
+    for (const selector of [
+      ".mono, .tabular-nums {",
+      "\ntable {",
+      ".ladder-detail {",
+      ".metric strong {",
+      ".tile-meta dd {",
+      ".sweep-readout strong {",
+      ".provisional-counts dd {",
+      ".viewer-meta dd {",
+    ]) {
+      const index = css.indexOf(selector);
+      expect(index, `${selector} is missing`).toBeGreaterThan(-1);
+      const rule = css.slice(index, css.indexOf("}", index));
+      expect(rule, selector).toContain("var(--font-mono)");
+      expect(rule, selector).toContain("tabular-nums");
+    }
+  });
+
+  it("loads every font from a local path, never a CDN", () => {
+    const faces = [...css.matchAll(/@font-face\s*\{([\s\S]*?)\}/g)].map((match) => match[1]);
+    expect(faces.length).toBe(6);
+    for (const face of faces) {
+      expect(face).toMatch(/url\("\/fonts\/[A-Za-z-]+\.woff2"\)/);
+      expect(face).not.toMatch(/https?:/);
+    }
+  });
+});
+
+/**
+ * A semantic label is a word the reader has to be able to read.
+ *
+ * A provenance badge saying "no provena…" is not a shorter way of saying "no
+ * provenance" — it is a different, unreadable claim, on the one control whose
+ * whole job is letting a viewer tell generated media from replayed. The badge
+ * shipped clipped because `max-width: 62%` resolved against a shrink-to-fit
+ * sibling group rather than the tile, so the badge inflated its own container
+ * and was then clamped to a fraction of the number it had just set.
+ *
+ * These tests make that class of bug fail at the stylesheet, where it lives.
+ */
+describe("semantic labels are never abbreviated", () => {
+  /** Declaration blocks whose selector mentions a label-bearing class. */
+  const LABEL_CLASSES = ["provenance-badge", "status-pill", "chip", "gate-index", "stage-label"];
+
+  function rulesMatching(names: string[]): { selector: string; body: string }[] {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const found: { selector: string; body: string }[] = [];
+    for (const match of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = match[1].trim();
+      if (names.some((name) => selector.includes(`.${name}`))) {
+        found.push({ selector, body: match[2] });
+      }
+    }
+    return found;
+  }
+
+  it("finds the label rules it is meant to be guarding", () => {
+    // Guards the guard: if a rename made the selectors invisible to this test,
+    // it would pass by looking at nothing.
+    expect(rulesMatching(LABEL_CLASSES).length).toBeGreaterThan(5);
+  });
+
+  it("never truncates a label with an ellipsis", () => {
+    for (const { selector, body } of rulesMatching(LABEL_CLASSES)) {
+      expect(body, `${selector} truncates a semantic label`).not.toContain("text-overflow: ellipsis");
+    }
+  });
+
+  it("never constrains a label to a fraction of its parent", () => {
+    // The original defect was `max-width: 62%`. A percentage below 100 resolves
+    // against whichever box the label sits in — for a shrink-to-fit flex parent
+    // that is a width the label itself determined — and guarantees a clip.
+    //
+    // `max-width: 100%` is the opposite and is allowed: it says "do not overflow
+    // your parent", which paired with wrapping is how .calledshot-cell already
+    // handles a long status word correctly.
+    for (const { selector, body } of rulesMatching(LABEL_CLASSES)) {
+      for (const match of body.matchAll(/max-width:\s*(\d+(?:\.\d+)?)%/g)) {
+        expect(Number(match[1]), `${selector} caps a label at ${match[1]}% of its parent`).toBe(100);
+      }
+    }
+  });
+
+  it("leaves exactly one ellipsis in the sheet, on a value that carries its full text", () => {
+    // `.source-chip` holds run ids. A value may abbreviate because a hover
+    // restores it; `SourceChip` passes `title`. A label may not, because there
+    // is nothing to restore it from.
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const ellipsised = [...stripped.matchAll(/([^{}]+)\{[^{}]*text-overflow:\s*ellipsis[^{}]*\}/g)].map((m) =>
+      m[1].trim(),
+    );
+    expect(ellipsised).toEqual([".source-chip"]);
+  });
+});
+
+describe("spacing comes from tokens", () => {
+  it("defines a spacing scale", () => {
+    for (const step of ["--space-1", "--space-2", "--space-3", "--space-4", "--space-6", "--space-8"]) {
+      expect(tokens[step], `styles.css declares no ${step}`).toBeDefined();
+    }
+  });
+
+  it("names every stacking level rather than hand-typing z-index", () => {
+    // Nine raw values previously sat on an unnamed 10-point convention, with
+    // .skip-link and .freeplay-dialog both on 50.
+    for (const step of ["--z-sticky", "--z-overlay", "--z-modal", "--z-skip"]) {
+      expect(tokens[step], `styles.css declares no ${step}`).toBeDefined();
+    }
+  });
+});

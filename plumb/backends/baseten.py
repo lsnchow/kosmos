@@ -35,6 +35,9 @@ must remain visible in the intent-to-evaluate denominator.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import hashlib
 import json
 import os
 import sqlite3
@@ -1362,11 +1365,61 @@ class BasetenChainBackend:
 
     # -- free play ------------------------------------------------------------
 
+    def _persist_freeplay_frames(self, session_id: str, outcome: Mapping[str, Any]) -> List[str]:
+        """Write the Chain's returned free-play frames and return their URLs.
+
+        The scored path never does this: its frames are persisted by the control
+        plane from segment events. Free-play has no ledger row, so its pixels
+        arrive on the result or not at all.
+
+        A declared ``png_sha256`` is verified before the bytes are written. A
+        frame that fails its own hash is dropped rather than shown, because the
+        whole point of this beat is that the pixels are what the world model
+        actually produced.
+        """
+
+        payloads = outcome.get("freeplay_frames") or []
+        if not isinstance(payloads, (list, tuple)):
+            return []
+        directory = self.data_dir / "freeplay" / session_id
+        directory.mkdir(parents=True, exist_ok=True)
+        # A session is a live viewport, not an archive: clear the previous chunk
+        # so a slow frame from an earlier keypress cannot appear in this one.
+        for stale in directory.glob("*.png"):
+            stale.unlink()
+        urls: List[str] = []
+        self._last_freeplay_size: Optional[Tuple[int, int]] = None
+        for index, item in enumerate(payloads):
+            if not isinstance(item, Mapping):
+                continue
+            encoded = item.get("data")
+            if not isinstance(encoded, str) or not encoded:
+                continue
+            try:
+                raw = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error):
+                continue
+            declared = item.get("png_sha256")
+            if isinstance(declared, str) and declared:
+                actual = hashlib.sha256(raw).hexdigest()
+                if actual != declared.removeprefix("sha256:"):
+                    continue
+            path = directory / ("%03d.png" % index)
+            path.write_bytes(raw)
+            height, width = item.get("height"), item.get("width")
+            if isinstance(height, int) and isinstance(width, int):
+                self._last_freeplay_size = (height, width)
+            urls.append("/api/artifacts/freeplay/%s/%s" % (session_id, path.name))
+        return urls
+
+
     def freeplay_step(
         self,
         session_id: str,
         task: str,
         actions: Sequence[Sequence[float]],
+        protocol_hash: str,
+        seed: int,
         resolution: int = 480,
     ) -> Dict[str, Any]:
         """Send one constant action chunk straight to the world model.
@@ -1385,31 +1438,47 @@ class BasetenChainBackend:
             raise ValueError("free-play needs at least one action row")
         if any(len(row) != 7 for row in actions):
             raise ValueError("free-play actions must be 7-D Bridge rows")
+        # The Chain's RolloutRequest requires a non-empty protocol_hash on the
+        # envelope and on every stage. Free-play is unscored, but it is still
+        # parameterised by the protocol -- denoise_steps below comes from these
+        # settings -- so the hash records which world configuration produced the
+        # frames. Sending "" made the Chain reject the request with a bare HTTP
+        # 400 that named nothing; refuse here instead, where the cause is known.
+        if not protocol_hash:
+            raise ValueError(
+                "free-play needs the active protocol hash: the Chain rejects an envelope without one, "
+                "and an unscored frame still has to record which world configuration produced it"
+            )
+        if self.start_resolver is None:
+            raise StartResolutionError(
+                "free-play needs a start resolver: the world model is conditioned on a real start frame, "
+                "and a fabricated one would defeat the point of showing it live"
+            )
+        start = self.start_resolver.resolve(task, "freeplay", "")
+        episode_id = "freeplay-%s" % session_id
+        stage_ref = {"episode_id": episode_id, "protocol_hash": protocol_hash}
+        # Free-play skips the policy, the validity gate and the judge, so those
+        # three payloads are empty by design: the Chain's freeplay branch reads
+        # none of them. The stage refs stay present because the controller still
+        # checks episode identity across every stage on this path.
         entrypoint_input = {
             "run_id": "freeplay",
-            "episode_id": "freeplay-%s" % session_id,
-            "protocol_hash": "",
-            "policy": {
-                "episode_id": "freeplay-%s" % session_id,
-                "protocol_hash": "",
-                # ``direct_actions`` tells the controller to skip the policy
-                # stage entirely rather than invent a policy call.
-                "payload": {"mode": "freeplay", "direct_actions": [list(row) for row in actions]},
+            "episode_id": episode_id,
+            "protocol_hash": protocol_hash,
+            "policy": {**stage_ref, "payload": {}},
+            "world": {**stage_ref, "payload": {}},
+            "validity": {**stage_ref, "payload": {}},
+            "judge": {**stage_ref, "payload": {}},
+            "freeplay": {
+                "task_id": task,
+                "prompt": start.prompt,
+                "compatibility_profile_id": self.settings.operating_point_id,
+                "domain": "bridge_orig_lerobot",
+                "seed": seed,
+                "conditioning_image": start.frame_payload(),
+                "actions": [list(row) for row in actions],
+                "source_state_lineage_id": start.start_lineage_id or None,
             },
-            "world": {
-                "episode_id": "freeplay-%s" % session_id,
-                "protocol_hash": "",
-                "payload": {
-                    "mode": "freeplay",
-                    "task": task,
-                    "resolution": int(resolution),
-                    "denoise_steps": self.settings.denoise_steps,
-                    "actions": [list(row) for row in actions],
-                },
-            },
-            # Free-play is unscored: both scoring stages are explicitly skipped.
-            "validity": {"episode_id": "freeplay-%s" % session_id, "protocol_hash": "", "payload": {"mode": "skip"}},
-            "judge": {"episode_id": "freeplay-%s" % session_id, "protocol_hash": "", "payload": {"mode": "skip"}},
         }
         options = AsyncChainRequestOptions(
             webhook_endpoint=self._webhook_for_run("freeplay"),
@@ -1422,12 +1491,17 @@ class BasetenChainBackend:
         self.allocations.allocate("controller_cpu", started, self._clock(), note="freeplay")
         if outcome is None:
             raise TimeoutError("the world model did not return frames before the free-play deadline")
-        frames = outcome.get("frame_urls") or []
+        frames = self._persist_freeplay_frames(session_id, outcome)
         return {
             "frame_urls": list(frames),
-            "frame_count": int(outcome.get("frame_count") or len(frames)),
+            "frame_count": len(frames),
             "commanded_rows": len(actions),
-            "resolution": int(resolution),
+            "requested_resolution": int(resolution),
+            # What the frames measurably are, which is not always what was asked
+            # for. None when the Chain did not report dimensions -- "480p" is a
+            # claim made on stage, so it is never assumed from the request.
+            "frame_height": (self._last_freeplay_size or (None, None))[0],
+            "frame_width": (self._last_freeplay_size or (None, None))[1],
             "request_id": receipt.request_id,
             "scored": False,
             "qualified": False,

@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // eslint-disable-next-line no-console
-    console.error(`PLUMB render error in ${this.props.region ?? "console"}`, error, info.componentStack);
+    console.error(`Nightshift render error in ${this.props.region ?? "console"}`, error, info.componentStack);
   }
 
   private reset = () => {

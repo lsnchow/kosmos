@@ -1,4 +1,4 @@
-import { FileLock2, Target } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { isRecord, type CalledShot, type JsonRecord } from "../lib/api";
 import { formatCount, formatRateAsPercent, pickNumber, pickString } from "../lib/format";
 import { Note, Panel, SourceChip, StatusPill } from "./Primitives";
@@ -31,9 +31,9 @@ export function calledShotFromProtocol(protocol: JsonRecord | undefined): Called
 /**
  * The called shot.
  *
- * PLUMB's estimate for this cell is pre-registered and frozen *before* the
+ * Nightshift's estimate for this cell is pre-registered and frozen *before* the
  * published human number is looked at. When there is no estimate yet the panel
- * shows it as pending — never as a number, and never as a comparison PLUMB has
+ * shows it as pending — never as a number, and never as a comparison Nightshift has
  * already won.
  */
 export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
@@ -55,7 +55,6 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
   return (
     <Panel
       title="The called shot"
-      eyebrow="One cell · frozen before the reference is read"
       className="calledshot-panel"
       action={<SourceChip>{pickString(calledShot?.cell) ?? "OpenVLA / close_drawer"}</SourceChip>}
       id="calledshot"
@@ -69,10 +68,12 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
           </span>
         </div>
         <div className="calledshot-cell calledshot-cell-plumb">
-          <span>PLUMB pre-registered estimate</span>
+          <span>Nightshift pre-registered estimate</span>
           {estimate === undefined ? (
             <strong className="calledshot-pending">
-              <StatusPill status="pending">{status}</StatusPill>
+              <StatusPill status="pending" title={status}>
+                {status.split(/[_\s]/)[0].toLowerCase()}
+              </StatusPill>
             </strong>
           ) : (
             <strong className="tabular-nums">{formatRateAsPercent(estimate)}</strong>
@@ -94,14 +95,20 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
 
       {gapPoints !== undefined && (
         <p className="calledshot-gap">
-          <Target aria-hidden="true" className="size-4" />
-          The simulator and the real robot disagree by{" "}
-          <b className="tabular-nums">{gapPoints.toFixed(0)} percentage points</b> on this one cell.
+          <Glyph name="target" />
+          {/* One span, not three bare nodes: .calledshot-gap is a flex row, so
+              every top-level child became a flex item and the `gap` meant to
+              separate the glyph from the sentence was opening columns inside
+              the sentence itself. */}
+          <span>
+            The simulator and the real robot disagree by{" "}
+            <b className="tabular-nums">{gapPoints.toFixed(0)} percentage points</b> on this one cell.
+          </span>
         </p>
       )}
 
       <div className="prereg-row">
-        <FileLock2 aria-hidden="true" className="size-4" />
+        <Glyph name="lock" />
         {prereg ? (
           <div>
             <a href={prereg} target="_blank" rel="noreferrer">
@@ -120,9 +127,9 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
         )}
       </div>
 
-      <Note>
-        Both reference numbers are AutoEval's published results, not PLUMB outcomes. The already-published
-        human value is not treated as a blind target; what is frozen is PLUMB's own estimate and the time it
+      <Note summary="Where these reference numbers come from">
+        Both reference numbers are AutoEval's published results, not Nightshift outcomes. The already-published
+        human value is not treated as a blind target; what is frozen is Nightshift's own estimate and the time it
         was recorded.
       </Note>
     </Panel>

@@ -1,4 +1,4 @@
-import { MonitorPlay } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { artifactUrl, artifactUrls, readProvenance, type Episode } from "../lib/api";
 import { formatCount, pickNumber, pickString } from "../lib/format";
 import { FramePlayer, MediaFrame } from "./MediaFrame";
@@ -29,12 +29,11 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
   return (
     <Panel
       title="480p presentation rollout"
-      eyebrow="Separate track · never in a scored comparison"
       className="hero-panel"
       action={<SourceChip>{resolution ?? "resolution not reported"}</SourceChip>}
     >
       {!hero ? (
-        <EmptyState icon={<MonitorPlay aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="monitor" />}>
           No episode declares <code>presentation_track = &quot;{HERO_TRACK}&quot;</code>, so there is no hero
           rollout to show. A 256p scoring episode is not promoted here and relabelled 480p.
         </EmptyState>
@@ -67,10 +66,12 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
                 : `${formatCount(pickNumber(hero.certified_frame_count))} certified frames`}
             </span>
           </div>
-          <p className="hero-id truncate">{pickString(hero.episode_id, hero.id) ?? "episode id not reported"}</p>
+          <p className="hero-id truncate" title={pickString(hero.episode_id, hero.id) ?? "episode id not reported"}>
+            {pickString(hero.episode_id, hero.id) ?? "episode id not reported"}
+          </p>
         </>
       )}
-      <Note>
+      <Note summary="Why 480p is a separate track">
         The presentation track is a separate operating point from the 256p primary scoring protocol. If a 480p
         setting ever enters a scored comparison it is qualified as its own operating point, with its own sweep
         and its own confirmation panel.

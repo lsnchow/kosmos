@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { ReactNode } from "react";
 import { useFlipbook } from "../hooks/useFlipbook";
 import { cn } from "../lib/utils";
@@ -8,6 +8,26 @@ import { cn } from "../lib/utils";
  * because an evidence clip that plays itself invites the reader to treat it as
  * live. The accumulated-frame players below are the presentation surfaces.
  */
+export function isVideoSource(src: string | undefined): boolean {
+  return typeof src === "string" && /\.(mp4|webm|mov)(\?|$)/i.test(src);
+}
+
+/**
+ * The "nothing to show here" state, written once.
+ *
+ * It appeared twice in this file, identically, for the single-frame and the
+ * flipbook paths. The reason string differs because the two absences differ:
+ * no media at all, versus no segment event yet.
+ */
+function MediaEmpty({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("media-empty", className)}>
+      <Glyph name="activity" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 export function MediaFrame({
   src,
   alt,
@@ -20,14 +40,9 @@ export function MediaFrame({
   emptyReason?: ReactNode;
 }) {
   if (!src) {
-    return (
-      <div className={cn("media-empty", className)}>
-        <Activity aria-hidden="true" className="size-5" />
-        <span>{emptyReason ?? "No persisted media for this slot yet"}</span>
-      </div>
-    );
+    return <MediaEmpty className={className}>{emptyReason ?? "No persisted media for this slot yet"}</MediaEmpty>;
   }
-  const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(src);
+  const isVideo = isVideoSource(src);
   return isVideo ? (
     <video className={cn("media", className)} controls muted playsInline src={src} aria-label={alt} />
   ) : (
@@ -63,12 +78,7 @@ export function FramePlayer({
 }) {
   const index = useFlipbook(frames.length, { offset, paused });
   if (frames.length === 0) {
-    return (
-      <div className={cn("media-empty", className)}>
-        <Activity aria-hidden="true" className="size-5" />
-        <span>{emptyReason ?? "No persisted segment event yet"}</span>
-      </div>
-    );
+    return <MediaEmpty className={className}>{emptyReason ?? "No persisted segment event yet"}</MediaEmpty>;
   }
   const src = frames[Math.min(index, frames.length - 1)];
   return (

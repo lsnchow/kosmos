@@ -61,31 +61,36 @@ export function useNow(intervalMs = 1000): number {
   return now;
 }
 
-const PRESENTATION_STORAGE_KEY = "plumb.presentation";
+export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /**
- * Presentation mode raises the whole type scale for a projector. It is a
- * display setting: it changes no number, label, or qualification.
+ * Whether the viewer has asked for reduced motion.
+ *
+ * Read live rather than once, because the setting can change mid-session and the
+ * landing page's looping background is exactly the kind of thing the preference
+ * exists to switch off. A browser without `matchMedia` reports `false`, which is
+ * the same answer a browser with the preference unset gives.
  */
-export function usePresentationMode(): [boolean, (next: boolean) => void] {
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(PRESENTATION_STORAGE_KEY) === "on";
-    } catch {
-      return false;
-    }
+export function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia(REDUCED_MOTION_QUERY).matches === true;
   });
 
   useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.documentElement.dataset.presentation = enabled ? "on" : "off";
-    try {
-      window.localStorage.setItem(PRESENTATION_STORAGE_KEY, enabled ? "on" : "off");
-    } catch {
-      // A blocked storage quota must not stop the mode from applying.
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(REDUCED_MOTION_QUERY);
+    setReduced(query.matches === true);
+    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
+    // Safari below 14 only has the deprecated listener pair.
+    if (typeof query.addEventListener === "function") {
+      query.addEventListener("change", onChange);
+      return () => query.removeEventListener("change", onChange);
     }
-  }, [enabled]);
+    query.addListener?.(onChange);
+    return () => query.removeListener?.(onChange);
+  }, []);
 
-  return [enabled, setEnabled];
+  return reduced;
 }
+

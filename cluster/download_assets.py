@@ -26,6 +26,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from cluster.asset_plan import (
+    ASSET_PLAN,
     Access,
     AssetPlanEntry,
     RepoType,
@@ -62,6 +63,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _proven_mirror_for(entry: AssetPlanEntry) -> Optional[AssetPlanEntry]:
+    """The plan entry proven byte-identical to ``entry``, if any.
+
+    Only ``ByteIdentity.PROVEN`` counts, and only from a publicly reachable row:
+    a mirror that is itself gated moves the blocker rather than removing it.
+    This reports a delivery channel, never a license -- the caller still refuses
+    without ``--accept-terms``.
+    """
+    for candidate in ASSET_PLAN.values():
+        evidence = candidate.mirror_evidence
+        if evidence is None or evidence.official_repo_id != entry.repo_id:
+            continue
+        if evidence.byte_identity.value != "proven":
+            continue
+        if candidate.access is not Access.PUBLIC:
+            continue
+        return candidate
+    return None
+
+
 def _resolve_plan(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Optional[AssetPlanEntry]:
     if not args.from_plan:
         if not args.repo:
@@ -91,16 +112,28 @@ def _resolve_plan(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
             "Asset plan %r is a %s artifact, not a Hub snapshot; use its dedicated fetch/clone step at revision %r"
             % (entry.name, entry.repo_type.value, entry.revision)
         )
+    if entry.access is Access.GATED_ACCEPT_TERMS and not args.accept_terms:
+        # Checked before the unresolved-revision branch below: --resolve-revision
+        # calls repo_info() against the gated host and comes back 401, which hides
+        # the real blocker behind a transport error.
+        hint = ""
+        mirror = _proven_mirror_for(entry)
+        if mirror is not None:
+            hint = (
+                " A public mirror (%s) was proven byte-identical to this repository at official revision %s "
+                "per %s, so accepting the terms is the only remaining step -- the bytes need not come from the "
+                "gated host. Byte identity changes the delivery path, not the license."
+                % (mirror.repo_id, mirror.mirror_evidence.official_revision, mirror.mirror_evidence.evidence_path)
+            )
+        parser.error(
+            "Asset plan %r is gated (%s). Re-run with --accept-terms once the terms are genuinely accepted.%s"
+            % (entry.name, entry.license_status.value, hint)
+        )
     if entry.revision is None and not args.revision and not args.resolve_revision:
         parser.error(
             "Asset plan %r has no immutable revision yet. Run --resolve-revision to look one up, then pass it "
             "with --revision and update the plan entry; unresolved revisions never reach a verified lock status."
             % entry.name
-        )
-    if entry.access is Access.GATED_ACCEPT_TERMS and not args.accept_terms:
-        parser.error(
-            "Asset plan %r is gated (%s). Re-run with --accept-terms once the terms are genuinely accepted."
-            % (entry.name, entry.license_status.value)
         )
     return entry
 
