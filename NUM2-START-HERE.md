@@ -1,5 +1,12 @@
 # Start message for a new chat named num2
 
+CURRENT BLOCKER: Trillium SSH expired after experiments completed. One Duo push
+timed out; user must reauthenticate locally with `ssh trillium-gpu`. Read the
+NEW first HANDOFF section and docs/JUDGE-REVIEW-NEXT.md. V2 returned75/80 valid
+samples but0/16 three-vote modes, so do not launch more weak-label training.
+Review-packet/export safeguards are implemented; actual media transfer/review
+packet creation remains pending. No fake human labels or qualification.
+
 LATEST: user approved pilot andsaidkeepgoing. **Actualjudge fine-tune939451 and
 saved-adapter reload939458 completed**; not justpreflight. Read HANDOFF first
 and docs/JUDGE-PILOT-V1.md. Do NOT scalev1: all7 retainedteacher targets came

@@ -1,5 +1,22 @@
 # PLUMB cluster operations — handoff for num2
 
+## Latest — actual pilot and v2 diagnostic, SSH expired
+
+Teacher939423 COMPLETED0:0 (5m34s), optimizer training939451 COMPLETED0:0
+(46s), saved-adapter comparison939458 COMPLETED0:0 (1m42s). Actual adapter and
+metrics are in docs/JUDGE-PILOT-V1.md; never replay these jobs unchanged.
+Teacher-v2 diagnostic939753 reported a completed16-clip summary with75/80 valid
+sample slots butzero3-of-5 unique modes. Its raw bundle remains in
+`experiments/judge-teacher-v2-diagnostic`, not yet fully mirrored locally.
+
+Afterward Trillium's local control socket disappeared and BatchMode SSH failed
+with permission denied. LOCAL drac:0.0 is a laptop zsh prompt, no active SSH
+shell. One normal re-login sent a Duo push; it timed out and the agent-owned
+PTY was cancelled. User needs `ssh trillium-gpu` and Duo approval locally.
+Never repeatedly push, delete sockets, or disturb other cluster sessions.
+No new GPU task was launched after the completedv2 diagnostic. Recheck live
+Slurm state on reconnect. See docs/JUDGE-REVIEW-NEXT.md for transfer/audit steps.
+
 ## Judge LoRA preflight — latest, 2026-09-19 afternoon
 
 Job939218 COMPLETED0:0 on one Trillium H100,57s Slurm elapsed. It checked

@@ -1,5 +1,34 @@
 # PLUMB execution handoff — implementation in progress
 
+## Latest execution boundary — v2 completed, SSH reauthentication needed
+
+The actual v1 adapter is trained and its saved reload is verified. Teacher-v2
+job939753 subsequently reported **75/80 schema-valid samples,0/16 accepted
+three-vote modes,16 abstentions**, status completed_unqualified. No v2 training
+was started and the acceptance rule was not weakened. Source release948d59...
+and raw reports remain on Trillium; the complete v2 report bundle is not yet
+mirrored locally (summary was observed in SSH stdout).
+
+**Trillium SSH expired**: control socket is absent and LOCAL drac:0.0 is back
+at a laptop zsh prompt. Other cluster sessions were left untouched. One normal
+SSH re-login/Duo push was attempted; it timed out, then that owned PTY was
+cancelled. Do not repeatedly send pushes or delete sockets. User must run
+`ssh trillium-gpu` and complete Duo locally to restore transfers/remote work.
+An asynchronous request for reauthentication is outstanding.
+
+Local work continued: v2 exporter recomputes raw selection and refuses weak,
+homogeneous or insufficient data; actual current v2 export should produce only
+a blocked audit. The development-review packet builder verifies original
+video/PNG hashes, uses opaque IDs and existing artifact URLs, leaves every
+worksheet blank/unassigned, and keeps a0600 coordinator resolver outside the
+served root. **No real review packets exist yet**: full source media still
+needs mirroring after reauth. No human identities/labels were fabricated.
+
+See `docs/JUDGE-REVIEW-NEXT.md` for exact next commands. Latest local full suite:
+**1,229 passed,6skipped**. App8787 exposes17 diagnostics including the actual
+trained pilot and saved-adapter comparison; both report links were checked200.
+All qualification gates remain unchanged; no Baseten submission/deployment.
+
 ## Actual judge pilot trained and reloaded — 2026-09-19 afternoon
 
 **Actual optimizer training is now complete.** User approved the unqualified
