@@ -31,7 +31,7 @@
 .font-display-serif {
   font-family: var(--font-mono);
   font-weight: 500;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 /* --- Frames -------------------------------------------------------------- */
@@ -48,31 +48,19 @@
 .liquid-glass {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 0;
-  background: rgb(255 255 255 / 4%);
+  border: 1px solid var(--line-4);
+  border-radius: var(--radius);
+  background: transparent;
 }
 
-.liquid-glass::before {
-  /* The top rule is brighter, the way a lit terminal frame catches its edge. */
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: rgb(255 255 255 / 22%);
-  pointer-events: none;
-}
+/* The reference frames carry no highlight edge: one rule, one weight. */
 
 /* The accent variant marks the one primary action per screen. */
 .liquid-glass-accent {
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: transparent;
+  color: var(--accent);
 }
-
-.liquid-glass-accent::before { background: rgb(255 255 255 / 45%); }
 
 /* --- The dream wall ------------------------------------------------------ */
 
@@ -89,8 +77,8 @@
   overflow: hidden;
   background:
     radial-gradient(120% 90% at 30% 20%, rgb(255 255 255 / 20%) 0%, rgb(255 255 255 / 0%) 62%),
-    radial-gradient(90% 120% at 75% 85%, rgb(123 230 96 / 9%) 0%, rgb(255 255 255 / 0%) 58%),
-    linear-gradient(160deg, #1c1c1c 0%, #070707 55%, #141414 100%);
+    radial-gradient(90% 120% at 75% 85%, rgb(163 211 213 / 9%) 0%, rgb(255 255 255 / 0%) 58%),
+    linear-gradient(160deg, #24242f 0%, #141420 55%, #1f1f2a 100%);
   opacity: 0;
   animation: dream-ignite 900ms steps(3, end) forwards;
 }
@@ -102,7 +90,7 @@
   inset: -40%;
   background:
     radial-gradient(35% 45% at 50% 50%, rgb(255 255 255 / 24%) 0%, rgb(255 255 255 / 0%) 72%),
-    conic-gradient(from 0deg at 50% 50%, rgb(255 255 255 / 10%), rgb(123 230 96 / 8%), rgb(255 255 255 / 0%), rgb(255 255 255 / 10%));
+    conic-gradient(from 0deg at 50% 50%, rgb(255 255 255 / 10%), rgb(163 211 213 / 8%), rgb(255 255 255 / 0%), rgb(255 255 255 / 10%));
   animation: dream-drift 19s linear infinite;
 }
 
@@ -130,7 +118,7 @@
   left: 0;
   height: 3px;
   transform-origin: left center;
-  background: rgb(123 230 96 / 90%);
+  background: rgb(163 211 213 / 90%);
   animation: dream-chunks 10.5s steps(1, end) infinite;
 }
 
@@ -170,9 +158,9 @@
 .chain-flow {
   background: linear-gradient(
     90deg,
-    rgb(123 230 96 / 0%) 0%,
-    rgb(123 230 96 / 100%) 50%,
-    rgb(123 230 96 / 0%) 100%
+    rgb(163 211 213 / 0%) 0%,
+    rgb(163 211 213 / 100%) 50%,
+    rgb(163 211 213 / 0%) 100%
   );
   animation: chain-travel 3.4s linear infinite;
 }

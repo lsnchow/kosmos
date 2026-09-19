@@ -68,7 +68,7 @@ export function ProblemSection() {
         </Reveal>
 
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
-          <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
+          <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] text-fg-strong md:text-6xl lg:text-7xl">
             Comparing two policies costs a person{" "}
             <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">a week standing next to an arm.</em>
           </h2>
@@ -134,7 +134,7 @@ export function CalledShotSection() {
         </Reveal>
 
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
-          <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-6xl">
+          <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] text-fg-strong md:text-6xl">
             The cheap substitute is{" "}
             <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">eighty-eight points wrong.</em>
           </h2>
@@ -149,7 +149,7 @@ export function CalledShotSection() {
             />
             <div className="absolute inset-x-0 bottom-0 flex flex-col gap-6 p-6 md:flex-row md:items-end md:justify-between md:p-10">
               <Glass className="max-w-md rounded-none p-6 md:p-8">
-                <p className="m-0 text-xs uppercase tracking-[0.18em] text-fg-dim">Our approach</p>
+                <p className="m-0 text-xs text-fg-dim">Our approach</p>
                 <p className="m-0 mt-3 text-sm leading-relaxed text-fg-strong md:text-base">
                   The validity gate is Python, not a model call. We took the work away from the
                   model.
@@ -174,7 +174,7 @@ export function CalledShotSection() {
               <p className="m-0 font-mono text-sm text-fg">
                 {CALLED_SHOT.policy} · “{CALLED_SHOT.task}”
               </p>
-              <p className="m-0 font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">
+              <p className="m-0 font-mono text-xs text-fg-dim">
                 50 trials per cell
               </p>
             </div>
@@ -221,7 +221,7 @@ export function PipelineSection() {
     <section id="pipeline" className="relative overflow-hidden bg-black px-6 py-24 md:py-36">
       <div className="relative mx-auto max-w-6xl">
         <Reveal from={{ y: 40 }} duration={0.8}>
-          <h2 className="font-display-serif m-0 text-4xl leading-[1.05] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
+          <h2 className="font-display-serif m-0 text-4xl leading-[1.05] text-fg-strong md:text-6xl lg:text-7xl">
             Four steps, <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">four</em> hardware profiles.
           </h2>
         </Reveal>
@@ -247,7 +247,7 @@ export function PipelineSection() {
                     </span>
                     <div>
                       <p className="m-0 text-base font-medium text-fg-strong">{step.name}</p>
-                      <p className="m-0 mt-1 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-accent-bright">
+                      <p className="m-0 mt-1 font-mono text-[0.6875rem] text-accent-bright">
                         {step.hardware}
                       </p>
                       <p className="m-0 mt-2 text-sm leading-relaxed text-fg-muted">{step.detail}</p>
@@ -268,7 +268,7 @@ export function PipelineSection() {
               {PIPELINE_NOTES.map((note, index) => (
                 <div key={note.label} className="flex flex-col gap-4">
                   {index > 0 && <span aria-hidden="true" className="h-px w-full bg-white/10" />}
-                  <p className="m-0 text-xs uppercase tracking-[0.18em] text-fg-dim">
+                  <p className="m-0 text-xs text-fg-dim">
                     {note.label}
                   </p>
                   <p className="m-0 text-base leading-relaxed text-fg-muted md:text-lg">
@@ -279,7 +279,7 @@ export function PipelineSection() {
 
               <div className="flex flex-col gap-4">
                 <span aria-hidden="true" className="h-px w-full bg-white/10" />
-                <p className="m-0 text-xs uppercase tracking-[0.18em] text-fg-dim">
+                <p className="m-0 text-xs text-fg-dim">
                   Five fixed tasks
                 </p>
                 <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
@@ -313,7 +313,7 @@ export function NumbersSection() {
       <div className="relative mx-auto max-w-6xl">
         <Reveal from={{ y: 30 }} duration={0.7}>
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <h2 className="font-display-serif m-0 text-3xl tracking-tight text-fg-strong md:text-5xl">
+            <h2 className="font-display-serif m-0 text-3xl text-fg-strong md:text-5xl">
               The four numbers we publish about ourselves
             </h2>
             <p className="m-0 hidden text-sm text-fg-dim md:block">The spec sheet</p>
@@ -333,14 +333,14 @@ export function NumbersSection() {
               <Reveal from={{ y: 50 }} delay={index * 0.15} duration={0.8} className="h-full">
                 <Glass className="group flex h-full flex-col rounded-none p-6 md:p-8">
                   <div className="flex items-start justify-between gap-4">
-                    <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">
+                    <span className="font-mono text-xs text-fg-dim">
                       {item.tag}
                     </span>
                     <span className="grid size-8 shrink-0 place-items-center rounded-none bg-white/5 text-fg-muted transition-colors group-hover:bg-white/10 group-hover:text-fg-strong">
                       <Glyph name="arrowUpRight" />
                     </span>
                   </div>
-                  <h3 className="m-0 mt-4 text-xl tracking-tight text-fg-strong md:text-2xl">
+                  <h3 className="m-0 mt-4 text-xl text-fg-strong md:text-2xl">
                     {item.title}
                   </h3>
                   <p className="m-0 mt-3 flex-1 text-sm leading-relaxed text-fg-muted">
@@ -348,7 +348,7 @@ export function NumbersSection() {
                   </p>
                   <div className="mt-6 border-t border-white/10 pt-5">
                     <dl className="m-0 flex items-baseline justify-between gap-4">
-                      <dt className="m-0 text-xs uppercase tracking-[0.14em] text-fg-dim">
+                      <dt className="m-0 text-xs text-fg-dim">
                         Value
                       </dt>
                       <dd className="m-0 flex items-center gap-2 font-mono text-sm text-caution">
@@ -396,7 +396,7 @@ export function ServicesSection() {
       <div className="relative mx-auto max-w-6xl">
         <Reveal from={{ y: 30 }} duration={0.7}>
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <h2 className="font-display-serif m-0 text-3xl tracking-tight text-fg-strong md:text-5xl">
+            <h2 className="font-display-serif m-0 text-3xl text-fg-strong md:text-5xl">
               What we do
             </h2>
             <p className="m-0 hidden text-sm text-fg-dim md:block">Two halves, in order</p>
@@ -420,14 +420,14 @@ export function ServicesSection() {
                   </div>
                   <div className="flex flex-1 flex-col p-6 md:p-8">
                     <div className="flex items-start justify-between gap-4">
-                      <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-dim">
+                      <span className="font-mono text-xs text-fg-dim">
                         {service.tag}
                       </span>
                       <span className="grid size-8 shrink-0 place-items-center rounded-none bg-white/5 text-fg-muted transition-colors group-hover:bg-white/10 group-hover:text-fg-strong">
                         <Glyph name="arrowUpRight" />
                       </span>
                     </div>
-                    <h3 className="m-0 mt-4 text-xl tracking-tight text-fg-strong md:text-2xl">
+                    <h3 className="m-0 mt-4 text-xl text-fg-strong md:text-2xl">
                       {service.title}
                     </h3>
                     <p className="m-0 mt-3 text-sm leading-relaxed text-fg-muted">{service.body}</p>
@@ -454,7 +454,7 @@ export function StackSection() {
 
         <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
           <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
-            <h2 className="font-display-serif m-0 text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-5xl">
+            <h2 className="font-display-serif m-0 text-4xl leading-[1.1] text-fg-strong md:text-5xl">
               Everything ungated. <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">Nothing waits on a human.</em>
             </h2>
             <p className="m-0 mt-6 text-base leading-relaxed text-fg-muted">
@@ -464,7 +464,7 @@ export function StackSection() {
             </p>
 
             <Glass className="mt-8 rounded-none p-6 md:p-8">
-              <p className="m-0 text-xs uppercase tracking-[0.18em] text-fg-dim">
+              <p className="m-0 text-xs text-fg-dim">
                 The burst, on stage
               </p>
               <p className="m-0 mt-4 font-display-serif text-3xl leading-tight text-fg-strong md:text-4xl">
@@ -475,7 +475,7 @@ export function StackSection() {
                 About {BURST_TARGET.gpuSecondsPerRollout} GPU-seconds a rollout, across{" "}
                 {BURST_TARGET.replicas} replicas.
               </p>
-              <p className="m-0 mt-4 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-caution">
+              <p className="m-0 mt-4 font-mono text-[0.6875rem] text-caution">
                 {BURST_TARGET.status}
               </p>
             </Glass>
@@ -488,7 +488,7 @@ export function StackSection() {
                   key={`${row.layer}-${row.choice}`}
                   className="grid grid-cols-1 gap-1 border-t border-white/10 py-4 first:border-t-0 first:pt-0 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4"
                 >
-                  <span className="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-fg-dim">
+                  <span className="font-mono text-[0.6875rem] text-fg-dim">
                     {row.layer}
                   </span>
                   <span>
@@ -518,7 +518,7 @@ export function LimitsSection() {
         </Reveal>
 
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
-          <h2 className="font-display-serif m-0 mt-6 max-w-3xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-5xl">
+          <h2 className="font-display-serif m-0 mt-6 max-w-3xl text-4xl leading-[1.1] text-fg-strong md:text-5xl">
             Goalposts we cannot move <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">until we cross them.</em>
           </h2>
         </Reveal>
@@ -528,7 +528,7 @@ export function LimitsSection() {
             <li key={limit.title} className="bg-black">
               <Reveal from={{ y: 30 }} delay={index * 0.08} duration={0.7} className="h-full">
                 <div className="h-full p-6 md:p-8">
-                  <h3 className="m-0 text-lg tracking-tight text-fg-strong">{limit.title}</h3>
+                  <h3 className="m-0 text-lg text-fg-strong">{limit.title}</h3>
                   <p className="m-0 mt-3 text-sm leading-relaxed text-fg-muted">{limit.body}</p>
                 </div>
               </Reveal>
@@ -551,7 +551,7 @@ export function CtaSection() {
       />
       <div className="relative mx-auto max-w-4xl text-center">
         <Reveal from={{ y: 40 }} duration={0.8}>
-          <h2 className="font-display-serif m-0 text-4xl leading-[1.05] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
+          <h2 className="font-display-serif m-0 text-4xl leading-[1.05] text-fg-strong md:text-6xl lg:text-7xl">
             We measured the ruler <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">before we trusted it.</em>
           </h2>
           <p className="m-0 mt-6 text-base leading-relaxed text-fg-muted md:text-lg">
@@ -564,7 +564,7 @@ export function CtaSection() {
             <Glass className="rounded-none liquid-glass-accent">
               <Link
                 to={CONSOLE_PATH}
-                className="flex items-center gap-2 px-8 py-3.5 text-sm font-medium text-accent-ink no-underline"
+                className="flex items-center gap-2 px-8 py-3.5 text-sm font-medium text-accent no-underline"
               >
                 Open the console
                 <Glyph name="arrowRight" />

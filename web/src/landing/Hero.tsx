@@ -91,7 +91,7 @@ export function Hero() {
           </span>
         </Glass>
 
-        <h1 className="font-display-serif m-0 max-w-5xl text-5xl leading-[1.05] tracking-tight text-fg-strong sm:text-6xl md:text-7xl lg:text-8xl">
+        <h1 className="font-display-serif m-0 max-w-5xl text-5xl leading-[1.05] text-fg-strong sm:text-6xl md:text-7xl lg:text-8xl">
           Evaluate a robot policy <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">without a robot.</em>
         </h1>
 
@@ -103,7 +103,7 @@ export function Hero() {
           <Glass className="rounded-none liquid-glass-accent">
             <Link
               to={CONSOLE_PATH}
-              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-accent-ink no-underline"
+              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-accent no-underline"
             >
               Open the console
               <Glyph name="arrowRight" />

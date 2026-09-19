@@ -49,10 +49,10 @@ export function Reveal({ children, className, from = { y: 40 }, delay = 0, durat
   );
 }
 
-/** The small uppercase label that opens every section. */
+/** The small label that opens every section. */
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="m-0 text-xs uppercase tracking-[0.2em] text-fg-dim">{children}</p>
+    <p className="m-0 text-xs text-fg-dim">{children}</p>
   );
 }
 

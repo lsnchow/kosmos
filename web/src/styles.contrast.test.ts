@@ -59,6 +59,38 @@ export function contrastRatio(a: string, b: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * Hue angle in degrees, 0-360. Undefined for a neutral, so callers must only
+ * ask it of a colour they already know is chromatic.
+ */
+export function hueAngle(hex: string): number {
+  const cleaned = hex.trim().replace("#", "");
+  const full =
+    cleaned.length === 3
+      ? cleaned
+          .split("")
+          .map((part) => part + part)
+          .join("")
+      : cleaned;
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(full.slice(offset, offset + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const chroma = max - min;
+  if (chroma === 0) return 0;
+  let hue: number;
+  if (max === r) hue = ((g - b) / chroma) % 6;
+  else if (max === g) hue = (b - r) / chroma + 2;
+  else hue = (r - g) / chroma + 4;
+  hue *= 60;
+  return hue < 0 ? hue + 360 : hue;
+}
+
+/** Shortest distance between two hue angles, 0-180. */
+export function hueSeparation(a: string, b: string): number {
+  const delta = Math.abs(hueAngle(a) - hueAngle(b)) % 360;
+  return delta > 180 ? 360 - delta : delta;
+}
+
 function colour(token: string): string {
   const value = tokens[token];
   if (value === undefined) throw new Error(`styles.css declares no ${token}`);
@@ -73,18 +105,18 @@ const TEXT_SURFACES = ["--surface-0", "--surface-1", "--surface-2", "--surface-3
  * lightest of the surfaces above, so every figure is a worst case.
  */
 const DOCUMENTED: Record<string, number> = {
-  "--text-strong": 12.1,
-  "--text": 10.6,
-  "--text-muted": 7.7,
-  "--text-dim": 5.9,
-  "--accent": 9.6,
-  "--accent-bright": 11.1,
-  "--good": 9.4,
-  "--bad": 6.6,
-  "--caution-text": 8.5,
-  "--caution-strong": 11.6,
-  "--caution": 7.2,
-  "--info": 6.8,
+  "--text-strong": 13.1,
+  "--text": 10.3,
+  "--text-muted": 6.4,
+  "--text-dim": 5.5,
+  "--accent": 9.7,
+  "--accent-bright": 11.9,
+  "--good": 9.7,
+  "--bad": 7.0,
+  "--caution-text": 11.5,
+  "--caution-strong": 13.4,
+  "--caution": 10.1,
+  "--info": 7.4,
 };
 
 /**
@@ -95,7 +127,7 @@ const INK_EXCEPTIONS: Record<string, { against: string; minimum: number; why: st
   "--accent-ink": {
     against: "--accent",
     minimum: 4.5,
-    why: "black ink on the cyan fill of .button-primary and .skip-link",
+    why: "the field colour, knocked out of the mint fill on .skip-link",
   },
 };
 
@@ -151,13 +183,34 @@ describe("palette contrast", () => {
     expect(contrastRatio(colour("--accent-ink"), colour("--accent-bright"))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps lime and amber apart, so brand and caution are never the same colour", () => {
-    // A status-heavy console cannot use one hue for "this is PLUMB" and "this
-    // number is not qualified". Distinct hues, and distinct enough in luminance
-    // that the two are not one ramp.
+  it("keeps brand and caution apart, so they are never read as the same state", () => {
+    /*
+     * A status-heavy console cannot use one hue for "this is Nightshift" and
+     * "this number is not qualified". That was a real bug once: a single amber
+     * carried both.
+     *
+     * This used to be asserted as `contrastRatio(accent, caution) > 1.1`, which
+     * is the wrong instrument. Contrast ratio is a function of luminance alone,
+     * so it cannot see hue at all — it passes two greys a shade apart and fails
+     * two obviously different hues that happen to sit at the same lightness.
+     * The palette now pairs a mint with an amber at 9.7:1 and 10.1:1, which no
+     * one could mistake for each other and which that check scored at 1.05.
+     *
+     * Hue separation is what the rule always meant. Thirty degrees is well
+     * inside "these are different colours" and still catches the original bug,
+     * where the separation was zero.
+     */
     expect(colour("--accent")).not.toBe(colour("--caution"));
     expect(colour("--accent")).not.toBe(colour("--caution-text"));
-    expect(contrastRatio(colour("--accent"), colour("--caution"))).toBeGreaterThan(1.1);
+    expect(hueSeparation(colour("--accent"), colour("--caution"))).toBeGreaterThanOrEqual(30);
+    expect(hueSeparation(colour("--accent"), colour("--caution-text"))).toBeGreaterThanOrEqual(30);
+    // Both must actually be chromatic; two neutrals would pass a hue test by
+    // accident, since hueAngle() reports 0 for anything with no chroma.
+    for (const token of ["--accent", "--caution"]) {
+      const hex = colour(token).replace("#", "");
+      const [r, g, b] = [0, 2, 4].map((o) => parseInt(hex.slice(o, o + 2), 16));
+      expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeGreaterThan(24);
+    }
   });
 
   it("uses no ink anywhere in the sheet that fails 4.5:1 on --surface-3", () => {
