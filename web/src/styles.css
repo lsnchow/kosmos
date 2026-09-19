@@ -333,6 +333,39 @@ code { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere
 .health-dot.health-known { background: var(--good); }
 .health-dot.health-pending { background: var(--text-dim); }
 
+/* ---------------------------------------------------------------------------
+ * Shell: topbar across the top, sidebar and page beneath it.
+ *
+ * Five different two-column ratios used to express the same "wide + rail"
+ * shape. `.split-grid` is now the one primitive for it, and `.page-stack` is
+ * the one vertical rhythm, so a panel's spacing no longer depends on which
+ * section happened to contain it.
+ * ------------------------------------------------------------------------- */
+.shell-body { display: grid; grid-template-columns: 17rem minmax(0, 1fr); align-items: start; }
+
+.sidebar-region { position: sticky; top: 4rem; align-self: start; height: calc(100dvh - 4rem); overflow-y: auto; border-right: var(--border-width) solid var(--line-1); padding: var(--space-4) var(--space-3); }
+.sidebar ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.sidebar-link { display: flex; align-items: flex-start; gap: var(--space-2); border: var(--border-width) solid transparent; border-radius: var(--radius); padding: var(--space-2) var(--space-3); min-height: 2.75rem; color: var(--text-muted); text-decoration: none; transition: background-color var(--duration-fast) ease-out, color var(--duration-fast) ease-out; }
+.sidebar-link:hover { background: var(--surface-2); color: var(--text-strong); }
+/* The active page is named by aria-current; this rail is only its echo. */
+.sidebar-link-active { border-color: var(--line-2); background: var(--surface-2); color: var(--text-strong); box-shadow: inset 2px 0 0 var(--accent); }
+.sidebar-text { display: grid; gap: var(--space-0-5); min-width: 0; }
+.sidebar-text strong { font-size: var(--fs-2xs); font-weight: 600; }
+.sidebar-hint { color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
+.sidebar-link-active .sidebar-hint { color: var(--text-muted); }
+
+.page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-8) max(var(--space-5), env(safe-area-inset-right)) var(--space-8) max(var(--space-5), env(safe-area-inset-left)); min-width: 0; }
+.page:focus { outline: none; }
+.page-stack { display: grid; gap: var(--space-4); min-width: 0; }
+.page-header { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr); gap: var(--space-8); align-items: end; margin-bottom: var(--space-2); }
+.page-header-main { display: grid; gap: var(--space-2); min-width: 0; }
+.page-lede { max-width: 68ch; color: var(--text-muted); font-size: var(--fs-sm); line-height: var(--leading-normal); }
+.page-header-actions { display: grid; justify-items: start; gap: var(--space-2); border-left: var(--border-width) solid var(--line-1); padding-left: var(--space-5); }
+.page-header-actions p { margin: 0; color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
+.split-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-4); align-items: start; min-width: 0; }
+
+.topbar .nav-toggle { display: none; }
+
 .console { width: min(1680px, 100%); margin: 0 auto; padding: var(--space-10) max(var(--space-4), env(safe-area-inset-right)) var(--space-8) max(var(--space-4), env(safe-area-inset-left)); }
 
 .masthead { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr); gap: var(--space-8); align-items: end; margin-bottom: var(--space-6); }
@@ -836,12 +869,27 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 
 /* --- Responsive and motion ---------------------------------------------- */
 
+/* Below this the sidebar costs more width than it returns, so it becomes a
+   disclosure under the topbar. It is hidden with `display: none` rather than
+   moved off-screen, so its links leave the tab order entirely when collapsed
+   instead of being focusable but invisible. */
+@media (max-width: 1024px) {
+  .shell-body { grid-template-columns: minmax(0, 1fr); }
+  .sidebar-region { display: none; position: static; height: auto; border-right: 0; border-bottom: var(--border-width) solid var(--line-1); }
+  .shell-body-nav-open .sidebar-region { display: block; }
+  .sidebar ul { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+  .topbar .nav-toggle { display: inline-flex; }
+  .page { padding-top: var(--space-5); }
+}
+
 @media (max-width: 1320px) {
   .burst-metrics { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
 }
 
 @media (max-width: 1120px) {
   .talk-grid, .workspace-grid, .lower-grid, .burst-grid { grid-template-columns: 1fr; }
+  .split-grid, .page-header { grid-template-columns: 1fr; }
+  .page-header-actions { border-left: 0; border-top: var(--border-width) solid var(--line-1); padding-left: 0; padding-top: var(--space-3); }
   .side-stack { grid-template-columns: 1fr 1fr; }
   .telemetry { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .smoke-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -882,6 +930,15 @@ html[data-presentation="on"] .chart-tick { font-size: 30px; }
 html[data-presentation="on"] .chart-series-label { font-size: 36px; }
 html[data-presentation="on"] table { white-space: normal; }
 html[data-presentation="on"] .rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Nothing existed between 760px and the 320px floor, where a 2-up tile grid
+   leaves roughly 155px per tile. One column is honest at that width. */
+@media (max-width: 480px) {
+  .rollout-grid, .sixclip-grid, .calledshot-grid { grid-template-columns: 1fr; }
+  .page { padding-right: var(--space-3); padding-left: var(--space-3); }
+  .topbar { gap: var(--space-2); }
+  .api-health { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

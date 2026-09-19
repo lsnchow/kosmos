@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from plumb.artifacts import ArtifactStore
@@ -270,6 +271,30 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
     except StartResolutionError as exc:
         missing.append("scenarios.jsonl (Gate C): %s" % exc)
     return backend, missing
+
+
+
+class _SinglePageApp(StaticFiles):
+    """Static files that fall back to ``index.html`` for client-side routes.
+
+    The console moved from one scrolling page to six routed pages, so a reload
+    on ``/results`` asks this mount for a file that does not exist. Plain
+    ``StaticFiles`` answers 404, which would turn a refresh mid-demo into a
+    blank page. API routes are unaffected: they are declared on the app and
+    match before this mount is consulted.
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as error:
+            if error.status_code != 404:
+                raise
+            # A missing asset is a real 404 -- only extensionless paths, which is
+            # what a route looks like, are handed to the client router.
+            if "." in path.rsplit("/", 1)[-1]:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 def create_app(data_dir: Optional[Path] = None) -> FastAPI:
@@ -1054,7 +1079,7 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
 
     frontend = repo_root / "web" / "dist"
     if frontend.is_dir():
-        app.mount("/", StaticFiles(directory=str(frontend), html=True), name="dashboard")
+        app.mount("/", _SinglePageApp(directory=str(frontend), html=True), name="dashboard")
     else:
 
         @app.get("/")
