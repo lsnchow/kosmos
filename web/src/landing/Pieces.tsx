@@ -52,7 +52,7 @@ export function Reveal({ children, className, from = { y: 40 }, delay = 0, durat
 /** The small uppercase label that opens every section. */
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="m-0 text-xs uppercase tracking-[0.2em] text-white/60">{children}</p>
+    <p className="m-0 text-xs uppercase tracking-[0.2em] text-fg-dim">{children}</p>
   );
 }
 
@@ -125,14 +125,14 @@ export function Figure({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <p className="m-0 flex items-baseline gap-2">
-        <span className="font-display-serif text-4xl leading-none text-white md:text-5xl">
+        <span className="font-display-serif text-4xl leading-none text-fg-strong md:text-5xl">
           {value}
         </span>
-        {unit && <span className="text-sm text-white/70">{unit}</span>}
+        {unit && <span className="text-sm text-fg-muted">{unit}</span>}
       </p>
-      {note && <p className="m-0 text-sm leading-relaxed text-white/70">{note}</p>}
+      {note && <p className="m-0 text-sm leading-relaxed text-fg-muted">{note}</p>}
       {source && (
-        <p className="m-0 font-mono text-[0.6875rem] leading-relaxed text-white/55">{source}</p>
+        <p className="m-0 font-mono text-[0.6875rem] leading-relaxed text-fg-dim">{source}</p>
       )}
     </div>
   );

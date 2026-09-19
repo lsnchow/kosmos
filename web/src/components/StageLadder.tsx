@@ -1,4 +1,4 @@
-import { Glyph } from "./Terminal";
+import { Glyph, Meter, TreeBranch, type CellTone } from "./Terminal";
 import type { Episode } from "../lib/api";
 import { STAGE_ORDER, stageLadder, type StageState } from "../lib/stages";
 import type { WallState } from "../lib/wall";
@@ -19,6 +19,29 @@ const PILL_WORDS: Record<StageState, string> = {
   reported: "reported",
   unreported: "not reported",
   failed: "failed",
+};
+
+/*
+ * The donor's rollup, verbatim: a terminal state is a full meter regardless of
+ * what it terminated into, and the word beside it carries which. A stage that
+ * ran and reported nothing therefore shows four filled cells and the literal
+ * phrase "not reported" — the meter says the Chain got there, the word says
+ * what came back.
+ */
+const STAGE_PROGRESS: Record<StageState, number> = {
+  pending: 0,
+  active: 0.6,
+  reported: 1,
+  unreported: 1,
+  failed: 1,
+};
+
+const STAGE_TONE: Record<StageState, CellTone> = {
+  pending: "muted",
+  active: "caution",
+  reported: "good",
+  unreported: "muted",
+  failed: "bad",
 };
 
 const PILL_STATUS: Record<StageState, string> = {
@@ -59,7 +82,8 @@ export function StageLadder({
         {stages.map((stage, index) => (
           <li key={stage.key} className={`ladder-step ladder-step-${stage.state}`}>
             <span className="ladder-index" aria-hidden="true">
-              {index + 1}
+              <TreeBranch last={index === stages.length - 1} />
+              <Meter progress={STAGE_PROGRESS[stage.state]} tone={STAGE_TONE[stage.state]} />
             </span>
             <div className="ladder-body">
               <div className="ladder-head">

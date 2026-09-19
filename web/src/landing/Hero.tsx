@@ -15,21 +15,21 @@ import { HeroVideo } from "./Video";
 function Nav() {
   return (
     <nav className="relative z-20 px-6 py-6" aria-label="Landing sections">
-      <Glass className="mx-auto flex max-w-5xl items-center justify-between rounded-full px-6 py-3">
+      <Glass className="mx-auto flex max-w-5xl items-center justify-between rounded-none px-6 py-3">
         <div className="flex items-center">
           <Link to="/" className="flex items-center gap-2.5 no-underline" aria-label={`${PRODUCT.name} home`}>
             <span
               aria-hidden="true"
-              className="grid size-6 place-items-center rounded-sm bg-accent font-mono text-sm font-semibold text-black"
+              className="grid size-6 place-items-center rounded-none bg-accent font-mono text-sm font-semibold text-black"
             >
               N
             </span>
-            <span className="text-lg font-semibold text-white">{PRODUCT.name}</span>
+            <span className="text-lg font-semibold text-fg-strong">{PRODUCT.name}</span>
           </Link>
           <ul className="m-0 ml-8 hidden list-none gap-8 p-0 md:flex">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
-                <a className="text-sm font-medium text-white/80 no-underline hover:text-white" href={link.href}>
+                <a className="text-sm font-medium text-fg no-underline hover:text-fg-strong" href={link.href}>
                   {link.label}
                 </a>
               </li>
@@ -38,7 +38,7 @@ function Nav() {
         </div>
         <div className="flex items-center gap-4">
           <a
-            className="hidden text-sm font-medium text-white/80 no-underline hover:text-white sm:inline"
+            className="hidden text-sm font-medium text-fg no-underline hover:text-fg-strong sm:inline"
             href="/api/protocol"
             target="_blank"
             rel="noreferrer"
@@ -47,11 +47,11 @@ function Nav() {
           </a>
           <Glass
             as="div"
-            className="rounded-full"
+            className="rounded-none"
           >
             <Link
               to={CONSOLE_PATH}
-              className="block px-6 py-2 text-sm font-medium text-white no-underline"
+              className="block px-6 py-2 text-sm font-medium text-fg-strong no-underline"
             >
               Open the console
             </Link>
@@ -84,35 +84,35 @@ export function Hero() {
       <Nav />
 
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-8 px-6 py-12 text-center">
-        <Glass className="flex items-center gap-2.5 rounded-full px-4 py-1.5">
+        <Glass className="flex items-center gap-2.5 rounded-none px-4 py-1.5">
           <span aria-hidden="true" className="size-1.5 rounded-full bg-caution" />
-          <span className="font-mono text-xs text-white/80">
+          <span className="font-mono text-xs text-fg">
             Unqualified · synthetic mode · every number carries its status
           </span>
         </Glass>
 
-        <h1 className="font-display-serif m-0 max-w-5xl text-5xl leading-[1.05] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl">
-          Evaluate a robot policy <em className="italic text-white/60">without a robot.</em>
+        <h1 className="font-display-serif m-0 max-w-5xl text-5xl leading-[1.05] tracking-tight text-fg-strong sm:text-6xl md:text-7xl lg:text-8xl">
+          Evaluate a robot policy <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">without a robot.</em>
         </h1>
 
-        <p className="m-0 max-w-2xl text-base leading-relaxed text-white/80 md:text-lg">
+        <p className="m-0 max-w-2xl text-base leading-relaxed text-fg md:text-lg">
           {PRODUCT.promise}
         </p>
 
         <div className="flex flex-col items-center gap-3 sm:flex-row">
-          <Glass className="rounded-full liquid-glass-accent">
+          <Glass className="rounded-none liquid-glass-accent">
             <Link
               to={CONSOLE_PATH}
-              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-white no-underline"
+              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-fg-strong no-underline"
             >
               Open the console
               <Glyph name="arrowRight" />
             </Link>
           </Glass>
-          <Glass className="rounded-full">
+          <Glass className="rounded-none">
             <Link
               to={LIVE_PATH}
-              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-white no-underline"
+              className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-fg-strong no-underline"
             >
               <Glyph name="play" />
               Watch a live run
@@ -122,9 +122,9 @@ export function Hero() {
 
         {/* The one sentence the whole project turns on, placed where a
             newsletter field would be on a page selling something else. */}
-        <p className="m-0 max-w-xl text-sm leading-relaxed text-white/70">
+        <p className="m-0 max-w-xl text-sm leading-relaxed text-fg-muted">
           Three groups have already automated this with world models. All three reported accuracy.
-          <span className="text-white"> None reported precision.</span>
+          <span className="text-fg-strong"> None reported precision.</span>
         </p>
       </div>
 

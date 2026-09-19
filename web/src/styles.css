@@ -466,8 +466,11 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .button-danger:not(:disabled):hover { background: var(--danger-hover); }
 .button-stage { font-size: var(--fs-lg); padding: 0.7em 1.1em; }
 
-.error-banner, .qualified-blocker { display: flex; border-radius: var(--radius-lg); }
-.error-banner { align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); border: 1px solid var(--danger-line); background: var(--danger-deep); padding: var(--space-3-5) var(--space-4); color: var(--danger-text); font-size: var(--fs-xs); }
+.error-banner, .qualified-blocker { display: flex; border-radius: var(--radius); }
+.error-banner { align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); border: 1px solid var(--danger-line); border-radius: 0; background: var(--danger-deep); padding: var(--space-3) var(--space-4); color: var(--danger-text); font-family: var(--font-mono); font-size: var(--fs-xs); }
+/* A shell prefixes its failures. The word is generated content, so it never
+   enters the accessible name of the role="alert" region it labels. */
+.error-banner::before { content: "err"; flex: none; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.8; }
 
 .talk-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-4); align-items: start; margin-bottom: var(--space-4); }
 .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem); gap: var(--space-4); align-items: start; }
@@ -663,8 +666,25 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 /* Task entry. First thing on the live page, because it is the system's primary
    input and because its latency has to hide behind the wall beneath it. */
 .task-prompt { display: grid; gap: var(--space-3); border: var(--border-width) solid var(--line-2); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-4); }
-.task-prompt-bar { display: flex; gap: var(--space-2); }
-.task-prompt-input { flex: 1; min-width: 0; border: var(--border-width) solid var(--line-3); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3) var(--space-3-5); color: var(--text-strong); font-family: var(--font-sans); font-size: var(--fs-2xs); }
+.task-prompt-bar { display: flex; align-items: stretch; gap: var(--space-2); }
+/*
+ * The instruction field is a shell line: a sigil, then what you typed. The
+ * cursor is the browser's own — a real caret in a real input, tinted to the
+ * accent — rather than a drawn block beside it, so selection, IME and
+ * right-to-left text all keep working.
+ */
+.task-prompt-bar::before {
+  content: "$";
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding-left: var(--space-1);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+}
+.task-prompt-input { flex: 1; min-width: 0; border: var(--border-width) solid var(--line-3); border-radius: 0; background: var(--surface-0); padding: var(--space-3) var(--space-3-5); color: var(--text-strong); font-family: var(--font-mono); font-size: var(--fs-2xs); caret-color: var(--accent); }
 .task-prompt-input::placeholder { color: var(--text-dim); }
 .task-prompt-input:focus-visible { border-color: var(--accent-bright); outline: none; }
 .task-prompt-verdict { margin: 0; color: var(--text-muted); font-size: var(--fs-3xs); }
@@ -693,7 +713,8 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactive); border-radius: var(--radius); background: var(--surface-2); padding: 0.5em; color: var(--text); font-family: var(--font-mono); font-size: var(--fs-2xs); }
 .run-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-3-5) 0; }
 .metric { min-width: 0; }
-.metric p, .metric span { margin: 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: var(--leading-snug); overflow-wrap: anywhere; }
+.metric p, .metric span { margin: 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: var(--leading-snug); letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.metric > p:first-child { text-transform: uppercase; }
 .metric span { color: var(--text-dim); }
 .metric strong { display: block; margin: var(--space-1) 0; color: var(--text-strong); font-family: var(--font-mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .metric-large strong { font-size: var(--fs-2xl); line-height: 1.1; }
@@ -702,8 +723,8 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 
 /* --- Telemetry ----------------------------------------------------------- */
 
-.telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3-5) var(--space-4); align-items: start; margin: var(--space-4) 0; border: 1px solid var(--line-1); border-radius: var(--radius-lg); background: var(--surface-inset); padding: var(--space-4) var(--space-4); }
-.telemetry-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-strong); font-size: var(--fs-lg); font-weight: 600; grid-column: 1 / -1; }
+.telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3-5) var(--space-4); align-items: start; margin: var(--space-4) 0; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-inset); padding: var(--space-4); }
+.telemetry-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--accent); font-family: var(--font-display); font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; grid-column: 1 / -1; }
 .telemetry .metric strong { font-size: var(--fs-xl); }
 .freshness { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.45; grid-column: 1 / -1; border-top: 1px solid var(--line-1); padding-top: var(--space-3); }
 .freshness span { display: block; }
@@ -722,15 +743,14 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 .ladder-summary { display: flex; align-items: center; gap: var(--space-1-5); margin: 0 0 var(--space-3); color: var(--text-muted); font-size: var(--fs-2xs); }
 .ladder-summary b { color: var(--text-strong); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .ladder { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 var(--space-3); margin: 0; padding: 0; list-style: none; }
-.ladder-step { display: flex; align-items: flex-start; gap: var(--space-3); border-left: 2px solid var(--line-2); padding: var(--space-3) 0 var(--space-3) var(--space-3-5); }
+.ladder-step { display: grid; gap: var(--space-1-5); border-left: 1px solid var(--line-2); padding: var(--space-3) 0 var(--space-3) var(--space-3); }
 .ladder-step-reported { border-left-color: var(--accent); }
 .ladder-step-active { border-left-color: var(--text-strong); }
 .ladder-step-unreported { border-left-color: var(--caution); }
 .ladder-step-failed { border-left-color: var(--danger-line); }
-.ladder-index { flex: none; width: 1.25rem; color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-3xs); font-variant-numeric: tabular-nums; }
-.ladder-step-reported .ladder-index { color: var(--accent); }
-.ladder-step-active .ladder-index { color: var(--text-strong); }
-.ladder-step-unreported .ladder-index { color: var(--caution); }
+/* Connector, then a four-cell meter: the donor's node line, minus the id. */
+.ladder-index { display: flex; align-items: center; gap: 0; color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-2xs); line-height: 1; }
+
 .ladder-body { min-width: 0; }
 .ladder-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .ladder-label { color: var(--text-dim); font-size: var(--fs-2xs); font-weight: 700; }
@@ -742,12 +762,18 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 
 .burst-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .burst-disabled { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.5; }
-.burst-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: var(--space-5) 0 var(--space-4); }
+.burst-progress { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 0; overflow: hidden; }
+.burst-progress-label { flex: none; color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; }
+.burst-progress .cell-bar { min-width: 0; overflow: hidden; }
+.burst-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: var(--space-4) 0; }
 
 .chart-figure { margin: 0; }
 .replica-chart { display: block; width: 100%; height: auto; }
 .chart-grid { stroke: var(--line-1); stroke-width: 1; }
 .chart-axis { stroke: var(--line-4); stroke-width: 2; }
+/* A plotted line in a terminal is a run of cells, so it gets square ends and
+   mitred joins rather than the rounded ones a drawing tool would default to. */
+.replica-chart path, .replica-chart polyline, .replica-chart line { stroke-linecap: square; stroke-linejoin: miter; }
 .chart-tick { fill: var(--text-muted); font-family: var(--font-mono); font-size: 22px; font-variant-numeric: tabular-nums; }
 .chart-series-label { fill: var(--text-strong); font-family: var(--font-mono); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); margin-top: var(--space-2); color: var(--text-muted); font-size: var(--fs-2xs); }
@@ -837,10 +863,12 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 .range-row { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 .range-row label { display: flex; justify-content: space-between; }
 .range-row input { width: 100%; height: 1.75rem; }
-.sweep-track { display: flex; gap: 3px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.sweep-tick { flex: 1; height: 0.75rem; border-radius: 2px; background: var(--line-3); }
+/* One cell per measured point. Square, butted up, no gradient: the track is a
+   row of terminal cells and a point either held its tolerances or it did not. */
+.sweep-track { display: flex; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.sweep-tick { flex: 1; height: 0.9rem; border-radius: 0; background: var(--line-3); }
 .sweep-tick-pass { background: var(--series-active); }
-.sweep-tick-fail { background: repeating-linear-gradient(45deg, var(--bad) 0 3px, var(--danger-surface) 3px 6px); }
+.sweep-tick-fail { background: repeating-linear-gradient(90deg, var(--bad) 0 2px, var(--danger-surface) 2px 4px); }
 .sweep-tick-selected { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
 .sweep-break { display: flex; align-items: flex-start; gap: var(--space-1-5); margin: var(--space-3) 0 0; color: var(--bad); font-size: var(--fs-3xs); line-height: 1.5; }
 .sweep-readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-3-5); margin-top: var(--space-4); }
@@ -854,7 +882,7 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 .gate-row { display: flex; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--line-1); padding-bottom: var(--space-3); }
 .gate-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .gate-name { display: flex; align-items: center; gap: var(--space-2); color: var(--text-strong); font-size: var(--fs-2xs); font-weight: 700; }
-.gate-index { display: grid; place-items: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line-interactive); border-radius: 9999px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-3xs); flex: none; }
+.gate-index { display: inline-flex; max-width: 100%; align-items: center; justify-content: center; min-width: 1.8em; border: 1px solid var(--line-interactive); border-radius: 0; padding: 0.1em 0.35em; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-3xs); flex: none; }
 .gate-row p { max-width: 24rem; margin: var(--space-1-5) 0 0 2.1em; color: var(--text-muted); font-size: var(--fs-3xs); line-height: 1.5; }
 
 /* --- Six clips ----------------------------------------------------------- */
@@ -954,9 +982,10 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 
 /* Task chips. Five fixed strings; no free-text field anywhere on this page. */
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.chip { display: inline-flex; align-items: center; gap: var(--space-1-5); border: 1px solid var(--line-2); border-radius: 9999px; background: var(--surface-1); padding: 0.45em 0.95em; color: var(--text-muted); font-size: var(--fs-2xs); }
+.chip { display: inline-flex; max-width: 100%; align-items: center; gap: var(--space-1-5); border: 1px solid var(--line-2); border-radius: 0; background: var(--surface-1); padding: 0.4em 0.8em; color: var(--text-muted); font-size: var(--fs-2xs); transition: border-color var(--duration-fast) var(--ease-step), color var(--duration-fast) var(--ease-step); }
 .chip:hover { border-color: var(--line-interactive); color: var(--text-strong); }
-.chip[aria-pressed="true"] { border-color: var(--accent); background: rgb(123 230 96 / 10%); color: var(--accent-bright); }
+/* Selected is reverse video, the same inversion the tab strip uses. */
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 
 /* Example rail: three cards from persisted runs. Never stand-in imagery. */
 

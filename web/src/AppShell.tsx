@@ -22,6 +22,26 @@ import { Sidebar } from "./components/Sidebar";
 import { formatCount, formatFrameCaption, pickString } from "./lib/format";
 import { cn } from "./lib/utils";
 
+/*
+ * A session opens the way a shell does: chrome, then rail, then page, in three
+ * steps. Once per session and no more — a boot sequence that replayed on every
+ * route change would stop reading as a boot and start reading as a stutter
+ * between pages. It is suppressed entirely under prefers-reduced-motion, in the
+ * stylesheet, and it gates nothing: the markup is complete before it starts.
+ */
+const BOOT_KEY = "plumb.booted";
+const BOOT_MS = 320;
+
+function shouldBoot(): boolean {
+  try {
+    return sessionStorage.getItem(BOOT_KEY) === null;
+  } catch {
+    // Private-mode Safari throws on sessionStorage. Skipping the flourish is
+    // the right failure; blocking the console on it is not.
+    return false;
+  }
+}
+
 export function AppShell() {
   const {
     health,
@@ -42,7 +62,19 @@ export function AppShell() {
     cancelRun,
   } = useAppData();
   const [navOpen, setNavOpen] = useState(false);
+  const [booting, setBooting] = useState(shouldBoot);
   const location = useLocation();
+
+  // The boot sequence is a first-impression, not a loading state: it must never
+  // delay reading. The class is dropped on the next frame, so the animation the
+  // browser already started runs to completion while React stops re-rendering
+  // for it, and nothing about the page is gated on it finishing.
+  useEffect(() => {
+    if (!booting) return;
+    sessionStorage.setItem(BOOT_KEY, "done");
+    const handle = setTimeout(() => setBooting(false), BOOT_MS);
+    return () => clearTimeout(handle);
+  }, [booting]);
 
   // Below the sidebar breakpoint the nav is a disclosure. Leaving it open after
   // a route change would cover the page the reader just asked for.
@@ -51,7 +83,7 @@ export function AppShell() {
   }, [location.pathname]);
 
   return (
-    <div className="app-shell">
+    <div className={cn("app-shell", booting && "booting")}>
       <a className="skip-link" href="#page">
         Skip to content
       </a>

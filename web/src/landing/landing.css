@@ -14,76 +14,59 @@
  *     broken element behind, so every moving thing is CSS.
  */
 
-@font-face {
-  font-family: "Instrument Serif";
-  src: url("/fonts/InstrumentSerif-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Instrument Serif";
-  src: url("/fonts/InstrumentSerif-Italic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
+/*
+ * The display face. This was Instrument Serif, whose two @font-face blocks and
+ * both .woff2 files are now gone: a proportional italic serif is the one thing
+ * on this page that could not be made to read as a terminal, and keeping it for
+ * eleven headings meant shipping 31 KB of font to contradict the console it
+ * introduces. Bitcount Grid Double is the console's own display face — a
+ * dot-matrix grid — so the landing and the console now open in the same voice.
+ */
 .font-display-serif {
-  font-family: "Instrument Serif", ui-serif, Georgia, serif;
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
-/* --- Liquid glass -------------------------------------------------------- */
+/* --- Frames -------------------------------------------------------------- */
 
 /*
- * One class, used on every glass element. The ::before is a 1.4 px gradient
- * border masked to the padding box — brightest top and bottom, invisible
- * through the middle, which is what reads as a lens edge rather than a stroke.
+ * This was `liquid-glass`: a 12 px backdrop blur under a masked gradient edge,
+ * and the only backdrop-filter and only non-inset box-shadow in the project.
+ * A terminal has neither. Depth there comes from one thing — a hairline, drawn
+ * or not drawn — so the lens becomes a frame: 1 px, square, over a flat fill.
+ *
+ * The class name and all thirty-one call sites are unchanged; only what it
+ * paints is different.
  */
 .liquid-glass {
   position: relative;
   overflow: hidden;
-  border: none;
-  background: rgb(255 255 255 / 6%);
-  background-blend-mode: luminosity;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / 16%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0;
+  background: rgb(255 255 255 / 4%);
 }
 
 .liquid-glass::before {
+  /* The top rule is brighter, the way a lit terminal frame catches its edge. */
   content: "";
   position: absolute;
-  inset: 0;
-  padding: 1.4px;
-  border-radius: inherit;
-  background: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 45%) 0%,
-    rgb(255 255 255 / 15%) 20%,
-    rgb(255 255 255 / 0%) 40%,
-    rgb(255 255 255 / 0%) 60%,
-    rgb(255 255 255 / 15%) 80%,
-    rgb(255 255 255 / 45%) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgb(255 255 255 / 22%);
   pointer-events: none;
 }
 
 /* The accent variant marks the one primary action per screen. */
 .liquid-glass-accent {
-  background: rgb(123 230 96 / 20%);
-  box-shadow: inset 0 1px 1px rgb(255 255 255 / 26%);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
+
+.liquid-glass-accent::before { background: rgb(255 255 255 / 45%); }
 
 /* --- The dream wall ------------------------------------------------------ */
 
@@ -103,7 +86,7 @@
     radial-gradient(90% 120% at 75% 85%, rgb(123 230 96 / 9%) 0%, rgb(255 255 255 / 0%) 58%),
     linear-gradient(160deg, #1c1c1c 0%, #070707 55%, #141414 100%);
   opacity: 0;
-  animation: dream-ignite 900ms var(--landing-ease, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+  animation: dream-ignite 900ms steps(3, end) forwards;
 }
 
 /* The latent field: two counter-drifting gradients, so no two seconds repeat. */

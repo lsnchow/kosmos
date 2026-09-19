@@ -12,6 +12,7 @@
  * interrupt a fade mid-flight when a loop boundary arrives early.
  */
 import { useEffect, useRef } from "react";
+import { prefersReducedMotion } from "../lib/motion";
 import { cn } from "../lib/utils";
 
 const FADE_MS = 500;
@@ -26,6 +27,10 @@ const GAP_MS = 100;
  */
 function makeFader(element: HTMLElement) {
   let frame = 0;
+  // A fade is exactly the kind of motion the reduce query asks us to drop. The
+  // element still reaches the same opacity, and the callers still get their
+  // completion callback, so the loop logic above is unchanged — it just cuts.
+  const instant = prefersReducedMotion();
 
   function cancel() {
     if (frame) cancelAnimationFrame(frame);
@@ -34,6 +39,11 @@ function makeFader(element: HTMLElement) {
 
   function to(target: number, done?: () => void) {
     cancel();
+    if (instant) {
+      element.style.opacity = String(target);
+      done?.();
+      return;
+    }
     const from = Number(element.style.opacity || "0");
     const started = performance.now();
     const step = (now: number) => {

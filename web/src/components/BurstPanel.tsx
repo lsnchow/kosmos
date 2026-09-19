@@ -1,4 +1,4 @@
-import { Glyph } from "./Terminal";
+import { CellBar, Glyph } from "./Terminal";
 import type { Run, Telemetry } from "../lib/api";
 import { formatCount, formatUsd, isTerminalStatus, pickNumber, formatCountPair} from "../lib/format";
 import { DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
@@ -90,6 +90,19 @@ export function BurstPanel({
         <p className="burst-disabled" id="burst-disabled-reason">
           Button disabled: {disabledReason}. Repeat submissions carry the same derived idempotency key, so the
           ledger returns the existing run instead of starting a second one.
+        </p>
+      )}
+
+      {/*
+        * The donor's footer bar. It is aria-hidden and carries no number of its
+        * own: the count it draws is already stated, exactly once, by the
+        * "Rollouts completed" metric below it. A bar that also printed the
+        * figure would be a second place for the same fact to go stale.
+        */}
+      {completed !== undefined && total !== undefined && total > 0 && (
+        <p className="burst-progress" aria-hidden="true">
+          <span className="burst-progress-label">tasks</span>
+          <CellBar value={completed / total} width={40} tone="good" />
         </p>
       )}
 
