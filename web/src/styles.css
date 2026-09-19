@@ -198,6 +198,7 @@
   --panel-padding: var(--space-4);
   --card-padding: var(--space-3-5);
   --container-max: 1680px;
+  --score-rank-width: 4.5rem;
 
   /* Stacking. Previously nine raw values on an unnamed 10-point convention,
      with .skip-link and .freeplay-dialog both sitting on 50. */
@@ -587,6 +588,18 @@ select { width: 100%; min-height: 2.5em; border: 1px solid var(--line-interactiv
 .empty-state p { max-width: 34rem; margin: 0; line-height: 1.6; }
 .scoreboard-empty { min-height: 17rem; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line-1); border-radius: var(--radius); }
+/* The scoreboard is wider than any viewport that holds a sidebar, so reading
+   the right-hand columns scrolls the row's identity off the left and the
+   numbers stop saying whose they are. Pinning the first two columns keeps
+   rank and policy/task attached to the figures they belong to. */
+.score-table th:nth-child(-n + 2),
+.score-table td:nth-child(-n + 2) { position: sticky; z-index: var(--z-raised); background: var(--surface-1); }
+.score-table th:nth-child(-n + 2) { z-index: calc(var(--z-raised) + 1); background: var(--surface-2); }
+/* The second column's offset has to equal the first column's width exactly, or
+   a sliver of scrolled content shows through the seam. Fixing the width is what
+   makes the offset knowable; both read the same token. */
+.score-table th:first-child, .score-table td:first-child { left: 0; width: var(--score-rank-width); min-width: var(--score-rank-width); }
+.score-table th:nth-child(2), .score-table td:nth-child(2) { left: var(--score-rank-width); box-shadow: 1px 0 0 var(--line-2); }
 /* Every figure in a table is compared down its column, so the whole table is
    mono with tabular figures. */
 table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: var(--fs-3xs); font-variant-numeric: tabular-nums; }
