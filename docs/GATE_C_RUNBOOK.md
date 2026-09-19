@@ -8,8 +8,50 @@ Nothing in this runbook fabricates a start, a scene fact, or a comparability
 claim. Every step either produces real evidence or fails and names what is
 missing. Run the steps in order; each one is safe to re-run.
 
-**Status right now:** `not_run`. No source dataset revision is pinned, no
-episode has been downloaded, and no scene record has been verified. Both source
+## Actual metadata audit — 2026-09-19
+
+Only the README and four metadata files (6,007,767 bytes) were acquired on
+Trillium from Bridge LeRobot revision
+`0e9d76d07e9df3ea3eba257b2520d4913833fad2`; no episode/video was selected for the
+study. The hash-bound local audit is
+`data/bridge-metadata-0e9d76d/audit-v1.json`. The pinned index contains53,192
+episodes,19,974 task strings and1,893,026 frames;14,532 episodes have no usable
+language label. Exact case-insensitive benchmark-instruction matches:
+
+| Task | Episodes | Qualification |
+| --- | ---: | --- |
+| open_drawer | 473 | Not reviewed for scene/reset parity |
+| close_drawer | 416 | Not an AutoEval drawer-panel replacement |
+| to_basket | 0 | No exact instruction match |
+| to_sink | 0 | No exact instruction match |
+| fold_cloth | 100 | Direction/scene/metric references still unreviewed |
+
+Keyword searches are discovery only: for example, basket matches include
+moving objects **out of** a basket, not the required task. Do not widen them
+into eligibility rules merely to fill the matrix.
+
+Published eight-dimensional state statistics also conflict with the provisional
+0–0.39 gripper profile: source gripper extrema are0.0463782921–1.1121242046.
+No scale, clamp, action/state interchange, or state-unit conversion is justified
+by this aggregate range. A source-backed conversion and trajectory fixture are
+still needed. All metadata counts are raw source facts, not successful or
+independent eligible benchmark starts.
+
+Reproduce this no-network/no-model audit against the downloaded metadata:
+
+```bash
+python -m cluster.audit_bridge_metadata \
+  --dataset-root data/bridge-metadata-0e9d76d \
+  --download-manifest data/bridge-metadata-0e9d76d/download.json \
+  --revision 0e9d76d07e9df3ea3eba257b2520d4913833fad2 \
+  --output data/bridge-metadata-0e9d76d/audit-new.json
+```
+
+The original planning steps below remain prerequisites for actual selection;
+the primary asset lock/protocol are intentionally unchanged by this audit.
+
+**Gate status:** `not_run`. The Bridge metadata revision above is pinned for
+audit only; no episode has been downloaded and no scene record verified. Both source
 datasets carry `unresolved_immutable_revision` in `cluster/asset_plan.py`, and
 `zhouzypaul/auto_eval` additionally carries `unresolved_license_or_access_terms`.
 

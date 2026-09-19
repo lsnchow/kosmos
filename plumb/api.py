@@ -32,6 +32,7 @@ import zlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -54,6 +55,9 @@ from plumb.protocol import (
 )
 from plumb.records import BACKENDS, COHORTS, RUN_MODES, ConfigurationError
 from plumb.reference import reference_payload
+from plumb.ledger import CallbackConflictError
+from plumb.outbox import BasetenOutbox
+from plumb.platform import BasetenChainClient, BasetenPlatformConfig, CallbackVerificationError, PlatformSchemaError
 
 LOGGER = logging.getLogger("plumb.api")
 
@@ -159,6 +163,18 @@ class AnnotationInput(BaseModel):
     observable_reasons: str = Field(default="", max_length=2000)
     annotator_model: Optional[str] = Field(default=None, max_length=200)
     annotator_model_revision: Optional[str] = Field(default=None, max_length=200)
+
+
+async def _callback_body(request: Request) -> bytes:
+    """Bound both callback routes without changing the signed byte stream."""
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > 1024 * 1024:
+            raise HTTPException(413, "Callback exceeds the 1 MiB limit")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _load_protocol(root: Path, repo_root: Path) -> Tuple[Optional[ProtocolDocument], Optional[str]]:
@@ -276,6 +292,7 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
 
     from plumb.backends.baseten import BackendNotConfigured, BasetenChainBackend
     from plumb.rehearsal import rehearsal_enabled
+    from plumb.result_store import ResultStoreConfigurationError, S3ResultStore
 
     if rehearsal_enabled():
         return _register_rehearsal_backend(root)
@@ -285,12 +302,22 @@ def _register_baseten_backend(root: Path) -> Tuple[Optional[Any], List[str]]:
         return None, ["PLUMB_WEBHOOK_ENDPOINT is not set"]
     from plumb.starts import ScenarioStartResolver, StartResolutionError
 
+    result_store = None
+    result_store_reason: Optional[str] = None
+    try:
+        # Construction only validates explicit configuration. It does not make
+        # an S3 call; preflight is an operator-invoked action below.
+        result_store = S3ResultStore.from_env()
+    except ResultStoreConfigurationError as exc:
+        result_store_reason = str(exc)
     try:
         settings = _backend_settings(webhook)
-        backend = BasetenChainBackend.from_env(settings, root)
+        backend = BasetenChainBackend.from_env(settings, root, result_store=result_store)
     except (BackendNotConfigured, ValueError) as exc:
         return None, [str(exc)]
     missing = list(backend.configuration_status()["missing"])
+    if result_store_reason is not None:
+        missing.append(result_store_reason)
     # A real submission needs real starts. There is no synthetic fallback on this
     # path: a rehearsal start must never reach a production run.
     try:
@@ -324,7 +351,13 @@ class _SinglePageApp(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
-def create_app(data_dir: Optional[Path] = None) -> FastAPI:
+def create_app(
+    data_dir: Optional[Path] = None,
+    *,
+    baseten_client: Optional[BasetenChainClient] = None,
+    development_review_root: Optional[Path] = None,
+    development_review_private_root: Optional[Path] = None,
+) -> FastAPI:
     root = (data_dir or Path(os.environ.get("PLUMB_DATA_DIR", "data"))).resolve()
     root.mkdir(parents=True, exist_ok=True)
     repo_root = Path(__file__).resolve().parents[1]
@@ -338,6 +371,12 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
         registered["baseten"] = baseten_backend
 
     service = RunService(root, backends=registered, gates_path=store.gates_path)
+    if baseten_client is None and os.environ.get("PLUMB_ENABLE_BASETEN_CALLBACKS") == "1":
+        config = BasetenPlatformConfig.from_env()
+        if not config.webhook_secret:
+            raise ValueError("PLUMB_ENABLE_BASETEN_CALLBACKS requires BASETEN_WEBHOOK_SECRET")
+        baseten_client = BasetenChainClient(config)
+    outbox = BasetenOutbox(service.ledger, baseten_client) if baseten_client is not None else None
     pool = ThreadPoolExecutor(
         max_workers=int(os.environ.get("PLUMB_MAX_WORKERS", "8")), thread_name_prefix="plumb-run"
     )
@@ -357,6 +396,26 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
     app.state.store = store
     app.state.protocol = document
     app.state.baseten = baseten_backend
+    app.state.baseten_outbox = outbox
+    # Development review is intentionally isolated from the annotation/Gate D
+    # routes. Its SQLite database is private data, never an artifact endpoint.
+    from plumb.development_review import DevelopmentReviewStore, register_development_review_routes
+
+    review_root = development_review_root or (root / "review")
+    private_root = development_review_private_root or root.parent / (root.name + "-development-review-private")
+    try:
+        review_session_ttl = int(os.environ.get("PLUMB_DEVELOPMENT_REVIEW_SESSION_TTL_SECONDS", str(8 * 60 * 60)))
+    except ValueError as error:
+        raise ValueError("PLUMB_DEVELOPMENT_REVIEW_SESSION_TTL_SECONDS must be an integer") from error
+    development_review = DevelopmentReviewStore(
+        repo_root=repo_root,
+        review_root=review_root,
+        served_root=root,
+        private_root=private_root,
+        session_ttl_seconds=review_session_ttl,
+    )
+    app.state.development_review = development_review
+    register_development_review_routes(app, development_review)
 
     # ------------------------------------------------------------------ helpers
 
@@ -678,6 +737,45 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
     def six_clip_reveal() -> dict:
         return _six_clip_payload(store, revealed=True)
 
+    @app.get("/api/baseten/outbox")
+    def platform_submissions(run_id: Optional[str] = None) -> dict:
+        if run_id is not None:
+            require_run(run_id)
+        # Never return payloads, callback bodies, credentials, or ownership tokens.
+        public_fields = ("outbox_id", "run_id", "episode_id", "state", "platform_request_id",
+                         "post_attempt_count", "remote_status", "remote_status_observed_at",
+                         "cancellation_requested", "deadline_at", "created_at", "updated_at")
+        rows = service.ledger.list_baseten_submissions(run_id=run_id)
+        return {"submissions": [{key: row.get(key) for key in public_fields} for row in rows],
+                "callback_ingress_enabled": outbox is not None,
+                "automatic_submission_enabled": False, "qualified": False}
+
+    @app.post("/api/baseten/callback", status_code=202)
+    async def outbox_callback(request: Request) -> dict:
+        if outbox is None:
+            raise HTTPException(503, "Baseten callback ingress is not configured")
+        raw = await _callback_body(request)
+        try:
+            receipt = outbox.ingest_callback(raw, dict(request.headers))
+        except CallbackVerificationError:
+            raise HTTPException(401, "Invalid callback authentication")
+        except CallbackConflictError:
+            raise HTTPException(409, "Conflicting callback for a persisted request")
+        except (PlatformSchemaError, ValueError):
+            raise HTTPException(422, "Invalid callback payload")
+        return {"request_id": receipt.callback.request_id, "persisted": True,
+                "duplicate": receipt.duplicate, "associated": receipt.associated,
+                "logical_result_finalized": False}
+
+    @app.post("/api/baseten/reconcile")
+    async def reconcile_platform() -> dict:
+        if outbox is None:
+            raise HTTPException(503, "Baseten delivery is not configured")
+        # Only local recovery here. No guessed Chain lifecycle URL or network
+        # retry is reachable from this endpoint.
+        result = await outbox.reconcile()
+        return {**asdict(result), "scope": "local_recovery_only", "submission_posts": 0}
+
     @app.get("/api/runs")
     def list_runs() -> dict:
         return {"runs": service.list_runs()}
@@ -914,9 +1012,16 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
 
     @app.get("/api/artifacts/{artifact_path:path}")
     def artifact(artifact_path: str):
+        def private_namespace(parts):
+            return any(part.casefold() == "private" or part.casefold().endswith("-development-review-private") for part in parts)
+
+        if private_namespace(Path(artifact_path).parts):
+            raise HTTPException(404, "Artifact not found")
         path = (root / artifact_path).resolve()
         suffix = path.suffix.lower()
         if root not in path.parents or not path.is_file() or suffix not in _ARTIFACT_MEDIA:
+            raise HTTPException(404, "Artifact not found")
+        if private_namespace(path.relative_to(root).parts):
             raise HTTPException(404, "Artifact not found")
         return FileResponse(
             path,
@@ -936,7 +1041,7 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
 
         if baseten_backend is None:
             raise HTTPException(409, {"reason": "no Baseten backend is configured", "missing": baseten_missing})
-        raw = await request.body()
+        raw = await _callback_body(request)
         try:
             callback, stored = baseten_backend.authenticate_and_store_callback(raw, dict(request.headers))
         except Exception as exc:
@@ -1121,6 +1226,16 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
 
     frontend = repo_root / "web" / "dist"
     if frontend.is_dir():
+        @app.get("/review", include_in_schema=False)
+        def development_review_page():
+            index = frontend / "index.html"
+            if not index.is_file():
+                raise HTTPException(404, "Development review UI is not built")
+            return FileResponse(index, media_type="text/html", headers={"X-Content-Type-Options": "nosniff"})
+
+        # _SinglePageApp is what makes the other six routes survive a reload;
+        # /review keeps its own handler above because that one also sets
+        # nosniff, which the static mount does not.
         app.mount("/", _SinglePageApp(directory=str(frontend), html=True), name="dashboard")
     else:
 

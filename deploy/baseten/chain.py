@@ -46,12 +46,24 @@ import json
 import math
 import os
 import pathlib
+import re
 import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from plumb.result_store import (
+    ResultStoreBinding,
+    ResultStoreConfigurationError,
+    ResultStoreConflictError,
+    ResultStoreError,
+    S3Credentials,
+    S3ResultStore,
+    S3ResultStoreConfig,
+    request_payload_digest,
+)
 
 
 try:  # Importing this repository must work without the remote-only Chains SDK.
@@ -94,6 +106,20 @@ ENV_MODEL_CACHE_ROOT = "PLUMB_MODEL_CACHE_ROOT"
 ENV_OPENVLA_REVIEWED_REMOTE_CODE = "PLUMB_OPENVLA_REVIEWED_REMOTE_CODE_ACK"
 ENV_ASSET_MANIFEST_PATH = "PLUMB_ASSET_MANIFEST_PATH"
 ENV_VALIDITY_CALIBRATION_CLASS = "PLUMB_VALIDITY_CALIBRATION_CLASS"
+ENV_RESULT_STORE_BUCKET = "PLUMB_RESULT_STORE_BUCKET"
+ENV_RESULT_STORE_REGION = "PLUMB_RESULT_STORE_REGION"
+ENV_RESULT_STORE_ENDPOINT_URL = "PLUMB_RESULT_STORE_ENDPOINT_URL"
+ENV_RESULT_STORE_PREFIX = "PLUMB_RESULT_STORE_PREFIX"
+ENV_RESULT_STORE_EVIDENCE_URI = "PLUMB_RESULT_STORE_EVIDENCE_URI"
+ENV_RESULT_STORE_VERIFIED_AT = "PLUMB_RESULT_STORE_VERIFIED_AT"
+ENV_RESULT_STORE_EXPECTED_BUCKET_OWNER = "PLUMB_RESULT_STORE_EXPECTED_BUCKET_OWNER"
+ENV_RESULT_STORE_MAX_BYTES = "PLUMB_RESULT_STORE_MAX_BYTES"
+ENV_RESULT_STORE_CONNECT_TIMEOUT_SECONDS = "PLUMB_RESULT_STORE_CONNECT_TIMEOUT_SECONDS"
+ENV_RESULT_STORE_READ_TIMEOUT_SECONDS = "PLUMB_RESULT_STORE_READ_TIMEOUT_SECONDS"
+ENV_RESULT_STORE_MAX_ATTEMPTS = "PLUMB_RESULT_STORE_MAX_ATTEMPTS"
+ENV_RESULT_STORE_ACCESS_KEY_SECRET_NAME = "PLUMB_RESULT_STORE_ACCESS_KEY_SECRET_NAME"
+ENV_RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME = "PLUMB_RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME"
+ENV_RESULT_STORE_SESSION_TOKEN_SECRET_NAME = "PLUMB_RESULT_STORE_SESSION_TOKEN_SECRET_NAME"
 
 DEFAULT_BATCH_MAX = 16
 DEFAULT_BATCH_WINDOW_MS = 15.0
@@ -280,6 +306,18 @@ class FreeplayPayload(BaseModel):
     source_state_lineage_id: Optional[str] = None
 
 
+class ResultStoreBindingPayload(BaseModel):
+    """Secret-free object identity supplied by the durable application outbox."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    result_key: str = Field(pattern=r"^[a-f0-9]{32}$")
+    run_id: str = Field(min_length=1, max_length=256)
+    episode_id: str = Field(min_length=1, max_length=256)
+    protocol_hash: str = Field(min_length=1, max_length=256)
+    request_payload_sha256: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+
 class RolloutRequest(BaseModel):
     """One logical episode.  The controller must not create a new identity."""
 
@@ -296,12 +334,26 @@ class RolloutRequest(BaseModel):
     # policy, validity and judge payloads. The stage refs stay required so
     # episode-identity matching is enforced on this path too.
     freeplay: Optional[FreeplayPayload] = None
+    result_store: Optional[ResultStoreBindingPayload] = None
 
     def matching_episode_requests(self) -> bool:
         return all(
             stage.episode_id == self.episode_id and stage.protocol_hash == self.protocol_hash
             for stage in (self.policy, self.world, self.validity, self.judge)
         )
+
+    def matching_result_store_binding(self) -> bool:
+        binding = self.result_store
+        if binding is None:
+            return False
+        if (
+            binding.run_id != self.run_id
+            or binding.episode_id != self.episode_id
+            or binding.protocol_hash != self.protocol_hash
+        ):
+            return False
+        unsigned = self.model_dump(mode="json", exclude={"result_store"})
+        return binding.request_payload_sha256 == request_payload_digest(unsigned)
 
 
 class StageTiming(BaseModel):
@@ -2466,6 +2518,39 @@ if CHAINS_RUNTIME_AVAILABLE:
     _SHARED_ENVIRONMENT: Dict[str, str] = {
         ENV_MODEL_CACHE_ROOT: MODEL_CACHE_ROOT,
     }
+    # The bucket destination is deployment context, never request data. Empty
+    # values are intentionally omitted so a manually invoked Chain fails its
+    # result-store configuration rather than using a made-up destination.
+    for _result_store_env in (
+        ENV_RESULT_STORE_BUCKET,
+        ENV_RESULT_STORE_REGION,
+        ENV_RESULT_STORE_ENDPOINT_URL,
+        ENV_RESULT_STORE_PREFIX,
+        ENV_RESULT_STORE_EVIDENCE_URI,
+        ENV_RESULT_STORE_VERIFIED_AT,
+        ENV_RESULT_STORE_EXPECTED_BUCKET_OWNER,
+        ENV_RESULT_STORE_MAX_BYTES,
+        ENV_RESULT_STORE_CONNECT_TIMEOUT_SECONDS,
+        ENV_RESULT_STORE_READ_TIMEOUT_SECONDS,
+        ENV_RESULT_STORE_MAX_ATTEMPTS,
+    ):
+        _value = _env_text(_result_store_env, "")
+        if _value:
+            _SHARED_ENVIRONMENT[_result_store_env] = _value
+    _RESULT_STORE_ACCESS_KEY_SECRET_NAME = _env_text(ENV_RESULT_STORE_ACCESS_KEY_SECRET_NAME, "")
+    _RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME = _env_text(ENV_RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME, "")
+    _RESULT_STORE_SESSION_TOKEN_SECRET_NAME = _env_text(ENV_RESULT_STORE_SESSION_TOKEN_SECRET_NAME, "")
+    _RESULT_STORE_SECRET_KEYS = tuple(
+        item
+        for item in (
+            _RESULT_STORE_ACCESS_KEY_SECRET_NAME,
+            _RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME,
+            _RESULT_STORE_SESSION_TOKEN_SECRET_NAME,
+        )
+        if item
+    )
+    if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", item) for item in _RESULT_STORE_SECRET_KEYS):
+        raise ValueError("PLUMB_RESULT_STORE_DEPLOY_SECRET_KEYS must be comma-separated deployment secret names")
     _VALIDITY_ENVIRONMENT: Dict[str, str] = dict(_SHARED_ENVIRONMENT)
     _VALIDITY_ENVIRONMENT[ENV_VALIDITY_CALIBRATION_CLASS] = VALIDITY_CALIBRATION_CLASS
     _WORLD_ENVIRONMENT: Dict[str, str] = dict(_SHARED_ENVIRONMENT)
@@ -3138,6 +3223,26 @@ if CHAINS_RUNTIME_AVAILABLE:
             worker_name, stub = self._by_arm[arm]
             return arm, worker_name, stub
 
+    def _result_store_credentials(context: chains.DeploymentContext) -> S3Credentials:  # type: ignore[name-defined]
+        """Resolve only declared credential fields from deployment context."""
+
+        if not _RESULT_STORE_ACCESS_KEY_SECRET_NAME or not _RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME:
+            raise ResultStoreConfigurationError(
+                "result-store deployment secret names for AWS access and secret keys are required"
+            )
+        try:
+            secrets = context.secrets
+            access_key = secrets[_RESULT_STORE_ACCESS_KEY_SECRET_NAME]
+            secret_key = secrets[_RESULT_STORE_SECRET_ACCESS_KEY_SECRET_NAME]
+            session_token = (
+                secrets[_RESULT_STORE_SESSION_TOKEN_SECRET_NAME]
+                if _RESULT_STORE_SESSION_TOKEN_SECRET_NAME
+                else None
+            )
+        except Exception as error:  # do not expose the missing secret name/value to a request result
+            raise ResultStoreConfigurationError("result-store deployment credentials are unavailable") from error
+        return S3Credentials(str(access_key), str(secret_key), None if session_token is None else str(session_token))
+
     @chains.mark_entrypoint("PLUMB Rollout Controller")
     class RolloutController(chains.ChainletBase):  # type: ignore[union-attr,misc]
         """CPU entrypoint running one episode's real sequential feedback loop.
@@ -3158,7 +3263,7 @@ if CHAINS_RUNTIME_AVAILABLE:
             name="plumb-rollout-controller",
             docker_image=_docker_image(chains.BasetenImage.PY311, _CONTROLLER_REQUIREMENTS),
             compute=chains.Compute(cpu_count=4, memory="8Gi", predict_concurrency=32),
-            assets=chains.Assets(),
+            assets=chains.Assets(secret_keys=list(_RESULT_STORE_SECRET_KEYS)),
             options=chains.ChainletOptions(
                 env_variables=_SHARED_ENVIRONMENT,
                 metadata=_chainlet_metadata(
@@ -3178,6 +3283,7 @@ if CHAINS_RUNTIME_AVAILABLE:
             minivla: MiniVLAWorker = chains.depends(MiniVLAWorker, retries=0),
             openpizero: OpenPiZeroWorker = chains.depends(OpenPiZeroWorker, retries=0),
             susie: SusieWorker = chains.depends(SusieWorker, retries=0),
+            context: chains.DeploymentContext = chains.depends_context(),
         ) -> None:
             # retries=0 everywhere: a transport retry creates an attempt, not a
             # new statistical episode, and attempt accounting belongs to the
@@ -3185,6 +3291,7 @@ if CHAINS_RUNTIME_AVAILABLE:
             self._world = world
             self._validity = validity
             self._judge = judge
+            self._deployment_context = context
             self._router = PolicyRouter(
                 {
                     "plumb-openvla-worker": openvla,
@@ -3297,6 +3404,39 @@ if CHAINS_RUNTIME_AVAILABLE:
             return result
 
         async def run_remote(self, request: RolloutRequest) -> RolloutResult:
+            """Run then conditionally persist every terminal result before return."""
+
+            if not request.matching_result_store_binding():
+                return RolloutResult(
+                    run_id=request.run_id,
+                    episode_id=request.episode_id,
+                    protocol_hash=request.protocol_hash,
+                    status="failed",
+                    missing_reason="result_store_binding_invalid",
+                )
+            try:
+                assert request.result_store is not None
+                binding = ResultStoreBinding(**request.result_store.model_dump(mode="json"))
+                store = S3ResultStore(
+                    S3ResultStoreConfig.from_env(), credentials=_result_store_credentials(self._deployment_context)
+                )
+                if not store.sdk_available():
+                    raise ResultStoreConfigurationError("result-store boto3 dependency is unavailable")
+            except (ResultStoreConfigurationError, ResultStoreError, ValueError, TypeError):
+                # Validate storage and credential wiring before any policy/world
+                # call. Do not spend a GPU second on a result that cannot be
+                # committed durably.
+                return RolloutResult(
+                    run_id=request.run_id,
+                    episode_id=request.episode_id,
+                    protocol_hash=request.protocol_hash,
+                    status="failed",
+                    missing_reason="result_store_unavailable_before_execution",
+                )
+            result = await self._run_remote(request)
+            return await self._persist_terminal_result(request, result, store)
+
+        async def _run_remote(self, request: RolloutRequest) -> RolloutResult:
             started = time.perf_counter()
             if not request.matching_episode_requests():
                 return RolloutResult(
@@ -3743,6 +3883,35 @@ if CHAINS_RUNTIME_AVAILABLE:
                 judge_status=judge_status,
             )
 
+        async def _persist_terminal_result(
+            self, request: RolloutRequest, result: RolloutResult, store: S3ResultStore
+        ) -> RolloutResult:
+            """Write the exact terminal object before returning it to Baseten.
+
+            The configured bucket/prefix and SDK credentials come solely from
+            Chain deployment context. The request carries only the pre-committed
+            opaque key and identity/digest binding, so it cannot redirect a
+            worker to an arbitrary object-store destination.
+            """
+
+            assert request.result_store is not None
+            try:
+                binding = ResultStoreBinding(**request.result_store.model_dump(mode="json"))
+                await asyncio.to_thread(store.put_terminal_result, binding, result.model_dump(mode="json"))
+                return result
+            except (ResultStoreConfigurationError, ResultStoreConflictError, ResultStoreError, ValueError) as error:
+                # Do not return a completed result when the durable write did
+                # not happen. The failure result itself cannot be safely written
+                # if the configured immutable key is unavailable/conflicting.
+                return result.model_copy(
+                    update={
+                        "status": "failed",
+                        "missing_reason": "result_store_write_failed:%s" % type(error).__name__,
+                        "validity": None,
+                        "binary_success": None,
+                        "progress_score": None,
+                    }
+                )
 
         def _terminal(
             self,

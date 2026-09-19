@@ -1,8 +1,14 @@
-"""Lazy policy and blinded-judge adapters for PLUMB.
+"""Lazy production policy and blinded-judge adapters for PLUMB.
 
 Importing this package is CPU-safe and does not import or download any model
 runtime.  Model frameworks are imported only when a real adapter is invoked.
+
+Source-specific unqualified reproductions are available only through the
+explicit :mod:`plumb.policies.diagnostics` namespace.  They do not replace
+the controller/certification adapters exported below.
 """
+
+from . import diagnostics
 
 from .contracts import (
     BRIDGE_ACTION_GRIPPER_HIGH,
@@ -82,6 +88,8 @@ from .octo import (
     OCTO_BASE_MODEL_ID,
     OCTO_FORBIDDEN_MODEL_IDS,
     OCTO_JAX_VERSION,
+    OCTO_PRODUCTION_SOURCE,
+    OCTO_PRODUCTION_SOURCE_COMMIT,
     OCTO_RELEASED_ENSEMBLE_EXP_WEIGHT,
     OCTO_SMALL_CHECKPOINT_STEP,
     OCTO_SMALL_MODEL_ID,
@@ -193,6 +201,8 @@ __all__ = (
     "OCTO_BASE_V1_CONTRACT",
     "OCTO_FORBIDDEN_MODEL_IDS",
     "OCTO_JAX_VERSION",
+    "OCTO_PRODUCTION_SOURCE",
+    "OCTO_PRODUCTION_SOURCE_COMMIT",
     "OCTO_RELEASED_ENSEMBLE_EXP_WEIGHT",
     "OCTO_SMALL_CHECKPOINT_STEP",
     "OCTO_SMALL_MODEL_ID",
@@ -251,4 +261,5 @@ __all__ = (
     "TASK_REGISTRY_HASH",
     "BenchmarkTask",
     "TaskRegistry",
+    "diagnostics",
 )

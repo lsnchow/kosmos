@@ -1,12 +1,14 @@
 """Baseten backend: outbox durability, honest refusals, and cost accounting.
 
-The backend's job is to never invent an outcome.  An ambiguous POST, a lost
-callback and a deadline are all explicit unevaluable results, and an unpriced
-resource makes the whole cost view unknown rather than cheaper.
+The backend's job is to never invent an outcome. An ambiguous POST remains
+unevaluable without re-POSTing; a terminal remote failure or deadline remains a
+failed lifecycle; and an unpriced resource makes the whole cost view unknown
+rather than cheaper.
 """
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,10 +17,12 @@ from plumb.backends.baseten import (
     BackendNotConfigured,
     BasetenBackendSettings,
     BasetenChainBackend,
+    RemoteChainExecutionError,
     SubmissionOutbox,
 )
 from plumb.platform import CallbackAssociation, PriceUnit, VerifiedPriceBasis
 from plumb.records import normalise_backend_result
+from plumb.starts import RehearsalStartResolver
 
 
 def _settings(**overrides):
@@ -117,6 +121,29 @@ def test_ambiguous_submission_is_not_terminal_and_is_never_resent(tmp_path):
     assert len(outbox.unsettled()) == 1
     with pytest.raises(ValueError, match="terminal state"):
         outbox.settle(key, "awaiting_reconciliation", None, None)
+
+
+def test_crashed_pre_post_boundary_is_ambiguous_and_never_reposted(tmp_path):
+    outcome = {
+        "status": "completed",
+        "validity": "unknown",
+        "binary_success": None,
+        "progress_score": None,
+        "missing_reason": "judge_no_quorum",
+        "horizon_actions": 70,
+        "executed_actions": 70,
+        "stages": {},
+    }
+    backend, client = _executing_backend(tmp_path, outcome)
+    episode = _episode(start_lineage_id="lineage-000")
+    key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], None)
+    assert backend.outbox.begin_submission(key)
+
+    result = backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0001")
+    assert result["missing_reason"] == "awaiting_reconciliation"
+    assert client.calls == 0
+    assert backend.outbox.counts() == {"awaiting_reconciliation": 1}
 
 
 def test_a_callback_that_beats_its_submission_is_parked_not_discarded(tmp_path):
@@ -292,42 +319,216 @@ def test_reconcile_resolves_a_late_callback_and_keeps_the_rest_unknown(tmp_path)
     assert "never replaced by a guess" in report["note"]
 
 
-def test_a_blocked_chain_stage_becomes_an_unevaluable_outcome_naming_the_stage(tmp_path):
-    backend = _backend(tmp_path)
-    episode = _episode()
-    attempt = tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000"
-    attempt.mkdir(parents=True)
-    result = backend._result_from_chain(
-        {"status": "blocked", "stages": {"world": {"status": "blocked"}}, "reason": "no world contract"},
-        episode,
-        attempt,
-    )
-    assert result["validity"] == "unknown"
-    assert result["binary_success"] is None
-    assert result["progress_score"] is None
-    # A structured reason, composed from the stage that blocked. Free-text prose
-    # is kept as detail and must not become the machine-readable reason, because
-    # exclusion accounting groups on this value.
-    assert result["missing_reason"] == "stage_world_blocked"
-    assert result["backend_metadata"]["detail"] == "no world contract"
+class _AcceptedClient:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.inputs = []
+
+    async def submit_async(self, _entrypoint_input, _options):
+        self.calls += 1
+        self.inputs.append(dict(_entrypoint_input))
+        return SimpleNamespace(request_id="request-1", response={"request_id": "request-1"})
 
 
-def test_the_chains_own_structured_missing_reason_wins_over_the_composed_one(tmp_path):
-    backend = _backend(tmp_path)
-    episode = _episode()
-    attempt = tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000"
-    attempt.mkdir(parents=True)
-    result = backend._result_from_chain(
-        {
-            "status": "failed",
-            "stages": {"world": {"status": "failed"}},
-            "missing_reason": "world_payload_missing_seed",
-            "reason": "prose that must not be used as the reason code",
-        },
-        episode,
-        attempt,
+def _executing_backend(tmp_path, outcome):
+    client = _AcceptedClient()
+    backend = BasetenChainBackend(
+        settings=_settings(),
+        data_dir=tmp_path,
+        client=client,
+        transport_kind="simulated",
+        start_resolver=RehearsalStartResolver(256),
     )
-    assert result["missing_reason"] == "world_payload_missing_seed"
+    backend._await_result = lambda _key, _request_id: dict(outcome)  # type: ignore[method-assign]
+    return backend, client
+
+
+@pytest.mark.parametrize(
+    ("outcome", "reason"),
+    [
+        (
+            {
+                "status": "failed",
+                "stages": {"world": {"status": "failed"}},
+                "missing_reason": "world_payload_missing_seed",
+                "reason": "remote world worker crashed",
+            },
+            "remote_chain_terminal_failed",
+        ),
+        (
+            {
+                "status": "blocked",
+                "stages": {"world": {"status": "blocked"}},
+                "missing_reason": "world_contract_missing",
+            },
+            "remote_chain_terminal_blocked",
+        ),
+        (
+            {
+                "status": "completed",
+                "validity": "unknown",
+                "binary_success": None,
+                "progress_score": None,
+                "horizon_actions": 70,
+                "executed_actions": 69,
+                "stages": {},
+            },
+            "remote_chain_incomplete_horizon",
+        ),
+    ],
+)
+def test_terminal_chain_failures_and_partial_horizons_fail_once_with_raw_evidence(tmp_path, outcome, reason):
+    backend, client = _executing_backend(tmp_path, outcome)
+    episode = _episode(start_lineage_id="lineage-000")
+    attempt = tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000"
+
+    with pytest.raises(RemoteChainExecutionError) as caught:
+        backend.execute(episode, {}, attempt)
+    assert caught.value.error["reason"] == reason
+    assert client.calls == 1
+    assert backend.outbox.counts() == {"failed": 1}
+    raw = json.loads((attempt / "baseten_terminal_failure.json").read_text())
+    assert raw["failure"]["reason"] == reason
+    assert raw["chain_result"] == outcome
+
+    # A terminal result is evidence, never a reason to re-POST the same cell.
+    with pytest.raises(RemoteChainExecutionError):
+        backend.execute(episode, {}, attempt)
+    assert client.calls == 1
+
+
+def test_completed_but_unevaluable_chain_clip_remains_a_completed_unknown(tmp_path):
+    outcome = {
+        "status": "completed",
+        "validity": "unknown",
+        "binary_success": None,
+        "progress_score": None,
+        "missing_reason": "judge_no_quorum",
+        "horizon_actions": 70,
+        "executed_actions": 70,
+        "stages": {},
+    }
+    backend, _client = _executing_backend(tmp_path, outcome)
+    result = backend.execute(
+        _episode(start_lineage_id="lineage-000"),
+        {},
+        tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000",
+    )
+    assert (result["validity"], result["binary_success"], result["missing_reason"]) == (
+        "unknown",
+        None,
+        "judge_no_quorum",
+    )
+
+
+def test_network_backend_is_unavailable_without_an_explicit_result_store(tmp_path):
+    backend = BasetenChainBackend(
+        settings=_settings(),
+        data_dir=tmp_path,
+        client=_AcceptedClient(),
+        start_resolver=RehearsalStartResolver(256),
+    )
+    with pytest.raises(BackendNotConfigured, match="immutable S3-compatible"):
+        backend.execute(_episode(start_lineage_id="lineage-000"), {}, tmp_path / "attempt")
+
+
+def test_pre_post_outbox_persists_an_opaque_result_key_without_a_destination(tmp_path):
+    outcome = {
+        "status": "completed",
+        "validity": "unknown",
+        "binary_success": None,
+        "progress_score": None,
+        "missing_reason": "judge_no_quorum",
+        "horizon_actions": 70,
+        "executed_actions": 70,
+        "stages": {},
+    }
+    backend, client = _executing_backend(tmp_path, outcome)
+    episode = _episode(start_lineage_id="lineage-000")
+    backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0000")
+    request = client.inputs[0]
+    binding = request["result_store"]
+    assert set(binding) == {"result_key", "run_id", "episode_id", "protocol_hash", "request_payload_sha256"}
+    assert len(binding["result_key"]) == 32
+    assert "bucket" not in binding and "endpoint" not in binding and "secret" not in binding
+
+
+def test_restarted_backend_waits_for_the_original_submitted_request_without_reposting(tmp_path):
+    outcome = {
+        "status": "completed",
+        "validity": "unknown",
+        "binary_success": None,
+        "progress_score": None,
+        "missing_reason": "judge_no_quorum",
+        "horizon_actions": 70,
+        "executed_actions": 70,
+        "stages": {},
+    }
+    backend, client = _executing_backend(tmp_path, outcome)
+    episode = _episode(start_lineage_id="lineage-000")
+    key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], None)
+    backend.outbox.mark_submitted(key, "durable-request-id")
+
+    result = backend.execute(episode, {}, tmp_path / "artifacts" / "run-1" / "ep-1" / "attempt-0001")
+    assert result["missing_reason"] == "judge_no_quorum"
+    assert client.calls == 0
+    assert backend.outbox.counts() == {"completed": 1}
+
+
+def test_reconcile_reads_an_injected_result_store_when_a_callback_never_arrives(tmp_path):
+    class Store:
+        def get_result(self, binding):
+            assert binding.run_id == "run-1"
+            return {
+                "status": "completed",
+                "validity": "unknown",
+                "binary_success": None,
+                "progress_score": None,
+                "horizon_actions": 70,
+                "executed_actions": 70,
+            }
+
+    backend = BasetenChainBackend(settings=_settings(), data_dir=tmp_path, result_store=Store())
+    episode = _episode()
+    key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], "sha256:" + "a" * 64)
+    backend.outbox.mark_submitted(key, "store-request-id")
+
+    report = backend.reconcile("run-1")
+    assert report["resolved"] == [key]
+    assert backend.outbox.counts() == {"completed": 1}
+
+
+def test_ambiguous_post_recovers_by_precommitted_result_key_without_a_request_id_or_repost(tmp_path):
+    class Store:
+        def __init__(self):
+            self.bindings = []
+
+        def get_result(self, binding):
+            self.bindings.append(binding)
+            return {
+                "status": "completed",
+                "validity": "unknown",
+                "binary_success": None,
+                "progress_score": None,
+                "horizon_actions": 70,
+                "executed_actions": 70,
+            }
+
+    store = Store()
+    backend, client = _executing_backend(tmp_path, {})
+    backend.result_store = store
+    episode = _episode()
+    key = SubmissionOutbox.logical_key(episode, episode["protocol_hash"], "OpenVLA")
+    backend.outbox.reserve(key, episode, "OpenVLA", episode["protocol_hash"], "sha256:" + "a" * 64)
+    backend.outbox.mark_ambiguous(key, {"reason": "transport_lost_after_post"})
+
+    report = backend.reconcile("run-1")
+    assert report["resolved"] == [key]
+    assert backend.outbox.counts() == {"completed": 1}
+    assert store.bindings[0].result_key
+    assert client.calls == 0
 
 
 def test_an_invalid_episode_never_carries_a_score(tmp_path):

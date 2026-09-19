@@ -88,6 +88,12 @@ class DeploymentCapacity:
     #: not by preference: see ``max_batch_for_memory``.
     world_batch_size: int = 1
     gpu_memory_bytes: int = 80 * 1024**3
+    #: Observed peak allocation for a *specific fused batch cardinality* on the
+    #: pinned runtime/profile.  A one-item peak does not linearly establish a
+    #: two- or sixteen-item peak: fixed workspace, allocator behaviour and
+    #: attention/kernel choices can all change.  Only an entry here may support
+    #: a multi-item throughput calculation.
+    measured_batch_peak_bytes: Mapping[int, int] = field(default_factory=dict)
     #: Controller/policy concurrency. Usually not the bottleneck, but a low value
     #: silently caps how many episodes can be in flight.
     max_concurrent_episodes: Optional[int] = None
@@ -97,19 +103,41 @@ class DeploymentCapacity:
             raise CapacityError("max_replicas must be at least 1")
         if self.world_batch_size < 1:
             raise CapacityError("world_batch_size must be at least 1")
+        if self.max_concurrent_episodes is not None and self.max_concurrent_episodes < 1:
+            raise CapacityError("max_concurrent_episodes must be at least 1 when supplied")
+        for batch_size, peak_bytes in self.measured_batch_peak_bytes.items():
+            if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+                raise CapacityError("measured batch sizes must be positive integers")
+            if isinstance(peak_bytes, bool) or not isinstance(peak_bytes, int) or peak_bytes < 1:
+                raise CapacityError("measured batch peaks must be positive byte counts")
 
     def max_batch_for_memory(self, per_call_peak_bytes: Optional[int]) -> Optional[int]:
-        """Largest batch the GPU can hold, or ``None`` if peak memory is unknown.
+        """A *linear projection*, or ``None`` if the one-call peak is unknown.
 
-        Batch packing is the lever the 60-second claim depends on, and it is the
-        one most easily over-assumed: a recorded 36.5 GB peak for a single call
-        means a batch of 16 does not fit on an 80 GB card, whatever the config
-        file says.
+        Multiplying a single-call peak also multiplies shared model weights,
+        so this is neither a valid batch upper bound nor a fit certificate. Use
+        :meth:`measured_batch_for_memory` for an executable capacity claim.
         """
 
         if not per_call_peak_bytes or per_call_peak_bytes <= 0:
             return None
         return max(1, int(self.gpu_memory_bytes // per_call_peak_bytes))
+
+    def measured_batch_for_memory(self, requested_batch_size: Optional[int] = None) -> Optional[int]:
+        """Largest directly measured fitting batch no larger than the request.
+
+        ``None`` is intentional: it says no multi-item batch has been measured
+        for this profile.  It never falls back to a multiplication/division
+        estimate from the one-item peak.
+        """
+
+        requested = self.world_batch_size if requested_batch_size is None else requested_batch_size
+        fitting = [
+            batch_size
+            for batch_size, peak_bytes in self.measured_batch_peak_bytes.items()
+            if batch_size <= requested and peak_bytes <= self.gpu_memory_bytes
+        ]
+        return max(fitting) if fitting else None
 
 
 @dataclass(frozen=True)
@@ -173,14 +201,27 @@ class CapacityPlan:
     batched_world_calls: int
     world_gpu_seconds: float
     throughput_seconds: float
+    controller_concurrency_seconds: float
     wall_seconds: float
     binding_limit: str
+    #: Linear upper bound based only on a batch-1 peak.  It is retained for
+    #: planning diagnostics, never used as proof a batch fits.
     memory_batch_ceiling: Optional[int]
+    #: The batch actually used in arithmetic.  It is one unless an exact
+    #: multi-item measurement is supplied in ``DeploymentCapacity``.
+    measured_batch_size: int
+    batch_measurement_status: str
     warnings: List[str] = field(default_factory=list)
 
     @property
     def meets_target(self) -> bool:
-        return self.wall_seconds <= TARGET_SECONDS
+        """Whether this is a full-target arithmetic projection.
+
+        It is deliberately not a qualification result.  Gate F still needs
+        three fresh executions and cost evidence before the target is achieved.
+        """
+
+        return self.episodes == TARGET_EPISODES and self.wall_seconds <= TARGET_SECONDS
 
     def replicas_needed_for_target(self) -> Optional[int]:
         """Replicas needed to hit 60 s, or ``None`` if latency makes it impossible.
@@ -192,6 +233,8 @@ class CapacityPlan:
 
         if self.episode_latency_seconds > TARGET_SECONDS:
             return None
+        if self.controller_concurrency_seconds > TARGET_SECONDS:
+            return None
         if self.world_gpu_seconds <= 0:
             return 1
         return max(1, math.ceil(self.world_gpu_seconds / TARGET_SECONDS))
@@ -202,10 +245,14 @@ class CapacityPlan:
         if self.episode_latency_seconds > TARGET_SECONDS:
             return 0
         per_episode_gpu = self.world_gpu_seconds / self.episodes if self.episodes else 0.0
-        if per_episode_gpu <= 0:
-            return self.episodes
-        budget = TARGET_SECONDS * self.capacity.max_replicas
-        return max(0, int(budget // per_episode_gpu))
+        gpu_achievable = self.episodes
+        if per_episode_gpu > 0:
+            budget = TARGET_SECONDS * self.capacity.max_replicas
+            gpu_achievable = max(0, int(budget // per_episode_gpu))
+        if self.capacity.max_concurrent_episodes is None:
+            return min(self.episodes, gpu_achievable)
+        controller_achievable = int(TARGET_SECONDS // self.episode_latency_seconds) * self.capacity.max_concurrent_episodes
+        return max(0, min(self.episodes, gpu_achievable, controller_achievable))
 
     def to_mapping(self) -> Dict[str, Any]:
         return {
@@ -217,16 +264,25 @@ class CapacityPlan:
             "latencies_are_measured": self.latencies.measured,
             "max_replicas": self.capacity.max_replicas,
             "world_batch_size": self.capacity.world_batch_size,
+            "world_batch_size_used": self.measured_batch_size,
+            "memory_batch_ceiling_linear_projection": self.memory_batch_ceiling,
+            # Kept for consumers of the older payload.  Its accompanying
+            # status makes the non-certifying nature explicit.
             "memory_batch_ceiling": self.memory_batch_ceiling,
+            "batch_measurement_status": self.batch_measurement_status,
             "rounds_per_episode": round(self.rounds_per_episode, 3),
             "episode_latency_seconds": round(self.episode_latency_seconds, 3),
             "world_calls": self.world_calls,
             "batched_world_calls": self.batched_world_calls,
             "world_gpu_seconds": round(self.world_gpu_seconds, 3),
             "throughput_seconds": round(self.throughput_seconds, 3),
+            "controller_concurrency_seconds": round(self.controller_concurrency_seconds, 3),
+            "max_concurrent_episodes": self.capacity.max_concurrent_episodes,
             "wall_seconds": round(self.wall_seconds, 3),
             "binding_limit": self.binding_limit,
             "meets_60s_target": self.meets_target,
+            "target_claim_status": "projection_not_qualified",
+            "target_claim_requirements": ["Gate E", "Gate F", "three fresh 1500-episode rehearsals"],
             "replicas_needed_for_target": self.replicas_needed_for_target(),
             "episodes_achievable_in_60s": self.episodes_achievable_in_target(),
             "warnings": list(self.warnings),
@@ -263,21 +319,37 @@ def plan_capacity(
     episode_latency = max_rounds * per_round + latencies.validity_seconds + latencies.judge_seconds
 
     memory_ceiling = capacity.max_batch_for_memory(latencies.world_peak_memory_bytes)
-    effective_batch = capacity.world_batch_size
-    if memory_ceiling is not None and effective_batch > memory_ceiling:
+    requested_batch = capacity.world_batch_size
+    effective_batch = requested_batch
+    measured_batch = capacity.measured_batch_for_memory(requested_batch)
+    batch_status = "single_call_only" if requested_batch == 1 else "unmeasured"
+    if requested_batch > 1:
+        if measured_batch is None:
+            effective_batch = 1
+            warnings.append(
+                "no measured multi-item GPU peak for requested world batch %d; a single-call peak is not a "
+                "batch-memory extrapolation, so planning with batch 1" % requested_batch
+            )
+        else:
+            effective_batch = measured_batch
+            batch_status = "measured"
+            if measured_batch < requested_batch:
+                warnings.append(
+                    "requested world batch %d has no fitting measurement; planning with measured batch %d"
+                    % (requested_batch, measured_batch)
+                )
+    if memory_ceiling is not None and requested_batch > memory_ceiling:
         warnings.append(
-            "requested world batch %d exceeds the %d that fits in %.0f GB at the measured "
-            "%.1f GB peak per call; planning with %d"
+            "requested world batch %d exceeds the naive linear %d-item projection from the measured "
+            "%.1f GB single-call peak on %.0f GB; shared weights make this neither an upper bound nor a fit certificate"
             % (
-                capacity.world_batch_size,
+                requested_batch,
                 memory_ceiling,
-                capacity.gpu_memory_bytes / 1024**3,
                 (latencies.world_peak_memory_bytes or 0) / 1024**3,
-                memory_ceiling,
+                capacity.gpu_memory_bytes / 1024**3,
             )
         )
-        effective_batch = memory_ceiling
-    if latencies.world_peak_memory_bytes is None and capacity.world_batch_size > 1:
+    if latencies.world_peak_memory_bytes is None and requested_batch > 1:
         warnings.append(
             "no measured per-call GPU peak, so the batch size is unchecked against memory; "
             "Gate A must record it before this plan is trusted"
@@ -289,15 +361,26 @@ def plan_capacity(
     # optimistic and is flagged as such.
     world_gpu_seconds = batched_world_calls * latencies.world_seconds
     throughput_seconds = world_gpu_seconds / capacity.max_replicas
+    controller_concurrency_seconds = episode_latency
+    if capacity.max_concurrent_episodes is not None:
+        controller_waves = math.ceil(episodes / capacity.max_concurrent_episodes)
+        controller_concurrency_seconds = controller_waves * episode_latency
 
-    if effective_batch > 1:
+    if requested_batch > 1:
         warnings.append(
-            "batched throughput assumes a fused forward of %d costs the same wall time as one "
-            "call; measure the real batch scaling in Gate A before relying on it" % effective_batch
+            "batched throughput requires a measured fused-forward latency curve; do not assume %d requests cost "
+            "the same wall time as one call" % requested_batch
         )
 
-    wall = max(episode_latency, throughput_seconds)
-    binding = "per_episode_latency" if episode_latency >= throughput_seconds else "aggregate_throughput"
+    wall = max(episode_latency, throughput_seconds, controller_concurrency_seconds)
+    if capacity.max_concurrent_episodes is not None and controller_concurrency_seconds >= max(episode_latency, throughput_seconds):
+        binding = "controller_concurrency"
+        warnings.append(
+            "controller concurrency caps the plan at %d in-flight episodes; replicas cannot exceed that dispatch limit"
+            % capacity.max_concurrent_episodes
+        )
+    else:
+        binding = "per_episode_latency" if episode_latency >= throughput_seconds else "aggregate_throughput"
 
     if binding == "per_episode_latency" and not feedback.qualified:
         warnings.append(
@@ -326,9 +409,12 @@ def plan_capacity(
         batched_world_calls=batched_world_calls,
         world_gpu_seconds=world_gpu_seconds,
         throughput_seconds=throughput_seconds,
+        controller_concurrency_seconds=controller_concurrency_seconds,
         wall_seconds=wall,
         binding_limit=binding,
         memory_batch_ceiling=memory_ceiling,
+        measured_batch_size=effective_batch,
+        batch_measurement_status=batch_status,
         warnings=warnings,
     )
 
@@ -414,9 +500,22 @@ def required_world_latency(
     max_rounds = max(rounds.values())
 
     # Latency limit: the slowest episode must fit in the window on its own.
-    latency_budget = TARGET_SECONDS / max_rounds - policy_seconds
+    # When the controller admits only C episodes concurrently, it must fit
+    # ceil(N/C) waves as well; a large replica cap cannot repair that bound.
+    controller_waves = (
+        1
+        if capacity.max_concurrent_episodes is None
+        else math.ceil(episodes / capacity.max_concurrent_episodes)
+    )
+    latency_budget = TARGET_SECONDS / (max_rounds * controller_waves) - policy_seconds
     # Throughput limit: total batched world seconds must fit across replicas.
-    batched_calls = math.ceil(episodes * mean_rounds / max(1, capacity.world_batch_size))
+    # ``required_world_latency`` is a planning question, but it must not hide
+    # an unmeasured batch assumption in the answer.  Only a directly measured
+    # fused batch changes this throughput budget.
+    effective_batch = capacity.measured_batch_for_memory(capacity.world_batch_size)
+    if effective_batch is None:
+        effective_batch = 1
+    batched_calls = math.ceil(episodes * mean_rounds / effective_batch)
     throughput_budget = (
         TARGET_SECONDS * capacity.max_replicas / batched_calls if batched_calls else float("inf")
     )
@@ -433,7 +532,11 @@ def required_world_latency(
         ),
         "rounds_per_episode_mean": round(mean_rounds, 3),
         "rounds_worst_task": max_rounds,
+        "controller_waves": controller_waves,
         "batched_world_calls": batched_calls,
+        "world_batch_size_requested": capacity.world_batch_size,
+        "world_batch_size_used": effective_batch,
+        "batch_measurement_status": "measured" if effective_batch > 1 else "single_call_only_or_unmeasured",
         "reason": (
             None
             if feasible
@@ -480,6 +583,10 @@ class BurstPlan:
             "headline": self.headline,
             "caveat": self.caveat,
             "study_is_never_reduced": True,
+            "target_episode_requirement": TARGET_EPISODES,
+            "target_scope_complete": self.requested_episodes == TARGET_EPISODES,
+            "target_claim_status": "projection_not_qualified",
+            "target_claim_requirements": ["Gate E", "Gate F", "three fresh 1500-episode rehearsals"],
         }
 
 
@@ -499,6 +606,31 @@ def plan_burst(plan: CapacityPlan) -> BurstPlan:
 
     achievable = plan.episodes_achievable_in_target()
     full_wall = plan.wall_seconds
+
+    # A caller is free to plan a smaller live demonstration, but the resulting
+    # caption must never reuse the 1,500-episode target language.  This branch
+    # is before the ordinary "whole matrix fits" branch precisely so 400 or
+    # 1,499 episodes cannot acquire ``meets_target=True`` by arithmetic alone.
+    if plan.episodes != TARGET_EPISODES:
+        return BurstPlan(
+            requested_episodes=plan.episodes,
+            achievable_episodes=min(achievable, plan.episodes),
+            wall_seconds_for_achievable=min(max(plan.episode_latency_seconds, 0.0), TARGET_SECONDS)
+            if achievable <= 0
+            else min(full_wall, TARGET_SECONDS),
+            wall_seconds_for_full=full_wall,
+            binding_limit=plan.binding_limit,
+            meets_target=False,
+            is_subset=True,
+            headline=(
+                "%d-episode planning subset; the public target remains %d episodes in %.0f seconds"
+                % (plan.episodes, TARGET_EPISODES, TARGET_SECONDS)
+            ),
+            caveat=(
+                "This plan is not the full %d-episode target and cannot be displayed as a target result. "
+                "It is a subset planning calculation only." % TARGET_EPISODES
+            ),
+        )
 
     if achievable >= plan.episodes:
         return BurstPlan(

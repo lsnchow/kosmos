@@ -7,8 +7,13 @@
 # Re-resolved against public PyPI on 2026-09-19 (UTC).
 #
 # ===========================================================================
-# NOTHING IN THIS FILE HAS EVER BEEN BUILT, INSTALLED, OR RUN
+# BASETEN IMAGE UNVERIFIED; SEPARATE ALLIANCE GPU PREFLIGHT NOW EXECUTED
 # ===========================================================================
+# On 2026-09-19, cluster job939218 completed a real no-optimizer Qwen LoRA
+# forward/backward using the same core base versions with Alliance builds.
+# See docs/DISTILLATION_RUNBOOK.md and its runtime lock for exact differences.
+# This does NOT validate the public-PyPI image, train an adapter, or replace
+# the formal dataset/calibration/deployment prerequisites below.
 # No Training Job has been submitted from this repository. `training_job`
 # appeared nowhere in it before this directory existed. There is no GPU here,
 # torch is not installed, and no container built from these pins has been

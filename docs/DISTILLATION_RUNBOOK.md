@@ -1,5 +1,56 @@
 # Distillation runbook — a second judge revision, on Training Jobs
 
+## Executed training-framework check — 2026-09-19
+
+User priority is now judge fine-tuning. **No optimizer training or adapter has
+been produced yet.** The actual one-H100 preflight939218 completed0:0 on
+Trillium, using the existing pinned Qwen2.5-VL-7B checkpoint and an isolated
+training environment. It performed a real assistant-only multimodal forward
+and LoRA backward: loss0.6149674654,20,185,088 trainable parameters,56 parameter
+tensors with nonzero gradients, gradient L2 norm0.3713223, peak CUDA allocation
+31,381,548,544B. Slurm elapsed57s; the report's1.9337s covers collation/forward/
+backward/gradient checks, **not** model loading or source hashing.
+
+This establishes tensor/gradient compatibility, not judge quality, training
+throughput, a trained adapter, or Baseten-container equivalence. Source release:
+`82eb4ab6e401eea765857d7e568444d1dd9cc893ea774a35621d02f53c51fdf2`.
+Raw report/log/runtime lock are in
+`data/live-integrated/cluster-evidence/judge-lora-preflight-939218/`.
+The original raw report is immutable: its seed covers forward/dropout, but was
+set after LoRA construction. Subsequent source moves seeding before construction;
+no repeatability claim is made for the recorded initialization.
+
+Runtime `/scratch/lchow432/plumb/venv-judge-lora-tf449` was copied from the
+existing environment; the original was not modified. Load modules
+`StdEnv/2023 python/3.11 arrow/19.0.1` (the batch script additionally loads CUDA/
+cuDNN). Imports and pip-check pass with Torch2.6.0, Transformers4.49.0,
+PEFT0.14.0, TRL0.14.0, Accelerate1.3.0, Datasets3.2.0, NumPy2.2.2 and
+PyArrow19.0.1. Actual Alliance distribution suffixes/paths and the complete
+freeze are recorded in `evidence/judge-training-runtime-tf449-v1.json`, SHA
+`1df3d68e8967204cd2f3f9633960fc9fc42753ff857f6a456dfaa3ca84fc962f`.
+
+The no-training fixture is
+`/scratch/lchow432/plumb/fixtures/judge-lora-preflight-v1/row.json`.
+It reconstructs the original MP4's16 decoded frames, checks every pixel hash
+against the real Qwen report, and preserves the original no-quorum/unknown
+aggregate. The first schema-valid raw attempt is used **only** to test loss;
+it is not promoted to an aggregate label or a training cohort. Reference role
+remains scene context, not a fabricated goal image.
+
+The training path now uses one16-frame **video** plus separate reference images,
+the serving system/rubric/timestamp template, assistant-only targets, a real
+Datasets object, TRL's no-text-preprocessing mode, batch1, and strictly local
+hash-verified weights. These repairs replace the previous untested16-independent-
+images/plain-list/default-batch path.
+
+Formal training still needs the frozen, disjoint dataset/calibrated teacher and
+the prerequisites below. A separate **uncalibrated development pilot** was
+offered to the user for approval; no response has been received as of this
+record. It must never be submitted or described as the formal calibrated study.
+No world-model training or new model-weight download occurred.
+
+---
+
 Judge distillation produces a **new judge revision**. It never edits the
 original judge's results, and it cannot score a burst until it has passed a
 **fresh** held-out calibration and a **paired frozen-video comparison** of its

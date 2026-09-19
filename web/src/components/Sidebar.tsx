@@ -29,6 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/evidence", label: "Evidence", icon: "shield", startsSecondary: true },
   { to: "/cost", label: "Cost", icon: "gauge" },
   { to: "/clips", label: "Clips", icon: "flask" },
+  { to: "/review", label: "Development review", icon: "shield" },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

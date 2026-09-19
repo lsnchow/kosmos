@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -53,6 +55,25 @@ BURST_EPISODE_TARGET = 1500
 BURST_SECONDS_TARGET = 60.0
 BURST_USD_TARGET = 11.25
 
+_SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and bool(_SHA256_RE.fullmatch(value))
+
+
+def _nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _finite_positive(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+        and float(value) > 0
+    )
+
 
 def _as_tuple(value: Any) -> Tuple[str, ...]:
     if value is None:
@@ -71,6 +92,26 @@ def _contains_synthetic(value: Any) -> bool:
         return any(_contains_synthetic(item) for item in value.values())
     if isinstance(value, (tuple, list, set)):
         return any(_contains_synthetic(item) for item in value)
+    return False
+
+
+def _contains_nonqualifying_execution(value: Any) -> bool:
+    """Whether a value explicitly labels a run as non-qualifying execution.
+
+    A vendor *fixture* may be genuine Gate A/B evidence, so ``fixture`` is not
+    forbidden.  In contrast a simulated transport, rehearsal or diagnostic is
+    deliberately useful engineering evidence but cannot survive an environment
+    switch and become a real-backend gate pass.
+    """
+
+    labels = ("synthetic", "simulated", "mock", "fake", "rehearsal", "diagnostic")
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        return any(label in lowered for label in labels)
+    if isinstance(value, Mapping):
+        return any(_contains_nonqualifying_execution(item) for item in value.values())
+    if isinstance(value, (tuple, list, set)):
+        return any(_contains_nonqualifying_execution(item) for item in value)
     return False
 
 
@@ -146,14 +187,18 @@ class GateRecord:
             errors.append("passed gate lacks evidence URIs")
         if not self.thresholds:
             errors.append("passed gate lacks frozen thresholds")
-        if _contains_synthetic(self.evidence_kind) or _contains_synthetic(self.measurements):
-            errors.append("synthetic/mock evidence may not support a passed qualification gate")
+        if _contains_nonqualifying_execution(self.evidence_kind) or _contains_nonqualifying_execution(self.measurements):
+            errors.append(
+                "synthetic/simulated/rehearsal/diagnostic evidence may not support a passed qualification gate"
+            )
         if self.gate_id == "A":
-            if int(self.measurements.get("backend_calls", 0) or 0) < 1:
+            backend_calls = self.measurements.get("backend_calls")
+            if isinstance(backend_calls, bool) or not isinstance(backend_calls, int) or backend_calls < 1:
                 errors.append("Gate A needs at least one actual backend call")
-            if self.measurements.get("wall_seconds") is None:
-                errors.append("Gate A needs measured wall_seconds (null is not a pass)")
-            if self.measurements.get("gpu_peak_memory_bytes") is None:
+            if not _finite_positive(self.measurements.get("wall_seconds")):
+                errors.append("Gate A needs a finite positive measured wall_seconds")
+            gpu_peak = self.measurements.get("gpu_peak_memory_bytes")
+            if isinstance(gpu_peak, bool) or not isinstance(gpu_peak, int) or gpu_peak < 1:
                 errors.append("Gate A needs actual GPU peak memory")
         if self.gate_id == "B":
             interventions = self.measurements.get("interventions")
@@ -170,8 +215,8 @@ class GateRecord:
                 errors.append(
                     "Gate B needs a suffix-causality result; it decides the feedback mode and cannot be skipped"
                 )
-            if not self.measurements.get("feedback_mode"):
-                errors.append("Gate B must record the feedback_mode it certifies")
+            if self.measurements.get("feedback_mode") != FeedbackMode.NATIVE_FEEDBACK.value:
+                errors.append("Gate B must certify native_feedback; approximation modes stay unqualified")
         if self.gate_id == "C":
             per_task = self.measurements.get("starts_per_task")
             if not isinstance(per_task, Mapping) or not per_task:
@@ -187,8 +232,12 @@ class GateRecord:
             for name in ("binary_kappa", "weighted_progress_kappa", "leniency_offset", "consensus_coverage"):
                 if self.measurements.get(name) is None:
                     errors.append("Gate D needs a measured %s" % name)
-            if not self.measurements.get("calibration_class"):
-                errors.append("Gate D must record its calibration_class (human / external_label / model)")
+            if self.measurements.get("calibration_class") != "human":
+                errors.append("Gate D requires human calibration; model/external labels stay unqualified")
+            if self.measurements.get("has_two_blinded_humans") is not True or self.measurements.get("human_annotator_count") != 2:
+                errors.append("Gate D requires declarations of exactly two blinded human annotators")
+            if self.measurements.get("gate_d_decision_status") != "pass":
+                errors.append("Gate D pass_with_limitations is blocked until human calibration passes")
             if not self.measurements.get("held_out_frozen_before_evaluation"):
                 errors.append(
                     "Gate D requires the judge to be frozen before the held-out split was evaluated"
@@ -485,17 +534,38 @@ class ProtocolManifestValidator:
         errors: List[str] = []
         if not protocol.get("protocol_id"):
             errors.append("protocol needs protocol_id")
-        if not str(protocol.get("sha256", "")).startswith("sha256:"):
+        protocol_hash = protocol.get("sha256") or protocol.get("protocol_sha256")
+        if not _is_sha256(protocol_hash):
             errors.append("protocol needs immutable sha256")
+        # The legacy mapping form stores its content hash under ``sha256``.
+        # Do not merely check the prefix: otherwise an edited threshold or
+        # scope can borrow the hash from the protocol it replaced.  The modern
+        # ProtocolDocument form has a distinct ``protocol_sha256`` body and is
+        # validated by ``ProtocolDocument.load`` before reaching this boundary.
+        if "sha256" in protocol and _is_sha256(protocol.get("sha256")):
+            computed = canonical_json_sha256({key: value for key, value in protocol.items() if key != "sha256"})
+            if protocol["sha256"] != computed:
+                errors.append("protocol sha256 does not match its supplied frozen content")
         if protocol.get("status") != "frozen" and protocol.get("frozen") is not True:
             errors.append("protocol is not frozen")
         expected = scenario_manifest.get("sha256")
         if expected and protocol.get("scenario_manifest_hash") != expected:
             errors.append("protocol scenario_manifest_hash does not match supplied scenario manifest")
-        for field in ("policy", "world_model", "judge", "thresholds", "seeds"):
+        # Older, study-local records carry direct revision groups; the current
+        # ProtocolDocument carries a frozen matrix/tolerances/judge-sampling
+        # body instead.  Either shape is inspectable here.  The qualification
+        # validator below requires the stricter execution bindings for both.
+        for field in ("seeds",):
             if field not in protocol:
                 errors.append("protocol lacks %s" % field)
+        legacy_identity = all(field in protocol for field in ("policy", "world_model", "judge", "thresholds"))
+        document_identity = all(field in protocol for field in ("matrix", "tolerances", "judge_sampling"))
+        if not legacy_identity and not document_identity:
+            errors.append("protocol lacks either direct revision groups or a frozen matrix/tolerances/judge-sampling body")
+        preregistration = protocol.get("preregistration")
         remote = protocol.get("remote_record") or protocol.get("preregistration_uri")
+        if not remote and isinstance(preregistration, Mapping):
+            remote = preregistration.get("uri")
         if not remote:
             errors.append("protocol lacks externally auditable remote record URI")
         return tuple(errors)
@@ -506,6 +576,355 @@ class QualificationDecision:
     capability: CapabilityResult
     required_gates: Tuple[str, ...]
     errors: Tuple[str, ...]
+
+
+def _string_list(value: Any, label: str, errors: List[str]) -> Tuple[str, ...]:
+    if not isinstance(value, (list, tuple)) or not value:
+        errors.append("%s must be a non-empty list of asset IDs" % label)
+        return ()
+    items = tuple(str(item) for item in value)
+    if any(not _nonempty_string(item) for item in items):
+        errors.append("%s contains an empty asset ID" % label)
+    if len(set(items)) != len(items):
+        errors.append("%s contains duplicate asset IDs" % label)
+    return items
+
+
+def _qualification_scope_and_assets(protocol: Mapping[str, Any]) -> Tuple[Tuple[str, ...], Dict[str, Tuple[str, ...]], List[str]]:
+    """Read the explicit full-study asset binding without inventing defaults."""
+
+    errors: List[str] = []
+    matrix = protocol.get("matrix")
+    if not isinstance(matrix, Mapping):
+        return (), {}, ["qualification requires a frozen full-study matrix"]
+    from .reference import POLICY_IDS, TASK_IDS
+
+    policies = tuple(str(policy) for policy in matrix.get("policies", ()))
+    tasks = tuple(str(task) for task in matrix.get("tasks", ()))
+    if policies != tuple(POLICY_IDS):
+        errors.append("qualification matrix must retain all six canonical policies in frozen order")
+    if tasks != tuple(TASK_IDS):
+        errors.append("qualification matrix must retain all five canonical tasks in frozen order")
+    if matrix.get("starts_per_task") != 50 or matrix.get("total_planned_episodes") != 1500:
+        errors.append("qualification matrix must bind the complete 6 x 5 x 50 (1500 episode) scope")
+
+    declared = protocol.get("qualification_assets")
+    if not isinstance(declared, Mapping):
+        return policies, {}, errors + ["protocol lacks explicit qualification_assets binding"]
+    groups: Dict[str, Tuple[str, ...]] = {}
+    for group in ("world_model", "judge", "scenario"):
+        groups[group] = _string_list(declared.get(group), "qualification_assets.%s" % group, errors)
+    raw_policies = declared.get("policies")
+    if not isinstance(raw_policies, Mapping):
+        errors.append("qualification_assets.policies must bind every canonical policy")
+        groups["policies"] = ()
+    else:
+        if set(raw_policies) != set(POLICY_IDS):
+            errors.append("qualification_assets.policies must contain exactly the six canonical policies")
+        policy_assets: List[str] = []
+        for policy in POLICY_IDS:
+            policy_assets.extend(
+                _string_list(raw_policies.get(policy), "qualification_assets.policies.%s" % policy, errors)
+            )
+        if len(policy_assets) != len(set(policy_assets)):
+            errors.append("qualification policy asset bindings reuse an asset ID across policies")
+        groups["policies"] = tuple(policy_assets)
+    return policies, groups, errors
+
+
+def _load_qualification_asset_lock(
+    protocol: Mapping[str, Any], asset_lock: Any, required_asset_ids: Sequence[str]
+) -> Tuple[Any, List[str]]:
+    """Load and bind the exact asset lock at the final qualification boundary.
+
+    ``AssetLock.summary`` is a display convenience, so it is never trusted as
+    qualification evidence.  The row-level checks and canonical lock hash are
+    recomputed by ``AssetLock`` instead.
+    """
+
+    errors: List[str] = []
+    expected_hash = protocol.get("asset_lock_hash")
+    if not _is_sha256(expected_hash):
+        errors.append("protocol lacks an immutable asset_lock_hash")
+    if asset_lock is None:
+        errors.append("qualification requires the asset lock named by protocol.asset_lock_hash")
+        return None, errors
+    try:
+        # Local import avoids the protocol -> gates import cycle at module load.
+        from .protocol import AssetLock, canonical_sha256
+
+        lock = asset_lock if isinstance(asset_lock, AssetLock) else AssetLock.from_mapping(asset_lock)
+        actual_hash = canonical_sha256(lock.to_mapping())
+        if expected_hash and actual_hash != expected_hash:
+            errors.append("supplied asset lock hash does not match protocol.asset_lock_hash")
+        errors.extend(lock.qualification_errors(required_asset_ids))
+        return lock, errors
+    except (TypeError, ValueError, KeyError) as exc:
+        errors.append("qualification asset lock is invalid: %s" % exc)
+        return None, errors
+
+
+def _profile_errors(
+    profile: Any,
+    *,
+    label: str,
+    asset_ids: Sequence[str],
+    asset_hashes: Optional[Mapping[str, str]] = None,
+    required_keys: Sequence[str],
+    require_gpu: bool = False,
+) -> List[str]:
+    """Validate a measured executable profile, not a caller-supplied flag."""
+
+    errors: List[str] = []
+    if not isinstance(profile, Mapping):
+        return ["%s must be a structured measured profile" % label]
+    for key in required_keys:
+        if not _nonempty_string(profile.get(key)):
+            errors.append("%s lacks %s" % (label, key))
+    for key in ("model_asset_id", "code_asset_id"):
+        value = profile.get(key)
+        if not _nonempty_string(value):
+            errors.append("%s lacks %s" % (label, key))
+        elif value not in set(asset_ids):
+            errors.append("%s %s is not in the protocol-bound qualification asset set" % (label, key))
+        elif asset_hashes is not None:
+            expected_hash = asset_hashes.get(str(value))
+            observed_hash = profile.get(key.replace("_id", "_sha256"))
+            if not _is_sha256(observed_hash) or observed_hash != expected_hash:
+                errors.append("%s %s does not bind the locked asset SHA-256" % (label, key))
+    container = profile.get("container_digest")
+    if not _is_sha256(container):
+        errors.append("%s container_digest must be a sha256 digest" % label)
+    if require_gpu:
+        gpu = profile.get("gpu_profile")
+        if not isinstance(gpu, Mapping):
+            errors.append("%s lacks a measured gpu_profile" % label)
+        else:
+            for key in ("gpu_model", "device_uuid", "driver_version", "runtime_version", "measured_at", "evidence_uri"):
+                if not _nonempty_string(gpu.get(key)):
+                    errors.append("%s.gpu_profile lacks %s" % (label, key))
+            if not _finite_positive(gpu.get("peak_memory_bytes")):
+                errors.append("%s.gpu_profile peak_memory_bytes must be a measured positive number" % label)
+    return errors
+
+
+def _strict_gate_evidence_errors(
+    ledger: GateLedger,
+    protocol: Mapping[str, Any],
+    scenario_manifest: Mapping[str, Any],
+    *,
+    task: str,
+    asset_lock: Any,
+) -> List[str]:
+    """Evidence that is required *in addition to* a PASS enum.
+
+    This routine is intentionally at the qualification boundary rather than
+    ``GateRecord.from_mapping``: a ledger remains able to preserve incomplete,
+    diagnostic, and ``pass_with_limitations`` artifacts without relabelling
+    them as qualified.  A result is qualified only when every reference below
+    can be followed to the frozen asset/profile/evidence record.
+    """
+
+    errors: List[str] = []
+    policies, asset_groups, scope_errors = _qualification_scope_and_assets(protocol)
+    errors.extend(scope_errors)
+    all_assets = tuple(asset for group in asset_groups.values() for asset in group)
+    lock, lock_errors = _load_qualification_asset_lock(protocol, asset_lock, all_assets)
+    asset_hashes = (
+        {asset_id: str(record.sha256) for asset_id, record in lock.assets.items()}
+        if lock is not None
+        else {}
+    )
+    errors.extend(lock_errors)
+
+    # All five panels must be real, frozen, and fully enumerated.  Checking
+    # only the task passed to this call would make a one-task convenient subset
+    # look like the preregistered six-by-five study.
+    errors.extend(
+        "full-scope scenario: " + message
+        for message in ScenarioManifestValidator.validate(scenario_manifest, require_primary_panel=True)
+    )
+    scenario_hash = scenario_manifest.get("sha256")
+    if _is_sha256(scenario_hash):
+        computed_scenario_hash = canonical_json_sha256(
+            {key: value for key, value in scenario_manifest.items() if key != "sha256"}
+        )
+        if scenario_hash != computed_scenario_hash:
+            errors.append("full-scope scenario: sha256 does not match supplied start content")
+
+    gate_a = ledger.records["A"]
+    backend_profile = gate_a.measurements.get("backend_profile")
+    errors.extend(
+        "Gate A: " + message
+        for message in _profile_errors(
+            backend_profile,
+            label="backend_profile",
+            asset_ids=asset_groups.get("world_model", ()),
+            asset_hashes=asset_hashes,
+            required_keys=("profile_id", "model_revision", "code_revision", "normalizer_revision"),
+            require_gpu=True,
+        )
+    )
+    if isinstance(backend_profile, Mapping):
+        gpu = backend_profile.get("gpu_profile")
+        if isinstance(gpu, Mapping) and gate_a.measurements.get("gpu_peak_memory_bytes") != gpu.get("peak_memory_bytes"):
+            errors.append("Gate A: gpu_peak_memory_bytes must equal the backend profile's measured GPU peak")
+    if not _finite_positive(gate_a.measurements.get("wall_seconds")):
+        errors.append("Gate A: wall_seconds must be an actual positive measurement")
+    if not isinstance(gate_a.measurements.get("backend_calls"), int) or isinstance(
+        gate_a.measurements.get("backend_calls"), bool
+    ) or gate_a.measurements.get("backend_calls", 0) < 1:
+        errors.append("Gate A: backend_calls must count at least one actual invocation")
+
+    gate_b = ledger.records["B"]
+    feedback = gate_b.measurements.get("feedback_certification")
+    if not isinstance(feedback, Mapping):
+        errors.append("Gate B: needs a structured feedback_certification, not a feedback_mode flag")
+    else:
+        if feedback.get("feedback_mode") != FeedbackMode.NATIVE_FEEDBACK.value:
+            errors.append("Gate B: feedback_certification must explicitly be native_feedback")
+        profile_id = backend_profile.get("profile_id") if isinstance(backend_profile, Mapping) else None
+        if not _nonempty_string(feedback.get("world_profile_id")) or feedback.get("world_profile_id") != profile_id:
+            errors.append("Gate B: feedback certification must bind the Gate-A backend profile")
+        if feedback.get("terminal_padding") is not False:
+            errors.append("Gate B: terminal padding is an alternate protocol, not native qualification evidence")
+        if not _is_sha256(feedback.get("evidence_hash")) or not _nonempty_string(feedback.get("evidence_uri")):
+            errors.append("Gate B: feedback certification needs immutable evidence_hash and evidence_uri")
+        prefixes = feedback.get("policy_executed_prefixes")
+        if not isinstance(prefixes, Mapping) or set(prefixes) != set(policies):
+            errors.append("Gate B: must record a certified executed prefix for every policy in the frozen scope")
+        else:
+            for policy in policies:
+                prefix = prefixes.get(policy)
+                if isinstance(prefix, bool) or not isinstance(prefix, int) or prefix < 1:
+                    errors.append("Gate B: %s lacks a positive certified executed prefix" % policy)
+            if prefixes.get("OpenVLA") != 1:
+                errors.append("Gate B: OpenVLA native feedback requires exactly one fresh action per generated frame")
+            policy_profiles = feedback.get("policy_profiles")
+            if not isinstance(policy_profiles, Mapping) or set(policy_profiles) != set(policies):
+                errors.append("Gate B: needs a measured executable policy profile for every frozen policy")
+            else:
+                raw_policy_assets = protocol.get("qualification_assets", {}).get("policies", {})
+                for policy in policies:
+                    profile = policy_profiles.get(policy)
+                    errors.extend(
+                        "Gate B: " + message
+                        for message in _profile_errors(
+                            profile,
+                            label="policy_profiles.%s" % policy,
+                            asset_ids=raw_policy_assets.get(policy, ()) if isinstance(raw_policy_assets, Mapping) else (),
+                            asset_hashes=asset_hashes,
+                            required_keys=("profile_id", "model_revision", "code_revision", "normalizer_revision"),
+                        )
+                    )
+                    if isinstance(profile, Mapping):
+                        if profile.get("executed_prefix_ticks") != prefixes.get(policy):
+                            errors.append("Gate B: %s profile prefix does not match its feedback certificate" % policy)
+                        terminal = profile.get("certified_terminal_prefixes")
+                        if not isinstance(terminal, Mapping) or set(terminal) != set(EXACT_TASK_PROMPTS):
+                            errors.append("Gate B: %s profile lacks terminal support for every frozen task" % policy)
+                        else:
+                            for task_name, terminal_prefix in terminal.items():
+                                if (
+                                    isinstance(terminal_prefix, bool)
+                                    or not isinstance(terminal_prefix, int)
+                                    or terminal_prefix < 1
+                                    or terminal_prefix > prefixes.get(policy, 0)
+                                ):
+                                    errors.append(
+                                        "Gate B: %s terminal support for %s is not a certified native prefix"
+                                        % (policy, task_name)
+                                    )
+                    revision = gate_b.policy_revisions.get(policy)
+                    if not isinstance(revision, Mapping) or not isinstance(profile, Mapping) or revision.get("profile_id") != profile.get("profile_id"):
+                        errors.append("Gate B: %s policy revision does not bind its measured executable profile" % policy)
+    suffix = gate_b.measurements.get("suffix_causality")
+    if not isinstance(suffix, Mapping):
+        errors.append("Gate B: suffix_causality must be a structured paired result")
+    else:
+        if suffix.get("status") != "pass":
+            errors.append("Gate B: suffix_causality has not passed")
+        if suffix.get("first_action_fixed_against_baseline") is not True:
+            errors.append("Gate B: suffix evidence must hold the first action fixed")
+        if suffix.get("future_suffix_changed_first_generated_frame") is not False:
+            errors.append("Gate B: future suffix sensitivity blocks native feedback qualification")
+        if not _is_sha256(suffix.get("evidence_hash")) or not _nonempty_string(suffix.get("evidence_uri")):
+            errors.append("Gate B: suffix evidence needs immutable evidence_hash and evidence_uri")
+    if any("padding" in str(value).lower() for value in (gate_b.measurements.get("protocol_identity"), gate_b.measurements.get("feedback_mode"))):
+        errors.append("Gate B: a padded protocol identity may not populate a native qualified cell")
+
+    gate_c = ledger.records["C"]
+    per_task = gate_c.measurements.get("starts_per_task")
+    comparability = gate_c.measurements.get("comparability")
+    for label, value in (("starts_per_task", per_task), ("comparability", comparability)):
+        if not isinstance(value, Mapping):
+            errors.append("Gate C: %s must cover every frozen task" % label)
+            continue
+        missing = [name for name in EXACT_TASK_PROMPTS if name not in value]
+        if missing:
+            errors.append("Gate C: %s is missing %s" % (label, ", ".join(missing)))
+    if isinstance(per_task, Mapping):
+        for name in EXACT_TASK_PROMPTS:
+            count = per_task.get(name)
+            if isinstance(count, bool) or not isinstance(count, int) or count < 50:
+                errors.append("Gate C: %s needs at least 50 measured starts" % name)
+    if isinstance(comparability, Mapping):
+        for name in EXACT_TASK_PROMPTS:
+            result = comparability.get(name)
+            if not isinstance(result, Mapping) or result.get("status") != "pass":
+                errors.append("Gate C: %s lacks a passed real-panel comparability record" % name)
+
+    gate_d = ledger.records["D"]
+    measurements = gate_d.measurements
+    if measurements.get("calibration_class") != "human":
+        errors.append("Gate D: model/external labels cannot substitute for the required human calibration")
+    if measurements.get("has_two_blinded_humans") is not True or measurements.get("human_annotator_count") != 2:
+        errors.append("Gate D: needs declarations of exactly two blinded human annotators")
+    if measurements.get("gate_d_decision_status") != "pass" or measurements.get("thresholds_satisfied") is not True:
+        errors.append("Gate D: pass_with_limitations or a threshold flag alone is not a passed human calibration")
+    human_evidence = measurements.get("human_annotation_evidence")
+    if not isinstance(human_evidence, Mapping):
+        errors.append("Gate D: needs a held-out human annotation evidence manifest")
+    else:
+        ids = human_evidence.get("annotator_ids")
+        if not isinstance(ids, (list, tuple)) or len(ids) != 2 or len({str(item) for item in ids}) != 2:
+            errors.append("Gate D: annotation manifest must declare two distinct annotator IDs")
+        if human_evidence.get("heldout_clip_count") != 50 or human_evidence.get("double_labeled_clip_count") != 50:
+            errors.append("Gate D: annotation manifest must bind all 50 double-labelled held-out clips")
+        if not _is_sha256(human_evidence.get("manifest_hash")) or not _nonempty_string(human_evidence.get("evidence_uri")):
+            errors.append("Gate D: annotation manifest needs immutable manifest_hash and evidence_uri")
+    judge_profile = measurements.get("judge_profile")
+    errors.extend(
+        "Gate D: " + message
+        for message in _profile_errors(
+            judge_profile,
+            label="judge_profile",
+            asset_ids=asset_groups.get("judge", ()),
+            asset_hashes=asset_hashes,
+            required_keys=("profile_id", "model_revision", "code_revision", "normalizer_revision", "runtime_lock_hash"),
+        )
+    )
+    tolerance_block = protocol.get("tolerances")
+    gate_d_tolerances = tolerance_block.get("gate_d") if isinstance(tolerance_block, Mapping) else None
+    if not isinstance(gate_d_tolerances, Mapping):
+        errors.append("Gate D: frozen protocol lacks gate_d tolerances")
+    else:
+        comparisons = (
+            ("binary_kappa", "min_binary_kappa", lambda actual, limit: actual >= limit),
+            ("weighted_progress_kappa", "min_weighted_progress_kappa", lambda actual, limit: actual >= limit),
+            ("leniency_offset", "max_leniency_offset", lambda actual, limit: actual <= limit),
+            ("consensus_coverage", "min_consensus_coverage", lambda actual, limit: actual >= limit),
+        )
+        for observed, threshold, predicate in comparisons:
+            actual = measurements.get(observed)
+            limit = gate_d_tolerances.get(threshold)
+            if not _finite_positive(actual) and not (observed == "leniency_offset" and isinstance(actual, (int, float)) and not isinstance(actual, bool) and math.isfinite(float(actual))):
+                errors.append("Gate D: %s must be a finite measured number" % observed)
+            elif not isinstance(limit, (int, float)) or isinstance(limit, bool) or not predicate(float(actual), float(limit)):
+                errors.append("Gate D: %s does not satisfy frozen %s" % (observed, threshold))
+    # These fields establish a provenance chain, not the real-world identity of
+    # an annotator.  Human identity remains an operational review obligation.
+    return errors
 
 
 class QualificationValidator:
@@ -521,6 +940,7 @@ class QualificationValidator:
         feedback_mode: FeedbackMode,
         requires_judge: bool = True,
         require_primary_panel: bool = False,
+        asset_lock: Optional[Any] = None,
     ) -> QualificationDecision:
         required = ("A", "B", "C", "D") if requires_judge else ("A", "B", "C")
         errors: List[str] = []
@@ -533,7 +953,7 @@ class QualificationValidator:
             scenario_manifest, task=task, require_primary_panel=require_primary_panel
         ))
         errors.extend(ProtocolManifestValidator.validate(protocol, scenario_manifest))
-        protocol_hash = protocol.get("sha256")
+        protocol_hash = protocol.get("sha256") or protocol.get("protocol_sha256")
         for gate_id in required:
             record = ledger.records[gate_id]
             if record.status is not GateStatus.PASS:
@@ -542,6 +962,19 @@ class QualificationValidator:
             if record.protocol_hash != protocol_hash:
                 errors.append("Gate %s protocol hash does not match frozen protocol" % gate_id)
             errors.extend("Gate %s: %s" % (gate_id, message) for message in record.pass_evidence_errors())
+        # A PASS enum means evidence was recorded; it is not an assertion that
+        # the recorded bytes, profiles and calibration support a public cell.
+        # Run this even when a gate is blocked so callers get the complete
+        # actionable evidence gap rather than a misleading first-error result.
+        errors.extend(
+            _strict_gate_evidence_errors(
+                ledger,
+                protocol,
+                scenario_manifest,
+                task=task,
+                asset_lock=asset_lock,
+            )
+        )
         if errors:
             capability = CapabilityResult(
                 status=CapabilityStatus.BLOCKED,

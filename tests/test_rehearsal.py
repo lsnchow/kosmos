@@ -17,6 +17,8 @@ import pathlib
 import pytest
 
 from plumb.backends.baseten import BasetenBackendSettings, BasetenChainBackend
+from plumb.engine import RunService
+from plumb.platform import BasetenPlatformConfig, ChainAsyncEndpoint
 from plumb.rehearsal import (
     REHEARSAL_CHAIN_ASYNC_URL,
     REHEARSAL_LABEL,
@@ -292,6 +294,147 @@ def test_a_rehearsal_result_never_claims_a_qualified_mode_or_a_world_model(tmp_p
     # The Chain's nested shape, deliberately with no flat aliases.
     assert "segments" in result and "gpu_seconds" in result and "timings" in result
     assert "n_segments" not in result and "compute_gpu_seconds" not in result
+
+
+def test_a_rehearsal_short_final_segment_reports_the_exact_requested_horizon(tmp_path):
+    transport = RehearsalChainTransport(webhook_secret="s", artifacts_dir=tmp_path)
+    result = transport._build_result(
+        "run-1",
+        "ep-70",
+        5,
+        transport.profile.stage_seconds(5),
+        {"horizon_actions": 70, "operating_point": {"action_chunk_size": 16}},
+    )
+    assert (result["horizon_actions"], result["executed_actions"]) == (70, 70)
+    assert [segment["certified_frame_count"] for segment in result["segments"]] == [16, 16, 16, 16, 6]
+
+
+def test_result_store_survives_a_dropped_webhook(tmp_path):
+    transport = RehearsalChainTransport(
+        webhook_secret="s",
+        artifacts_dir=tmp_path,
+        profile=RehearsalProfile(
+            policy_seconds=0,
+            world_seconds_per_chunk=0,
+            validity_seconds=0,
+            judge_seconds=0,
+            dropped_webhook_rate=1.0,
+        ),
+    )
+    request_id = "rehearsal-test-request"
+    transport._complete_now(
+        request_id,
+        {
+            "run_id": "run-1",
+            "episode_id": "ep-store",
+            "policy": {"payload": {"horizon_actions": 16}},
+            "validity": {"payload": {"operating_point": {"action_chunk_size": 16}}},
+        },
+        "https://unused.example.test/callback",
+    )
+    result = transport.get_result(request_id)
+    assert result is not None and result["status"] in {"completed", "failed"}
+    assert transport.stats.webhooks_dropped == 1
+    assert (tmp_path / "result-store" / (request_id + ".json")).is_file()
+
+
+def test_backend_recovers_a_dropped_rehearsal_webhook_from_the_injected_result_store(tmp_path):
+    transport = RehearsalChainTransport(
+        webhook_secret="s",
+        artifacts_dir=tmp_path / "rehearsal",
+        profile=RehearsalProfile(
+            policy_seconds=0,
+            world_seconds_per_chunk=0,
+            validity_seconds=0,
+            judge_seconds=0,
+            service_failure_rate=0,
+            unevaluable_rate=0,
+            dropped_webhook_rate=1.0,
+        ),
+    )
+    backend = BasetenChainBackend(
+        settings=BasetenBackendSettings(
+            webhook_endpoint="https://plumb.example.test/api/callbacks",
+            operating_point_id="op-256-30",
+            poll_interval_seconds=0.001,
+            request_deadline_seconds=2,
+        ),
+        data_dir=tmp_path / "data",
+        config=BasetenPlatformConfig(
+            api_key="rehearsal-key",
+            webhook_secret="s",
+            chain_endpoint=ChainAsyncEndpoint(REHEARSAL_CHAIN_ASYNC_URL),
+        ),
+        transport=transport,
+        transport_kind="simulated",
+        start_resolver=RehearsalStartResolver(256),
+    )
+    result = backend.execute(
+        _episode(),
+        {},
+        tmp_path / "data" / "artifacts" / "run-1" / "ep-1" / "attempt-0001",
+    )
+    assert (result["horizon_actions"], result["executed_actions"]) == (70, 70)
+    assert transport.stats.webhooks_dropped == 1
+    assert backend.outbox.counts() == {"completed": 1}
+
+
+def test_terminal_rehearsal_chain_failure_remains_failed_after_engine_persistence(tmp_path):
+    transport = RehearsalChainTransport(
+        webhook_secret="s",
+        artifacts_dir=tmp_path / "rehearsal",
+        profile=RehearsalProfile(
+            policy_seconds=0,
+            world_seconds_per_chunk=0,
+            validity_seconds=0,
+            judge_seconds=0,
+            service_failure_rate=1.0,
+            unevaluable_rate=0,
+            dropped_webhook_rate=1.0,
+        ),
+    )
+    data_dir = tmp_path / "data"
+    backend = BasetenChainBackend(
+        settings=BasetenBackendSettings(
+            webhook_endpoint="https://plumb.example.test/api/callbacks",
+            operating_point_id="op-256-30",
+            poll_interval_seconds=0.001,
+            request_deadline_seconds=2,
+        ),
+        data_dir=data_dir,
+        config=BasetenPlatformConfig(
+            api_key="rehearsal-key",
+            webhook_secret="s",
+            chain_endpoint=ChainAsyncEndpoint(REHEARSAL_CHAIN_ASYNC_URL),
+        ),
+        transport=transport,
+        transport_kind="simulated",
+        start_resolver=RehearsalStartResolver(256),
+    )
+    service = RunService(data_dir, backends={"baseten": backend})
+    run = service.create_run(
+        {
+            "mode": "diagnostic",
+            "backend": "baseten",
+            "policies": ["OpenVLA"],
+            "tasks": ["close_drawer"],
+            "starts_per_task": 1,
+            "max_workers": 1,
+            "protocol_hash": "sha256:" + "a" * 64,
+        }
+    )
+    service.execute_run(run["id"])
+    episode = service.list_episodes(run["id"])[0]
+    assert (episode["status"], episode["missing_reason"]) == ("failed", "service_failure")
+    assert episode["world_identity"]["simulated_transport"] is True
+    assert episode["world_identity"]["transport"] == SIMULATED_TRANSPORT
+    assert len(episode["platform_request_ids"]) == 1
+    assert episode["exclusion_reason"] == "simulated_terminal_service_failure"
+    assert episode["error"]["backend_failure"]["missing_reason"] == "simulated_terminal_service_failure"
+    assert "chain_terminal_failure" in episode["artifact_refs"]
+    failure_path = data_dir / episode["artifact_refs"]["chain_terminal_failure"]["relative_path"]
+    failure = json.loads(failure_path.read_text())
+    assert failure["failure"]["reason"] == "remote_chain_terminal_failed"
 
 
 def test_an_unscored_profile_never_returns_a_score(tmp_path):

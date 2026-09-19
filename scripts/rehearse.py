@@ -5,17 +5,17 @@ This exists to answer one question without a GPU: **does the entire production
 path work end to end?**  It seeds the gate ledger with rehearsal evidence, starts
 the server in rehearsal mode, dispatches a real run through the real Baseten code
 path, waits for the real HMAC-signed callbacks, runs the reconciler over the
-deliberately-dropped ones, publishes every spec section 8 artifact, and reports
+deliberately-dropped ones, publishes the run-derived section 8 artifacts, and reports
 what happened.
 
 Nothing it produces is a scientific result.  Every record carries
 ``transport="simulated"``, the gate evidence is marked ``rehearsal``, and Gate F
 cannot pass on it.  What it does prove is that the plumbing, the dashboard feed,
-the reconciler, the cost ledger and the artifact writers all work -- so that when
-real credentials arrive, the only new variable is the model.
+the reconciler, the cost ledger and the artifact writers work for the exercised
+cases. Real deployment, resource limits and model behavior remain unverified.
 
     python scripts/rehearse.py --starts 2
-    python scripts/rehearse.py --starts 50 --full-matrix
+    python scripts/rehearse.py --starts 50 --keep
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -51,12 +52,11 @@ def _request(url: str, method: str = "GET", payload: Optional[Dict[str, Any]] = 
 
 
 def seed_rehearsal_gates(results_dir: Path, protocol_hash: str) -> Path:
-    """Write gate evidence explicitly marked as rehearsal, not qualification.
+    """Write unrun gate records explicitly marked as rehearsal, not qualification.
 
-    Gates A, B and C are what the backend requires in order to *execute*.  Their
-    evidence here is labelled ``rehearsal`` so that ``_contains_synthetic`` style
-    review, the dashboard and any human reader can see at a glance that no real
-    qualification happened.
+    A configured simulated transport can execute independently of model gates.
+    Its metadata must never become passed evidence after switching to a real
+    transport in the same results directory.
     """
 
     from plumb.artifacts import ArtifactStore
@@ -69,7 +69,7 @@ def seed_rehearsal_gates(results_dir: Path, protocol_hash: str) -> Path:
     ledger.record(
         GateRecord(
             gate_id="A",
-            status=GateStatus.PASS,
+            status=GateStatus.NOT_RUN,
             protocol_hash=protocol_hash,
             fixture_ids=("rehearsal-vendor-fixture",),
             evidence_uris=(evidence_uri,),
@@ -89,7 +89,7 @@ def seed_rehearsal_gates(results_dir: Path, protocol_hash: str) -> Path:
     ledger.record(
         GateRecord(
             gate_id="B",
-            status=GateStatus.PASS,
+            status=GateStatus.NOT_RUN,
             protocol_hash=protocol_hash,
             fixture_ids=("rehearsal-bridge-fixture",),
             evidence_uris=(evidence_uri,),
@@ -113,7 +113,7 @@ def seed_rehearsal_gates(results_dir: Path, protocol_hash: str) -> Path:
     ledger.record(
         GateRecord(
             gate_id="C",
-            status=GateStatus.PASS,
+            status=GateStatus.NOT_RUN,
             protocol_hash=protocol_hash,
             start_ids=tuple("rehearsal-start-%03d" % index for index in range(50)),
             evidence_uris=(evidence_uri,),
@@ -160,7 +160,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from plumb.protocol import default_protocol, freeze
 
-    workspace = REPO_ROOT / "data" / "rehearsal-run"
+    # Each invocation owns a new directory; --keep must not cause a later run
+    # to overwrite its protocol, logs, receipts, or artifacts.
+    (REPO_ROOT / "data").mkdir(parents=True, exist_ok=True)
+    workspace = Path(tempfile.mkdtemp(prefix="rehearsal-run-", dir=str(REPO_ROOT / "data")))
     data_dir = workspace / "data"
     results_dir = workspace / "results-root"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -200,7 +203,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    findings: Dict[str, Any] = {"protocol_hash": document.sha256, "gates_path": str(gates_path)}
+    findings: Dict[str, Any] = {"protocol_hash": document.sha256, "gates_path": str(gates_path), "workspace": str(workspace)}
 
     def server_output() -> str:
         try:
@@ -352,6 +355,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     except Exception as exc:
         findings["error"] = str(exc)
         findings["server_log_tail"] = server_output()[-3000:]
+        with (workspace / "rehearsal-report.json").open("x", encoding="utf-8") as report:
+            json.dump(findings, report, indent=2)
         print(json.dumps(findings, indent=2))
         return 1
     finally:
@@ -370,6 +375,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     counts = findings.get("counts") or {}
     if counts.get("total") and counts.get("total") != (counts.get("completed", 0) + counts.get("failed", 0)):
         problems.append("not every planned episode reached a terminal state")
+    simulated = findings.get("simulated_chain") or {}
+    if counts.get("failed") != simulated.get("service_failures"):
+        problems.append("logical failures do not match injected terminal service failures")
+    if counts.get("completed") != simulated.get("completed"):
+        problems.append("logical completions do not match successful simulated executions")
+    if simulated.get("submitted") != counts.get("total"):
+        problems.append("submission count differs from planned episodes (missing or repeated POST)")
+    if simulated.get("completion_errors"):
+        problems.append("simulated executions raised unexpected errors")
+    if (findings.get("reconciler") or {}).get("unresolved"):
+        problems.append("dropped callbacks left unresolved submissions")
+    outbox = (findings.get("telemetry") or {}).get("outbox_counts") or {}
+    if outbox.get("failed", 0) != simulated.get("service_failures", 0):
+        problems.append("outbox failures differ from injected failures; callback recovery incomplete")
     episodes = findings.get("episodes") or {}
     if episodes.get("total") != episodes.get("terminal"):
         problems.append("terminal episode count does not equal the planned count")
@@ -399,8 +418,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         problems.append("the analysis manifest was not accepted")
     if not findings.get("still_unqualified"):
         problems.append("a rehearsal made the system report itself qualified")
+    if any(value != "not_run" for value in findings.get("gates_after", {}).values()):
+        problems.append("a rehearsal changed a model qualification gate")
     findings["problems"] = problems
     findings["verdict"] = "production path verified (simulated Chain)" if not problems else "problems found"
+    with (workspace / "rehearsal-report.json").open("x", encoding="utf-8") as report:
+        json.dump(findings, report, indent=2)
 
     if args.json:
         print(json.dumps(findings, indent=2))

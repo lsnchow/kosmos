@@ -1,8 +1,8 @@
 # Go live — the sequence once GPU and Baseten access exist
 
-Everything in this repository that can be built without a GPU is built and
-verified. This document is the ordered list of what remains, what each step
-unblocks, and how to confirm it worked.
+This document separates implemented software from the runtime and human
+evidence still required. Re-run checks against the current integrated revision;
+earlier successful fixtures do not certify changed adapters.
 
 Run this first, any time, to see exactly where you are:
 
@@ -15,8 +15,9 @@ credentials or people — with the blocker named) or **fail** (something is
 broken). It exits non-zero only on a `fail`. When the steps below are done, run
 `--require-qualified`, which turns every remaining `pending` into a failure.
 
-Current state: **15 pass, 8 pending, 0 fail.** Nothing below requires an approval
-or a request to a third party: every remaining step is self-serve.
+The current check output is authoritative; do not reuse an old pass/pending
+count. Actual account access, matched source data, licenses, and two human
+annotators remain external inputs. Missing inputs remain blockers.
 
 ---
 
@@ -93,32 +94,24 @@ was the wrong knob, and `plumb/capacity.py` works it out from measured inputs:
 
 - **Per-episode latency is irreducible by replica count.** Each episode's
   policy/world loop is sequential (spec section 7); only episodes parallelise. At
-  OpenVLA's certified native cadence a 100-tick task is 100 sequential rounds, so
+  OpenVLA's required native cadence a 100-tick task is 100 sequential rounds, so
   with the recorded latencies one episode needs ~536 s. `smallest_sufficient_cap`
   returns `None` there — not a large number, *impossible*.
-- **Batch packing is capped by memory, not preference.** The recorded 36.5 GB
-  peak per call means a batch of 16 does not fit on an 80 GB H100. The planner
-  reduces a requested 16 to 2 and says why.
+- **Batch fit requires measurement.** The recorded36.5GB single-call peak does
+  not determine multi-batch memory, which also depends on shared weights,
+  activations and workspaces. The planner uses batch1 unless a matching measured
+  batch profile establishes another setting. Linear extrapolation is a projection.
 - **Per-call latency beats replicas.** Going from 4.52 s to 0.30 s per call buys
   more than going from 1 to 100 replicas — and that is a resolution and
   denoising-steps decision entirely in your control, which is what the
   cost/fidelity sweep is for.
 
-So the burst sizes itself. `plan_burst()` reads the measured capacity and writes
-its own caption, so the number on screen can never drift from the arithmetic:
-
-```
-cap=1    68 of 1500 episodes in 60 seconds
-cap=5    344 of 1500 episodes in 60 seconds
-cap=30   1500 episodes in under 60 seconds
-```
-
-Spec section 7's line is preserved either way: the **1,500-episode study is never
-reduced** to fit a window. It runs in full and is reported in full. Only the live
-on-stage burst is a subset, and it is labelled one.
-
-If you happen to learn your actual cap, feed it in and the caption updates. No
-request to anyone is required for the demo to run or to be honest.
+`plan_burst()` can report a projection or an explicitly labelled subset when
+capacity is insufficient. A subset does not satisfy the requested full burst:
+the target remains1,500 complete episodes in60s for total demonstration cost
+at most$11.25, confirmed in three fresh rehearsals. Report an unmet target when
+those conditions are not achieved. Unmeasured batching cannot support measured
+fit or throughput claims.
 
 ## Step 3 — stage the assets (1–3 hours, mostly download)
 
@@ -208,9 +201,10 @@ task), frozen before annotation.
 **This is the one step that needs people.** Gate D wants two blinded human
 annotators. The annotation surface is built (`/api/annotate/*`, `plumb annotate`),
 `annotator_type` is a closed enum, and a model annotator can never be recorded as
-`human`. With no human labels the gate reads `pass_with_limitations` with
-`human_annotation` named as the open dependency. The ~30-minute path to convert it
-to a true `pass` is in the runbook.
+`human`. With no human labels, Gate D is blocked. A development report named
+`pass_with_limitations` is not a Gate D pass and cannot unlock qualified
+scoring. The annotation workflow is documented in the runbook; its completion
+time depends on the clips and annotators.
 
 ## Step 8 — freeze and preregister
 
@@ -264,14 +258,17 @@ policy↔world feedback is sequential; only episodes parallelise. Horizons are
 
 At OpenVLA's native one-action-per-frame cadence that is 1,500 × 84 = **126,000
 forward-dynamics calls**. Sixty seconds at 100 replicas with `concurrency_target=1`
-is 6,000 replica-seconds, which needs **≤0.048 s per call**. No diffusion forward
-pass does that.
+is 6,000 replica-seconds, requiring **≤0.048 replica-seconds per action** on
+average, including overhead. This is a target bound, not measured feasibility.
 
-So the 60-second target is not reachable by latency reduction. It depends on
-**in-container batch packing** on the world model, which spec §7 names explicitly
-("throughput comes from batch packing and replica count"). Packing B episodes into
-one diffusion forward divides GPU-seconds by roughly B. The micro-batcher is built
-and unit-tested; what B actually buys is a Gate A measurement, not an assumption.
+Batch packing may improve aggregate throughput, but its speedup and memory cost
+must be measured. It does not remove each episode's sequential feedback path:
+a 100-tick episode must also finish its dependent policy/world calls, scoring,
+and overhead within 60 seconds. A measured 16-action forward latency is not a
+measurement of native one-action feedback. The micro-batcher is implemented;
+neither its tests nor single-call memory estimates establish a feasible batch
+size or the burst target. Gate A needs the actual supported native profile and
+measured batch/latency evidence.
 
 If the target is missed, report the measured number. Spec §7 forbids silently
 shrinking to 400 episodes or replaying cached video as live, and `SCRIPT.md`

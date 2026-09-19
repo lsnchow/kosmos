@@ -59,12 +59,13 @@ These paths and sizes come from the original handoff and source checks. Resolve 
 - Octo checkpoints are NOT at repo root. `resolve/main/checkpoint` returns 404.
 - Octo must be v1.0. Do **not** use `octo-small-1.5`.
 - MiniVLA's filename contains `=` — URL-encode as `%3D`. Skip the 76 MB `.jsonl`, it is a training log.
+- Continuation source audit: MiniVLA's VQ configuration models seven future actions, but the pinned released tokenizer returns only `ret_action[:, 0]`. An exposed seven-action proposal is therefore still unresolved, not implemented by repeating that action. See [the dependency record](docs/POLICY-DEPENDENCIES.md) for pinned code and loader blockers.
 - `Stanford-ILIAD/pretrain_vq` declares **no license** (`cardData: null`). Flag to the user; do not redistribute.
 - Remove automatic mirroring. Resolve missing license/access terms for `pretrain_vq`; private hosting is not a substitute for redistribution rights. Preserve upstream notices for any authorized archival copy. MiniVLA remains required, with license resolution tracked as a dependency.
 
 Open pi-zero's checkpoint is intended to supply the model weights; verify full state-dict coverage in the pinned loader. `strict=True` checks keys, not provenance or deserialization safety. Required PaliGemma support files are `tokenizer.json`, `tokenizer.model`, `tokenizer_config.json`, `added_tokens.json`, `special_tokens_map.json`, `preprocessor_config.json`, and `config.json` (historical estimate 21.9 MB). Prefer the official `google/paligemma-3b-pt-224` access path under accepted terms. `leo009/paligemma-3b-pt-224` is a candidate mirror only after provenance, hashes, and applicable terms are resolved; do not claim byte identity without a saved comparison. Configure an explicit application cache directory. [Official PaliGemma](https://huggingface.co/google/paligemma-3b-pt-224)
 
-SuSIE and SuSIE_LL are **required for the full matrix**. Candidate assets: `patreya/gcbc-bridge` (`checkpoint_75000`, historical size 258,718,956 B; advertised MIT) and `kvablack/susie` (~3.438 GB). SuSIE needs separate subgoal and low-level components plus a pinned JAX/Flax Stable Diffusion stack. SuSIE_LL executes the low-level goal-conditioned policy directly. Preserve the released AutoEval configuration as the replication arm, disclose its mismatch with upstream SuSIE, and evaluate a corrected upstream configuration as a separately named sensitivity arm (§4).
+SuSIE and SuSIE_LL are **required for the full matrix**. Candidate assets: `patreya/gcbc-bridge` (the immutable Hub snapshot's direct Flax file is `checkpoint/checkpoint`; historical source step name `checkpoint_75000`; 258,718,956 B; publisher-advertised MIT) and `kvablack/susie` (~3.438 GB). SuSIE needs separate subgoal and low-level components plus a pinned JAX/Flax Stable Diffusion stack. SuSIE_LL executes the low-level goal-conditioned policy directly. Preserve the released AutoEval configuration as the replication arm, disclose its mismatch with upstream SuSIE, and evaluate a corrected upstream configuration as a separately named sensitivity arm (§4).
 
 ### Judge and data
 
@@ -246,7 +247,7 @@ Distill on Baseten Training Jobs as a separate judge revision. Keep development/
 
 ## 6. Measurement protocol
 
-Freeze the scenario/policy matrix, split membership, RNG seeds, judge, endpoints, thresholds, exclusion policy, cost-selection rule and analysis code before primary evaluation. Development fixtures may precede this freeze. Store `protocol.json`, its SHA-256 and the analysis-code revision in an append-only project-owned remote artifact store with an externally auditable timestamp and reviewer access; record its URI, version and timestamp in `results/gates.json`. A signed remote release is an acceptable equivalent. Amendments receive a new protocol ID without overwriting the old one. This workspace currently has no repository or preregistration; a local hash alone does not supply independent timing evidence. Do not call the already-known published 92% value a blind target.
+Freeze the scenario/policy matrix, split membership, RNG seeds, judge, endpoints, thresholds, exclusion policy, cost-selection rule and analysis code before primary evaluation. Development fixtures may precede this freeze. Store `protocol.json`, its SHA-256 and the analysis-code revision in an append-only project-owned remote artifact store with an externally auditable timestamp and reviewer access; record its URI, version and timestamp in `results/gates.json`. A signed remote release is an acceptable equivalent. Amendments receive a new protocol ID without overwriting the old one. A private source repository now exists, but no qualified primary-study preregistration has been published; a local hash alone does not supply independent timing evidence. Do not call the already-known published 92% value a blind target.
 
 ### Rates, missing outcomes, and reference uncertainty
 
@@ -473,6 +474,21 @@ qualification gates. Raw reports and small media copies live under
   first prediction receives 14 future action rows; this cannot certify or replace
   native OpenVLA feedback. Different horizon/noise shapes prevent a causal paired
   attribution of the visual difference.
+- A causal growing-history replay (`937822`) generated one new frame from up
+  to 15 committed past latents and already-executed saved actions, with no
+  future-action rows. The 16-tick run and repeat took 187.265 seconds including
+  loading/artifacts. All pixel and latent hashes repeated exactly, but the
+  inspected final frame still had substantial blur and gripper/object
+  distortion. The inference conditioning differs from training mask=1, and
+  this replay did not query a policy or resolve physical fidelity.
+- Octo-Small v1.0 now runs in an isolated cluster runtime. The first attempt
+  exposed an API mismatch: pinned Octo v0.1 returns normalized actions, whereas
+  AutoEval calls a newer unnormalization API. The corrected, distinctly named
+  native-v0.1 diagnostic (`937277.1`) produced three finite four-action
+  proposals with exact reset/repeat. Eight workers across two H100 nodes
+  (`937277.2`) completed24 calls and matched fixed-input outputs exactly.
+  This is runtime/repeatability evidence, not AutoEval replication, generated
+  feedback, task evaluation, or a burst/cost qualification.
 - Immutable cluster downloads pin Cosmos `e59a53c25979a090fa8706c9acc0c254a6e89b92`,
   OpenVLA `47a0ec7fc4ec123775a391911046cf33cf9ed83f`, Qwen
   `cc594898137f460bfe9f0759e9844b3ce807cfb5`, and IRASim source

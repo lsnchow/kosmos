@@ -279,3 +279,4 @@ class PolicyObservation:
     proprio: Optional[Tuple[float, ...]] = None
     goal_image: Any = None
     timestamp: Optional[float] = None
+    proprio_convention: Optional[str] = None

@@ -985,7 +985,8 @@ class GateQualificationTests(unittest.TestCase):
         self.assertEqual(decision.capability.status, CapabilityStatus.BLOCKED)
         self.assertIn("synthetic", decision.capability.reason)
 
-    def test_actual_evidence_and_frozen_manifest_can_qualify(self) -> None:
+    def test_bare_handwritten_gate_fields_cannot_qualify(self) -> None:
+        """A PASS enum and scalar placeholders are not bound execution evidence."""
         scenario = self._scenario()
         protocol = self._protocol(scenario)
         ledger = GateLedger.new(protocol["sha256"])
@@ -994,7 +995,9 @@ class GateQualificationTests(unittest.TestCase):
         decision = QualificationValidator.validate(
             ledger, scenario, protocol, task="close_drawer", feedback_mode=FeedbackMode.NATIVE_FEEDBACK
         )
-        self.assertEqual(decision.capability.status, CapabilityStatus.QUALIFIED)
+        self.assertEqual(decision.capability.status, CapabilityStatus.BLOCKED)
+        self.assertIn("asset lock", decision.capability.reason)
+        self.assertIn("backend_profile", decision.capability.reason)
 
     def test_forecast_state_never_becomes_qualified_cell(self) -> None:
         scenario = self._scenario()

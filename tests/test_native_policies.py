@@ -796,7 +796,7 @@ def test_octo_uses_two_image_history_four_action_proposal_and_one_ensembled_exec
     # actions and the revisioned normalizer is applied exactly once per row.
     assert call["unnormalization_statistics"] is None
     assert call["observations"]["image_primary"]["dtype"] == "uint8"
-    assert call["observations"]["pad_mask"]["value"] == [[False, True]]
+    assert call["observations"]["timestep_pad_mask"]["value"] == [[False, True]]
     assert model.task_calls == [("Open the drawer",)]
     assert adapter.normalizer.counters()["denormalize_calls"] == 4
 
@@ -1981,7 +1981,12 @@ def test_asset_plan_lock_entries_are_never_verified_and_keep_unknowns_null():
     sizes = {item["path"]: item["expected_bytes"] for item in vjepa["files"]}
     assert sizes == {"config.json": 785, "model.safetensors": 1303947864, "video_preprocessor_config.json": 1298}
     assert "original/*" in vjepa["ignore_patterns"]
-    assert _entry("susie-low-level")["files"][0]["expected_bytes"] == 258718956
+    susie_low_level = _entry("susie-low-level")
+    susie_files = {item["path"]: item["expected_bytes"] for item in susie_low_level["files"]}
+    assert susie_low_level["revision"] == "1a4c15dd9ad780a257e9494f0fac79cbe8e64793"
+    assert susie_low_level["license_status"] == "advertised_unverified"
+    assert susie_low_level["redistribution"] == "local_use_only"
+    assert susie_files == {"README.md": 24, "checkpoint/checkpoint": 258718956, "checkpoint/commit_success.txt": 162}
     assert _entry("openvla-7b")["files"] == []
     assert _entry("openvla-7b")["historical_total_estimate_bytes"] == 15085000000
 

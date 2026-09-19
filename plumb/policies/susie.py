@@ -18,6 +18,11 @@ upstream arm is a separately named sensitivity cell.
 
 from __future__ import annotations
 
+import hashlib
+import inspect
+import os
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +58,33 @@ from .native import (
 
 SUSIE_SUBGOAL_MODEL_ID = "kvablack/susie"
 SUSIE_LOW_LEVEL_MODEL_ID = "patreya/gcbc-bridge"
-SUSIE_LOW_LEVEL_CHECKPOINT_FILE = "checkpoint_75000"
+# The Hub snapshot preserves the historical GCS step only in
+# checkpoint/commit_success.txt. Its actual restore target is this direct file;
+# pointing Flax at the containing directory with default prefix="checkpoint_"
+# silently returns the initialized target.
+SUSIE_LOW_LEVEL_CHECKPOINT_FILE = "checkpoint/checkpoint"
+SUSIE_LOW_LEVEL_MODEL_REVISION = "1a4c15dd9ad780a257e9494f0fac79cbe8e64793"
+SUSIE_LOW_LEVEL_CHECKPOINT_SHA256 = "80b354db7a05d514d6df5b5a4395469902b0ff362d383edeeb4abb8c1c9d9e33"
+SUSIE_LOW_LEVEL_README_SHA256 = "d8d7a46d41a1a37fe4f0a5f637bf55c649310185329127d8a2204632e480be17"
+# AutoEval's pinned README names rail-berkeley/soar/model_training—not the
+# similarly shaped BridgeData V2 jaxrl_m tree. The latter rejects AutoEval's
+# std_parameterization policy keyword and cannot be substituted.
+SUSIE_GCBC_SOURCE_COMMIT = "eabd5f16a856e484884a22e257a941bb358cea08"
+SUSIE_GCBC_SOURCE_SUBDIR = "model_training"
+SUSIE_GCBC_SOURCE_REQUIREMENTS = {
+    "jax": "0.4.20",
+    "flax": "0.7.5",
+    "distrax": "0.1.5",
+    "numpy": "1.24.3",
+    "tensorflow": "2.15.0",
+    "orbax-checkpoint": "0.3.5",
+    "scipy": "1.12.0",
+}
+# This remains the source for the separate upstream gc_ddpm_bc sensitivity
+# arm, not for the released AutoEval gc_bc checkpoint.
+SUSIE_BRIDGE_DATA_SOURCE_COMMIT = "bc60a35b701a12021c8c95e9d8601274d3acd928"
+SUSIE_AUTOEVAL_CONFIG_SHA256 = "4a474fdb183956e674a45450f12afb924a91195bffbd009e67b5e95dc7b16564"
+SUSIE_AUTOEVAL_NORMALIZER_SHA256 = "9c8d48caa20c0e8e43888819d0410918a107b3be971cc2ec046acbb373ba7f3d"
 SUSIE_RELEASED_ARM_ID = "autoeval_released_replication"
 SUSIE_UPSTREAM_ARM_ID = "upstream_corrected_sensitivity"
 SUSIE_RELEASED_AGENT = "gc_bc"
@@ -63,6 +94,87 @@ _RNG_STREAM_LABELS: Mapping[str, int] = {"subgoal": 1, "low_level": 2}
 
 class SuSIEUnavailableError(PolicyLoadError):
     """The approved local SuSIE JAX/Flax stack or checkpoint is absent."""
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _verify_clean_source(root: Path) -> Path:
+    """Validate the exact SOAR checkout that supplies AutoEval's ``jaxrl_m``."""
+
+    module_root = root / SUSIE_GCBC_SOURCE_SUBDIR
+    required = ("jaxrl_m/agents/__init__.py", "jaxrl_m/agents/continuous/gc_bc.py", "jaxrl_m/vision/__init__.py")
+    if not root.is_dir() or any(not (module_root / name).is_file() for name in required):
+        raise SuSIEUnavailableError("Pinned SOAR model_training source checkout is incomplete at %s." % root)
+    try:
+        head = subprocess.run(("git", "-C", str(root), "rev-parse", "HEAD"), capture_output=True, text=True, check=False, timeout=10)
+        status = subprocess.run(("git", "-C", str(root), "status", "--porcelain"), capture_output=True, text=True, check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SuSIEUnavailableError("Cannot inspect SOAR source checkout %s." % root) from error
+    if head.returncode != 0 or head.stdout.strip() != SUSIE_GCBC_SOURCE_COMMIT:
+        raise SuSIEUnavailableError("SOAR checkout must be pinned to %s." % SUSIE_GCBC_SOURCE_COMMIT)
+    if status.returncode != 0 or status.stdout.strip():
+        raise SuSIEUnavailableError("SOAR checkout is dirty; refusing mutable gc_bc source.")
+    return module_root.resolve()
+
+
+def _tree_digest(jax_module: Any, value: Any) -> str:
+    """Hash initialized/restored tensor leaves without serializing code objects."""
+
+    digest = hashlib.sha256()
+    leaves = jax_module.tree_util.tree_leaves(value)
+    for leaf in leaves:
+        array = jax_module.device_get(leaf)
+        shape = tuple(getattr(array, "shape", ()))
+        dtype = str(getattr(array, "dtype", ""))
+        digest.update((repr(shape) + "|" + dtype + "|").encode("utf-8"))
+        raw = getattr(array, "tobytes", None)
+        if callable(raw):
+            digest.update(raw())
+        else:
+            digest.update(repr(array).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _strict_state_tree(expected: Any, actual: Any, *, path: str = "params") -> None:
+    if isinstance(expected, Mapping):
+        if not isinstance(actual, Mapping):
+            raise SuSIEUnavailableError("Checkpoint %s must be a mapping." % path)
+        expected_keys = set(str(key) for key in expected)
+        actual_keys = set(str(key) for key in actual)
+        if expected_keys != actual_keys:
+            raise SuSIEUnavailableError(
+                "Checkpoint %s keys differ from initialized source model; missing=%s extra=%s."
+                % (path, sorted(expected_keys - actual_keys), sorted(actual_keys - expected_keys))
+            )
+        for key, value in expected.items():
+            _strict_state_tree(value, actual[str(key)], path=path + "." + str(key))
+
+
+def _strict_param_shapes(jax_module: Any, expected: Any, restored: Any) -> None:
+    expected_leaves, expected_tree = jax_module.tree_util.tree_flatten(expected)
+    restored_leaves, restored_tree = jax_module.tree_util.tree_flatten(restored)
+    if expected_tree != restored_tree or len(expected_leaves) != len(restored_leaves):
+        raise SuSIEUnavailableError("Restored parameter pytree does not exactly match initialized source structure.")
+    for index, (before, after) in enumerate(zip(expected_leaves, restored_leaves)):
+        before_value, after_value = jax_module.device_get(before), jax_module.device_get(after)
+        if tuple(getattr(before_value, "shape", ())) != tuple(getattr(after_value, "shape", ())):
+            raise SuSIEUnavailableError("Restored parameter leaf %d shape differs from initialized source model." % index)
+        if str(getattr(before_value, "dtype", "")) != str(getattr(after_value, "dtype", "")):
+            raise SuSIEUnavailableError("Restored parameter leaf %d dtype differs from initialized source model." % index)
 
 
 class SuSIESubgoalModel(Protocol):
@@ -147,9 +259,11 @@ class SuSIEPolicyProfile:
     jax_version: Optional[str] = None
     low_level_model_id: str = SUSIE_LOW_LEVEL_MODEL_ID
     low_level_license: Optional[str] = None
+    low_level_license_path: Optional[str] = None
     subgoal_model_id: str = SUSIE_SUBGOAL_MODEL_ID
     local_files_only: bool = True
     native_unnormalizes: bool = False
+    inference_params_only: bool = False
     asset_manifest_id: Optional[str] = None
     asset_manifest_sha256: Optional[str] = None
     runtime_lock_id: Optional[str] = None
@@ -210,6 +324,188 @@ class SuSIEPolicyProfile:
                 "the released wrapper also unnormalize would apply the transform twice"
             )
         return None
+
+
+class _AutoEvalGCBCBridgeLowLevel:
+    """Direct, reviewed AutoEval ``gc_bc`` inference over local Bridge assets.
+
+    It deliberately contains no SuSIE diffusion dependency.  The object
+    exposes the production adapter's normalized-row boundary: dimensions 0–5
+    remain model-normalized while dimension 6 is source-thresholded to the
+    AutoEval physical binary gripper convention.  A normalizer with a false
+    seventh mask then applies the one allowed affine transform.
+    """
+
+    def __init__(self, profile: "SuSIEPolicyProfile") -> None:
+        if profile.arm.arm_id != SUSIE_RELEASED_ARM_ID or profile.arm.low_level_agent != SUSIE_RELEASED_AGENT:
+            raise SuSIEUnavailableError("The direct gc_bc loader is only valid for the named AutoEval released replication arm.")
+        if profile.low_level_model_id != SUSIE_LOW_LEVEL_MODEL_ID or profile.low_level_revision != SUSIE_LOW_LEVEL_MODEL_REVISION:
+            raise SuSIEUnavailableError("Direct gc_bc loader requires the pinned patreya/gcbc-bridge artifact revision.")
+        checkpoint = Path(profile.low_level_model_path)
+        if checkpoint.name != "checkpoint" or checkpoint.parent.name != "checkpoint":
+            raise SuSIEUnavailableError(
+                "gc_bc local_model_path must be the immutable direct file .../checkpoint/checkpoint, not checkpoint_75000 or a directory."
+            )
+        if not checkpoint.is_file() or _sha256_file(checkpoint) != SUSIE_LOW_LEVEL_CHECKPOINT_SHA256:
+            raise SuSIEUnavailableError("gc_bc checkpoint is absent or does not match its immutable SHA-256.")
+        readme = Path(profile.low_level_license_path or checkpoint.parents[1] / "README.md")
+        if not readme.is_file() or _sha256_file(readme) != SUSIE_LOW_LEVEL_README_SHA256:
+            raise SuSIEUnavailableError("gc_bc publisher MIT README is absent or does not match its immutable snapshot hash.")
+        if "license: mit" not in readme.read_text(encoding="utf-8").lower():
+            raise SuSIEUnavailableError("gc_bc immutable README does not declare the publisher's MIT license.")
+        source_value = profile.low_level_entry_point.source_repo_path
+        if not source_value:
+            raise SuSIEUnavailableError("Direct gc_bc loader requires a clean pinned SOAR source checkout path.")
+        source_root = Path(str(source_value)).resolve()
+        module_root = _verify_clean_source(source_root)
+        if str(module_root) not in sys.path:
+            sys.path.insert(0, str(module_root))
+        try:
+            import flax  # type: ignore
+            import jax  # type: ignore
+            import numpy as np  # type: ignore
+            from flax import serialization  # type: ignore
+            from flax.training import checkpoints  # type: ignore
+            from jaxrl_m.agents import agents  # type: ignore
+            from jaxrl_m.vision import encoders  # type: ignore
+        except ImportError as error:
+            raise SuSIEUnavailableError("Direct gc_bc runtime lacks pinned BridgeData JAX/Flax dependencies.") from error
+        if str(getattr(jax, "__version__", "")).split("+", 1)[0] != str(profile.jax_version or "").split("+", 1)[0]:
+            raise SuSIEUnavailableError("Installed JAX does not match the profile's recorded runtime version.")
+        agent_class = agents.get(SUSIE_RELEASED_AGENT) if hasattr(agents, "get") else agents[SUSIE_RELEASED_AGENT]
+        encoder_factory = encoders["resnetv1-34"]
+        encoder_source = encoder_factory
+        while hasattr(encoder_source, "func"):
+            encoder_source = encoder_source.func
+        if not _under(Path(inspect.getfile(agent_class)), module_root) or not _under(Path(inspect.getfile(encoder_source)), module_root):
+            raise SuSIEUnavailableError("Imported jaxrl_m modules do not resolve inside the pinned SOAR model_training checkout.")
+        self._jax = jax
+        self._np = np
+        self.runtime_jax_version = str(getattr(jax, "__version__", ""))
+        self.runtime_flax_version = str(getattr(flax, "__version__", ""))
+        self.source_runtime_deviation = {
+            "source_repository": "rail-berkeley/soar",
+            "source_commit": SUSIE_GCBC_SOURCE_COMMIT,
+            "source_subdirectory": SUSIE_GCBC_SOURCE_SUBDIR,
+            "source_required_versions": dict(SUSIE_GCBC_SOURCE_REQUIREMENTS),
+            "actual_jax_version": self.runtime_jax_version,
+            "actual_flax_version": self.runtime_flax_version,
+            "core_jax_flax_match": (
+                self.runtime_jax_version.split("+", 1)[0] == SUSIE_GCBC_SOURCE_REQUIREMENTS["jax"]
+                and self.runtime_flax_version.split("+", 1)[0] == SUSIE_GCBC_SOURCE_REQUIREMENTS["flax"]
+            ),
+            "full_runtime_tuple_verified": False,
+        }
+        # Exact AutoEval jaxrl_gc_policy_kwargs construction.
+        encoder = encoder_factory(pooling_method="avg", add_spatial_coordinates=False, act="swish")
+        batch = {
+            "observations": {"proprio": np.zeros((1, 7)), "image": np.zeros((1, 256, 256, 3))},
+            "goals": {"image": np.zeros((1, 256, 256, 3))},
+            "actions": np.zeros((1, 7)),
+        }
+        root_rng = jax.random.PRNGKey(42)
+        _, construct_rng = jax.random.split(root_rng)
+        agent = agent_class.create(
+            rng=construct_rng,
+            observations=batch["observations"],
+            goals=batch["goals"],
+            actions=batch["actions"],
+            encoder_def=encoder,
+            early_goal_concat=True,
+            shared_goal_encoder=True,
+            use_proprio=False,
+            learning_rate=3e-4,
+            warmup_steps=2000,
+            decay_steps=int(2e6),
+            network_kwargs={"hidden_dims": (256, 256, 256), "dropout_rate": 0.1},
+            policy_kwargs={
+                "tanh_squash_distribution": False,
+                "std_parameterization": "fixed",
+                "fixed_std": [1, 1, 1, 1, 1, 1, 0.1],
+            },
+        )
+        before = _tree_digest(jax, agent.state.params)
+        if profile.inference_params_only:
+            raw_checkpoint = checkpoints.restore_checkpoint(str(checkpoint), target=None)
+            if not isinstance(raw_checkpoint, Mapping) or set(raw_checkpoint) != {"state"}:
+                raise SuSIEUnavailableError("Inference-only gc_bc restore requires raw checkpoint top-level keys exactly {'state'}.")
+            raw_state = raw_checkpoint["state"]
+            expected_state_keys = {"opt_states", "params", "rng", "step", "target_params"}
+            if not isinstance(raw_state, Mapping) or set(raw_state) != expected_state_keys:
+                raise SuSIEUnavailableError("Inference-only gc_bc restore raw state keys do not match the reviewed checkpoint schema.")
+            if raw_state["target_params"] is not None or agent.state.target_params is not None:
+                raise SuSIEUnavailableError("Inference-only gc_bc restore requires reviewed target_params=None on both checkpoint and initialized source state.")
+            expected_params = serialization.to_state_dict(agent.state.params)
+            _strict_state_tree(expected_params, raw_state["params"])
+            restored_params = serialization.from_state_dict(agent.state.params, raw_state["params"])
+            _strict_param_shapes(jax, agent.state.params, restored_params)
+            restored = agent.replace(state=agent.state.replace(params=restored_params, target_params=None))
+            restore_method = "inference_params_only_source_checkpoint_no_optimizer_restore"
+            raw_keys = {"top_level": sorted(raw_checkpoint), "state": sorted(raw_state)}
+            optimizer_excluded = True
+        else:
+            restored = checkpoints.restore_checkpoint(str(checkpoint), target=agent)
+            restore_method = "full_source_checkpoint_restore"
+            raw_keys = None
+            optimizer_excluded = False
+        after = _tree_digest(jax, restored.state.params)
+        if before == after:
+            raise SuSIEUnavailableError(
+                "gc_bc restore left the initialized target byte-identical; refusing a silent no-checkpoint diagnostic."
+            )
+        self._agent = restored
+        self.restore_digest = {
+            "initialized_params": before,
+            "restored_params": after,
+            "changed": True,
+            "method": restore_method,
+            "raw_checkpoint_keys": raw_keys,
+            "optimizer_state_excluded": optimizer_excluded,
+            "inference_only_not_resumable": bool(profile.inference_params_only),
+        }
+        self.last_model_normalized: Optional[Tuple[float, ...]] = None
+        self.last_wrapper_boundary: Optional[Tuple[float, ...]] = None
+
+    def sample_actions(self, *, image: Any, goal_image: Any, rng: Any) -> Any:
+        current = self._np.asarray(image)
+        goal = self._np.asarray(goal_image)
+        for label, value in (("current", current), ("goal", goal)):
+            if tuple(getattr(value, "shape", ())) != (256, 256, 3) or str(getattr(value, "dtype", "")) != "uint8":
+                raise PolicyContractError("AutoEval gc_bc %s image must be exact uint8 (256, 256, 3)." % label)
+        # This is AutoEval GCPolicy's deterministic path. The agent's argmax
+        # branch does not consume a PRNG seed; the adapter's RNG remains logged
+        # at the call boundary but is intentionally not substituted here.
+        sampler = getattr(self._agent, "sample_actions")
+        raw = sampler(
+            {"image": current[self._np.newaxis, ...]},
+            {"image": goal[self._np.newaxis, ...]},
+            temperature=0.0,
+            argmax=True,
+            seed=None,
+        )
+        if isinstance(raw, tuple):
+            if len(raw) != 2:
+                raise PolicyContractError("AutoEval gc_bc tuple output must be exactly (actions, action_mode).")
+            raw, action_mode = raw
+            mode_values = self._np.asarray(self._jax.device_get(action_mode))
+            if tuple(getattr(mode_values, "shape", ())) != (1, 7) or not self._np.isfinite(mode_values).all():
+                raise PolicyContractError("AutoEval gc_bc action_mode must be one finite (1, 7) row.")
+        values = self._np.asarray(self._jax.device_get(raw))
+        if tuple(getattr(values, "shape", ())) != (1, 7) or not self._np.isfinite(values).all():
+            raise PolicyContractError("AutoEval gc_bc must return one finite normalized (1, 7) action.")
+        row = values[0]
+        self.last_model_normalized = tuple(float(value) for value in row)
+        # Match AutoEval unnormalize_actions exactly at the gripper boundary;
+        # first six values are left for PLUMB's revisioned normalizer.
+        boundary = tuple(float(value) for value in row[:6]) + (1.0 if float(row[6]) > 0.0 else 0.0,)
+        self.last_wrapper_boundary = boundary
+        return [list(boundary)]
+
+
+def build_autoeval_gcbc_bridge_low_level(profile: "SuSIEPolicyProfile") -> _AutoEvalGCBCBridgeLowLevel:
+    """Pinned real loader for the published AutoEval ``gc_bc`` component."""
+
+    return _AutoEvalGCBCBridgeLowLevel(profile)
 
 
 @dataclass(frozen=True)
@@ -296,6 +592,7 @@ class _SuSIEAdapterBase(NativePolicyAdapter):
             "low_level_model_path": self.profile.low_level_model_path,
             "low_level_revision": self.profile.low_level_revision,
             "low_level_license": self.profile.low_level_license,
+            "inference_params_only": self.profile.inference_params_only,
             "low_level_checkpoint_file": SUSIE_LOW_LEVEL_CHECKPOINT_FILE,
             "subgoal_stage": bool(self.requires_subgoal),
             "subgoal_model_id": self.profile.subgoal_model_id if self.requires_subgoal else None,

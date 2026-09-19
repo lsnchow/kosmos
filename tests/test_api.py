@@ -1,9 +1,27 @@
 """API contract and qualification boundaries, not real-model performance tests."""
+import json
 import time
 
 from fastapi.testclient import TestClient
 
 from plumb.api import create_app
+
+
+def test_artifacts_never_serve_private_namespaces_or_symlink_aliases(tmp_path):
+    root = tmp_path / "data"
+    root.mkdir()
+    for namespace in ("private", "live-integrated-development-review-private"):
+        directory = root / namespace
+        directory.mkdir()
+        (directory / "resolver.json").write_text('{"private":true}')
+    (root / "public.json").write_text('{"public":true}')
+    (root / "alias.json").symlink_to(root / "private" / "resolver.json")
+    (root / "directory-alias").symlink_to(root / "private", target_is_directory=True)
+    with TestClient(create_app(root)) as client:
+        for path in ("private/resolver.json", "PRIVATE/resolver.json", "live-integrated-development-review-private/resolver.json",
+                     "alias.json", "directory-alias/resolver.json"):
+            assert client.get("/api/artifacts/" + path).status_code == 404
+        assert client.get("/api/artifacts/public.json").json() == {"public": True}
 
 
 def test_fixture_run_is_persisted_and_never_qualified(tmp_path):
@@ -82,6 +100,56 @@ def test_artifacts_cannot_escape_data_directory(tmp_path):
         (tmp_path / "private.json").write_text('{"private": true}')
         (root / "escape.json").symlink_to(tmp_path / "private.json")
         assert client.get("/api/artifacts/escape.json").status_code == 404
+
+
+def test_development_review_page_uses_the_built_frontend_without_exposing_private_drafts(tmp_path):
+    root = tmp_path / "data"
+    with TestClient(create_app(root)) as client:
+        page = client.get("/review")
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+        # The private SQLite location is neither an artifact extension nor an API
+        # route; no reviewer draft is served by the artifact handler.
+        assert client.get("/api/artifacts/private/development-review.sqlite3").status_code == 404
+
+
+def test_custom_data_root_uses_its_review_directory_by_default(tmp_path):
+    root = tmp_path / "data"
+    worksheet = root / "review" / "pilot-review-v1" / "blank-worksheets.jsonl"
+    worksheet.parent.mkdir(parents=True)
+    worksheet.write_text(
+        json.dumps(
+            {
+                "schema": "plumb-development-review-packets-v1",
+                "purpose": "development_review_only",
+                "gate_d_eligible": False,
+                "clip_id": "review-clip-api",
+                "task": "close_drawer",
+                "task_instruction": "Close the drawer",
+                "task_rubric": "Visible end state only",
+                "review_guidance": {
+                    "integrity": {"intact": "Intact", "artifact": "Artifact", "uncertain": "Uncertain"},
+                    "collision": {"none_visible": "None", "visible": "Visible", "uncertain": "Uncertain"},
+                    "completion": "Visible evidence only",
+                },
+                "raw_video_url": "http://127.0.0.1:8787/api/artifacts/review/pilot/clip.mp4",
+                "sampled_frames": [
+                    {
+                        "index": index,
+                        "timestamp": index * 0.5,
+                        "url": "http://127.0.0.1:8787/api/artifacts/review/pilot/frame-%02d.png" % index,
+                    }
+                    for index in range(16)
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with TestClient(create_app(root)) as client:
+        assert client.get("/api/development-review/sets").json()["sets"] == [
+            {"set_id": "pilot-review-v1", "title": "pilot-review-v1", "clip_count": 1, "status": "development_review_only"}
+        ]
 
 
 def test_freeplay_refuses_to_fabricate_a_frame(tmp_path):

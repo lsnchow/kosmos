@@ -382,6 +382,14 @@ describe("Nightshift pages render their beats", () => {
     }
   });
 
+  it("routes /review to the development review tool", async () => {
+    // It arrived on main behind a `window.location.pathname` check in
+    // main.tsx, which a client-side navigation never re-evaluates. As a route
+    // it has to render from a link click and from a cold load alike.
+    await renderAt("/review", /Review visible evidence, one opaque clip at a time/i);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
@@ -393,15 +401,25 @@ describe("Nightshift pages render their beats", () => {
       ["/clips", /^Clips$/i],
     ] as const) {
       const { container, unmount } = await renderAt(route, title);
-      const results = await axe.run(container, {
-        rules: {
-          // jsdom has no layout or stylesheet, so computed-colour checks cannot
-          // run here. Contrast is verified against the palette in styles.css.
-          "color-contrast": { enabled: false },
-          // The six clips are silent generated robot video with no speech track;
-          // a captions file would have nothing to transcribe.
-          "video-caption": { enabled: false },
-        },
+      let results!: axe.AxeResults;
+      // Ported from main: axe drives its own async passes, and the display
+      // clock ticks under it, so any state that lands mid-scan has to be
+      // flushed inside act() or React warns and the run races the tick.
+      await act(async () => {
+        results = await axe.run(container, {
+          // jsdom has no asset server; don't wait for image/font preloads. All
+          // the semantic rules below still run.
+          preload: false,
+          rules: {
+            // jsdom has no layout or stylesheet, so computed-colour checks
+            // cannot run here. Contrast is verified against the palette in
+            // styles.css instead.
+            "color-contrast": { enabled: false },
+            // The six clips are silent generated robot video with no speech
+            // track; a captions file would have nothing to transcribe.
+            "video-caption": { enabled: false },
+          },
+        });
       });
       expect(
         results.violations.map((v) => `${route} ${v.id}: ${v.help} (${v.nodes.length} node(s))`),

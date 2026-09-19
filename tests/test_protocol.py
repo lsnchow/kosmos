@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import plumb.protocol as protocol_module
 
 from plumb.protocol import (
     AssetLock,
@@ -21,6 +22,7 @@ from plumb.protocol import (
     build_analysis_manifest,
     build_asset_lock,
     default_protocol,
+    discover_preregistration,
     freeze,
     mdd_options,
 )
@@ -109,6 +111,7 @@ def test_a_registered_record_requires_uri_commit_and_external_timestamp():
         uri="https://example.com#refs/tags/x",
         commit="abc",
         signed=True,
+        remote_tag_verified=True,
         external_timestamp="2026-09-19T04:00:00-04:00",
     )
     assert full.status == "registered"
@@ -118,7 +121,72 @@ def test_a_registered_record_requires_uri_commit_and_external_timestamp():
         commit="abc",
         external_timestamp="2026-09-19T04:00:00-04:00",
     )
-    assert unsigned.status == "registered_unsigned"
+    assert unsigned.status == "unregistered"
+    assert "signature was not cryptographically verified" in unsigned.blocking_reasons()[0]
+
+
+def _prereg_git_responses(protocol_digest, *, remote_tag_oid="tag-oid", signature_looking_text=False):
+    """A read-only git view for discovery tests; no key or remote is needed."""
+
+    tag = "prereg/protocol-v1"
+    tag_ref = "refs/tags/" + tag
+    responses = {
+        ("tag", "-l", tag, "--format=%(contents)"): (
+            "protocol_sha256 "
+            + protocol_digest
+            + ("\n-----BEGIN PGP SIGNATURE-----\nforged text" if signature_looking_text else "")
+        ),
+        ("rev-parse", tag_ref): "tag-oid",
+        ("cat-file", "-t", tag_ref): "tag",
+        ("rev-list", "-n", "1", tag): "commit-oid",
+        ("ls-remote", "--tags", "origin", tag_ref): "%s\t%s" % (remote_tag_oid, tag_ref),
+        ("remote", "get-url", "origin"): "https://example.test/plumb.git",
+        ("tag", "-l", tag, "--format=%(taggerdate:iso-strict)"): "2026-09-19T04:00:00+00:00",
+    }
+
+    def fake_git(args, cwd=None):
+        return responses.get(tuple(args))
+
+    return fake_git
+
+
+def test_discovery_rejects_signature_looking_text_when_git_verify_tag_fails(monkeypatch, tmp_path):
+    digest = "sha256:" + "a" * 64
+    fake_git = _prereg_git_responses(digest, signature_looking_text=True)
+    # This was the old bypass: the annotation could simply contain these words.
+    monkeypatch.setattr(protocol_module, "_git", fake_git)
+    monkeypatch.setattr(protocol_module, "_git_verify_tag", lambda tag, cwd=None: False)
+    record = discover_preregistration(digest, "prereg/protocol-v1", repo_root=tmp_path)
+    assert record.status == "unregistered"
+    assert record.signed is False
+    assert record.remote_tag_verified is False
+    assert "verify-tag" in record.notes[0]
+
+
+def test_discovery_rejects_a_remote_tag_with_a_different_tag_object_oid(monkeypatch, tmp_path):
+    digest = "sha256:" + "a" * 64
+    monkeypatch.setattr(protocol_module, "_git", _prereg_git_responses(digest, remote_tag_oid="other-tag-oid"))
+    monkeypatch.setattr(protocol_module, "_git_verify_tag", lambda tag, cwd=None: True)
+    record = discover_preregistration(digest, "prereg/protocol-v1", repo_root=tmp_path)
+    assert record.status == "unregistered"
+    assert record.signed is True
+    assert record.remote_tag_verified is False
+    assert record.tag_object_id == "tag-oid"
+    assert record.remote_tag_object_id == "other-tag-oid"
+    assert record.uri == "https://example.test/plumb.git#refs/tags/prereg/protocol-v1"
+    assert "remote tag object" in record.blocking_reasons()[-1]
+    assert "does not match" in record.notes[0]
+
+
+def test_discovery_registers_only_a_cryptographically_verified_matching_tag(monkeypatch, tmp_path):
+    digest = "sha256:" + "a" * 64
+    monkeypatch.setattr(protocol_module, "_git", _prereg_git_responses(digest))
+    monkeypatch.setattr(protocol_module, "_git_verify_tag", lambda tag, cwd=None: True)
+    record = discover_preregistration(digest, "prereg/protocol-v1", repo_root=tmp_path)
+    assert record.status == "registered"
+    assert record.signed is True
+    assert record.remote_tag_verified is True
+    assert record.tag_object_id == record.remote_tag_object_id == "tag-oid"
 
 
 def test_an_incomplete_asset_row_is_never_verified():

@@ -18,9 +18,11 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import socket
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from cluster.asset_plan import (
@@ -51,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-gb", type=float, default=None)
     parser.add_argument("--allow", action="append", default=[], help="Extra allow pattern (extends the plan)")
     parser.add_argument("--ignore", action="append", default=[], help="Extra ignore pattern (extends the plan)")
+    parser.add_argument("--manifest-name", help="New basename for immutable download receipt; no overwrite allowed")
     parser.add_argument(
         "--accept-terms",
         action="store_true",
@@ -165,9 +168,10 @@ def main() -> int:
     ignore.extend(args.ignore)
     max_gb = args.max_gb if args.max_gb is not None else (entry.max_gb if entry is not None else 40.0)
 
-    root = args.root.resolve()
-    if not str(root).startswith(("/scratch/", "/global/scratch/")) or root.name != "plumb":
-        parser.error("Large downloads are permitted only in a cluster scratch/.../plumb directory")
+    try:
+        root = validated_download_root(args.root)
+    except ValueError as error:
+        parser.error(str(error))
     os.environ["HF_HOME"] = str(root / "cache" / "huggingface")
 
     from huggingface_hub import HfApi, snapshot_download
@@ -196,7 +200,7 @@ def main() -> int:
     info = api.repo_info(repo, repo_type=repo_type, revision=revision, files_metadata=True)
     if info.sha != revision:
         parser.error("Revision must be the full resolved commit SHA")
-    files = [sibling for sibling in info.siblings if _selected(sibling.rfilename, allow, ignore)]
+    files = selected_repository_files(api, repo, repo_type, revision, allow, ignore)
     if allow and not files:
         parser.error("No repository file matched the planned patterns: %s" % ", ".join(allow))
     size = sum(sibling.size or 0 for sibling in files)
@@ -241,6 +245,12 @@ def main() -> int:
 
     evidence = root / "evidence"
     evidence.mkdir(parents=True, exist_ok=True)
+    name = args.manifest_name or (entry.name if entry is not None else repo.replace("/", "--")) + "-download.json"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\.json", name):
+        parser.error("--manifest-name must be a simple JSON basename")
+    receipt_path = evidence / name
+    if receipt_path.exists() or receipt_path.is_symlink():
+        parser.error("refusing to overwrite download receipt; choose a new --manifest-name")
     started = time.time()
     destination = snapshot_download(
         repo_id=repo,
@@ -292,10 +302,9 @@ def main() -> int:
             "all_files_upstream_verified": all(record["verified"] for record in records) if records else False,
         }
     )
-    name = (entry.name if entry is not None else repo.replace("/", "--")) + "-download.json"
-    path = evidence / name
-    path.write_text(json.dumps(plan, indent=2) + "\n")
-    print("MANIFEST " + str(path), flush=True)
+    with receipt_path.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(plan, indent=2) + "\n")
+    print("MANIFEST " + str(receipt_path), flush=True)
     return 0
 
 
@@ -303,6 +312,48 @@ def _selected(name: str, allow: List[str], ignore: List[str]) -> bool:
     if allow and not any(fnmatch.fnmatch(name, pattern) for pattern in allow):
         return False
     return not any(fnmatch.fnmatch(name, pattern) for pattern in ignore)
+
+
+def validated_download_root(value: Path) -> Path:
+    root = value.resolve()
+    if not str(root).startswith(("/scratch/", "/global/scratch/")) or root.name != "plumb":
+        raise ValueError("Large downloads are permitted only in a cluster scratch/.../plumb directory")
+    return root
+
+
+def selected_repository_files(api, repo, repo_type, revision, allow, ignore):
+    """Do not trust repo_info.siblings: very large repository listings truncate.
+
+    Explicit paths use path-info, while patterns use the SDK's paginated tree
+    iterator. The complete selection must be known before enforcing the cap.
+    """
+    exact = bool(allow) and all(not any(char in value for char in "*?[") for value in allow)
+    wanted = set(value for value in allow if _selected(value, allow, ignore))
+    if exact:
+        entries = []
+        for start in range(0, len(wanted), 100):
+            entries.extend(api.get_paths_info(repo_id=repo, paths=sorted(wanted)[start:start + 100],
+                                              repo_type=repo_type, revision=revision, expand=False))
+    else:
+        entries = api.list_repo_tree(repo_id=repo, repo_type=repo_type, revision=revision, recursive=True, expand=False)
+    files = []
+    for entry in entries:
+        # RepoFolder has no blob_id; an actual RepoFile always carries it.
+        if not hasattr(entry, "blob_id"):
+            continue
+        name = getattr(entry, "path", None)
+        if not isinstance(name, str) or not _selected(name, allow, ignore):
+            continue
+        size = getattr(entry, "size", None)
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ValueError("cannot enforce download ceiling without an exact byte length: " + name)
+        files.append(SimpleNamespace(rfilename=name, size=size, lfs=getattr(entry, "lfs", None)))
+    names = [value.rfilename for value in files]
+    if len(names) != len(set(names)):
+        raise ValueError("repository file listing repeats paths")
+    if exact and set(names) != wanted:
+        raise ValueError("explicit selected file paths missing from pinned repository: " + ", ".join(sorted(wanted - set(names))))
+    return sorted(files, key=lambda value: value.rfilename)
 
 
 def _planned_expected_bytes(entry: Optional[AssetPlanEntry], name: str) -> Optional[int]:

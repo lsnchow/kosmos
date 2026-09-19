@@ -14,6 +14,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppDataProvider } from "./AppData";
 import { AppShell } from "./AppShell";
 import { Landing } from "./landing/Landing";
+import { DevelopmentReview } from "./components/DevelopmentReview";
 import { ClipsPage } from "./pages/ClipsPage";
 import { CostPage } from "./pages/CostPage";
 import { EvidencePage } from "./pages/EvidencePage";
@@ -25,6 +26,16 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route index element={<Landing />} />
+      {/*
+       * The review tool sits outside <AppShell/> deliberately. It is an
+       * internal annotation surface with its own masthead and its own
+       * `.console` wrapper, and a reviewer scoring clips has no use for the
+       * sidebar, the run poller or the event stream. It arrived on main as a
+       * `window.location.pathname === "/review"` check in main.tsx, which
+       * predates the router; as a route it survives a client-side navigation
+       * and a hard reload alike.
+       */}
+      <Route path="review" element={<DevelopmentReview />} />
       <Route element={<AppShell />}>
         <Route path="console" element={<OverviewPage />} />
         <Route path="live" element={<LivePage />} />
@@ -41,7 +52,7 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <AppDataProvider>
+<AppDataProvider>
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>

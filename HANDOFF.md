@@ -1,5 +1,540 @@
 # PLUMB execution handoff — implementation in progress
 
+Final access note: after successful job940190 and an empty scheduler check,
+the final Trillium BatchMode check returned permission denied. Authentication
+has expired again; no new job was submitted afterward. Do not retry Duo while
+the user is away. Completed evidence is already mirrored. SuSIE implementation
+and source/results documentation are pushed in `892e221`.
+The final artifact-route hardening denies reserved private directories, even
+through symlink aliases, when a broader data root is served. The review API also
+rejects null/non-string reviewer identities instead of coercing them into names.
+
+## Current judge format-only pilot — adapter disabled
+
+Job 939998 trained a **structure-only** JSON-format adapter on 12 development
+train rows for 24 optimizer steps; all semantic target tokens were masked. Its
+4-row development syntax loss changed 1.71370849→0.02586903. Reload compare
+job 940000 changed bare JSON 0/4→4/4 while schema validity remained 4/4 for both
+base and adapter, but semantic tuples drifted on 4/4 rows. The adapter is
+therefore disabled: this is no semantic, human-quality, calibration, Gate D,
+or production-scoring result. Reports are local under
+`data/live-integrated/cluster-evidence/judge-format-{pilot-939998,compare-940000}/report.json`;
+cluster artifacts are `/scratch/lchow432/plumb/experiments/judge-format-only-v1`
+and `evidence/judge-format-only-v1-comparison.json`, source release
+`f6b30d952be1b2e9cccf4c5915a4e85a636b22b620634e485dfde0ab77c08fc5`.
+No new weights were downloaded; adapters remain cluster-only. Root verified
+live `/review` at `http://127.0.0.1:8787/review` in isolated Chromium QA with a
+temporary DB: 16 clips/images decoded, drafts saved/reloaded/resumed, no JS
+errors, and no 390px horizontal overflow. Production review DB is absent and no
+human labels exist; the isolated `model_assisted` test draft is not human data.
+App tmux `plumb-live` PID19103 now exposes24 diagnostic cards; all24 report
+URLs return200. Health remains `qualified=false`, all gates are
+`not_run`, and execution remains synthetic-only. See `docs/JUDGE-FORMAT-PILOT.md`.
+
+SuSIE_LL job940190 **COMPLETED0:0** in20 seconds on one H100, status
+`completed_unqualified`. It made two finite `[1,7]` gc_bc calls with exact
+reset/repeat on a static vendor-video first/final-frame conditioning fixture;
+this is not rollout, task success, Gate A/B, or a primary row. Checkpoint is
+cluster-only at `/scratch/lchow432/plumb/models/patreya--gcbc-bridge/checkpoint/checkpoint`, SHA
+`80b354...`; publisher README declares MIT (not independently re-licensed).
+The correct clean staged source is SOAR
+`/scratch/lchow432/plumb/source-soar-gcbc@eabd5f16a856e484884a22e257a941bb358cea08/model_training`,
+not the wrong `bc60...` upstream source. Restore was strict inference-only
+params-only (`target_params=None`; optimizer state excluded), not training
+resume; failed full restore940180 and failures940172/940173/940174 are preserved
+in local report directories. Evidence: local
+`data/live-integrated/cluster-evidence/susie-ll-gcbc-940190/report.json`, remote
+`evidence/susie-ll-gcbc-static-goal-v5.json`, release
+`fdc52dcb09cebae2bdcd3d213a4865aa28c43f87be425f483a456a01afca44ea`.
+No adapter promotion follows from this smoke. Latest checks: Python1267 passed,
+6 skipped; frontend144 passed and build passed. Scheduler is empty.
+
+## Access restored; actual development-review packets ready
+
+User reauthenticated Trillium. BatchMode SSH works again; latest scheduler
+check showed no user jobs running. No completed GPU experiment was repeated.
+The full v2 raw bundle is now mirrored at
+`data/judge-teacher-v2-evidence/judge-teacher-v2-diagnostic/`.
+The exporter was run against actual mirrored evidence and wrote
+`data/judge-teacher-v2-evidence/export-audit-939753.json`:0 accepted train,
+0 accepted validation, no dataset created. Its expected blocked exit2 is not
+a tooling failure; do not relax the label rule.
+
+The23MB source review media were mirrored without model weights. Actual16
+opaque, blank, unassigned development-review packets are now published:
+`data/live-integrated/review/pilot-review-v1/INDEX.md` and
+`data/live-integrated/review/pilot-review-v1/blank-worksheets.jsonl`.
+All272 localhost video/frame URLs returned200. Every label field remains blank.
+Coordinator-only resolver: `data/private/judge-pilot-review-v1-resolver.json`,
+mode0600, outside the served root; never give it to reviewers. Byte hashes were
+verified before publication. Source mirror: `data/judge-pilot-v1-review-source`.
+
+Next dependency is actual human development review, not SSH/setup. Obtain real
+reviewer identities/independence before recording labels; no names or labels
+have been invented. These16 already-used clips are not fresh held-out Gate-D
+data. The existing trained adapter remains experimental and disabled for
+production scoring. Older SSH-blocker/packets-pending notes below are history.
+
+## Latest execution boundary — v2 completed, SSH reauthentication needed
+
+The actual v1 adapter is trained and its saved reload is verified. Teacher-v2
+job939753 subsequently reported **75/80 schema-valid samples,0/16 accepted
+three-vote modes,16 abstentions**, status completed_unqualified. No v2 training
+was started and the acceptance rule was not weakened. Source release948d59...
+and raw reports remain on Trillium; the complete v2 report bundle is not yet
+mirrored locally (summary was observed in SSH stdout).
+
+**Trillium SSH expired**: control socket is absent and LOCAL drac:0.0 is back
+at a laptop zsh prompt. Other cluster sessions were left untouched. One normal
+SSH re-login/Duo push was attempted; it timed out, then that owned PTY was
+cancelled. Do not repeatedly send pushes or delete sockets. User must run
+`ssh trillium-gpu` and complete Duo locally to restore transfers/remote work.
+An asynchronous request for reauthentication is outstanding.
+
+Local work continued: v2 exporter recomputes raw selection and refuses weak,
+homogeneous or insufficient data; actual current v2 export should produce only
+a blocked audit. The development-review packet builder verifies original
+video/PNG hashes, uses opaque IDs and existing artifact URLs, leaves every
+worksheet blank/unassigned, and keeps a0600 coordinator resolver outside the
+served root. **No real review packets exist yet**: full source media still
+needs mirroring after reauth. No human identities/labels were fabricated.
+
+See `docs/JUDGE-REVIEW-NEXT.md` for exact next commands. Latest local full suite:
+**1,229 passed,6skipped**. App8787 exposes17 diagnostics including the actual
+trained pilot and saved-adapter comparison; both report links were checked200.
+All qualification gates remain unchanged; no Baseten submission/deployment.
+
+## Actual judge pilot trained and reloaded — 2026-09-19 afternoon
+
+**Actual optimizer training is now complete.** User approved the unqualified
+pilot; do not revert to approval-pending/preflight-only instructions below.
+Teacher939423, training939451 and adapter-reload939458 all COMPLETED0:0.
+Two epochs/8 optimizer steps on4 accepted training clips;3 development clips.
+Dev loss0.7981337→0.6012993→0.3868534. Selected saved adapter epoch02 tree SHA
+7a0b7796a0ac8b78fbb8ba8f4c4db01fe8d35c2edc3cb7a0fbeec9f4fb20523e.
+
+**Do NOT scale or deploy this v1 judge.** All7 accepted labels came from a
+single valid vote (sample2), all artifact/visible/5/met; no3/5 teacher quorum.
+The reloaded adapter repeats that tuple onall3 dev clips, while the base says
+intact. This is observed label/selection bias, not improved human accuracy.
+See `docs/JUDGE-PILOT-V1.md` for complete measured results, artifact paths,
+source releases, preserved failure and raw-summary counter caveat.
+
+Work continues on a separate experimental teacher-v2 **prompt/selection
+diagnostic**, not more v1 training: explicit integrity/collision definitions,
+exact enum consistency reminder, require unique semantic mode≥3/5. It must
+not alter the global primary judge, repair old responses, or fill gates.
+The user asked to keep going; next is running the bounded v2 diagnostic on
+the existing16 developmental inputs and reviewing actual schema/agreement.
+
+Teacher-v2 diagnostic job939753 was submitted from immutable source release
+948d59d53df2e7ce644ba2177702d00fe89854a33b258e99acecd99cb46d1151.
+Output namespace: `/scratch/lchow432/plumb/experiments/judge-teacher-v2-diagnostic`.
+Same base model/runtime/16 source clips; it is NOT the v1 trained adapter.
+It produces raw reports and summary only, never training JSONL or gate records.
+Recheck scheduler and per-clip reports before resuming; all v1 artifacts remain
+untouched. Latest local full suite:1,221passed/6skipped.
+
+## Approved experimental judge pilot — acquisition/execution history
+
+The user explicitly approved the unqualified teacher-labelled development
+pilot and instructed continued execution. The earlier approval-pending text
+below is superseded. Do not ask the same permission again.
+
+Frozen selection:16 distinct real Bridge close-drawer episodes,12 train and4
+development validation, from dataset revision0e9d76d07e9df3ea3eba257b2520d4913833fad2.
+Selection SHA18717375576b9fb3e08606a7e09b30d73f2dd731b167b3e99c0866f122cf5bf8;
+local `data/judge-pilot-v1-selection.json`, remote `fixtures/judge-pilot-v1-selection.json`.
+All16 source lineages, including later abstentions, remain excluded from future
+formal study/calibration. This pilot does NOT replace the full6×5×50 scope.
+
+Remote prepared data:
+`/scratch/lchow432/plumb/experiments/judge-lora-pilot-v1-prepared`.
+Each clip has16 distinct lossless RGB PNGs sampled from its actual video,
+Parquet nominal timestamps, and initial scene context (NOT a fabricated goal).
+No robot-state/gripper conversion occurs. Original source receipts and media
+are preserved. Only2,666,878 bytes of selected video/Parquet were acquired;
+no model weights were downloaded.
+
+Acquisition caught a real large-Hub-listing bug: repo_info.siblings omitted12
+selected videos. `cluster/download_assets.py` now queries exact explicit paths
+or a paginated tree, checks the full byte ceiling, and writes no-clobber named
+receipts. Old20-file receipt `evidence/IPEC-COMMUNITY--bridge_orig_lerobot-download.json`
+and partial prepared directory `experiments/judge-lora-pilot-v1` are preserved.
+Complete32-file receipt: `evidence/judge-pilot-v1-source-complete-download.json`.
+
+Teacher job939398 failed before model inference because a new collector expected
+model_id rather than the existing download manifest's repo field. It is fixed
+by reusing the same full file/hash/revision validator as the training path;
+the failed job/log and immutable release80a737fb... are preserved.
+Teacher retry939423 later COMPLETED; the earlier running snapshot is historical. Its immutable release is
+`cacf20c6120b4511c6bb5a2fe76c249dea2842b61d538bcfec26a87b59f1832d`.
+It uses existing Qwen7B weights and venv-judge-lora-tf449, one H100 debug15min.
+Check actual `squeue`/`sacct` and rawteacher per-clip files before any retry.
+
+Next actions: finish teacher collection (resumable completed hash-matched clips),
+validate finalinputs/splits, then actually run `cluster/judge_lora_pilot.sbatch`
+with `cluster/judge_lora_pilot_config.json`, a NEW outputdir and the pinned model
+view. Two manual AdamW epochs, r64/alpha32/lr1e-4/batch1/seed20260919; every real
+optimizer step/checkpoint/loss is recorded. Then run the saved-adapter reload
+comparison on the originally assigned dev-validation clips only. No Gate-D/E,
+human accuracy, formal search, primary score, or calibrated-judge claim.
+
+## Judge fine-tuning priority — 2026-09-19 afternoon
+
+User explicitly requested judge fine-tuning ASAP. **Actual optimizer training
+has NOT started; no adapter is saved.** One-H100 Trillium preflight939218
+COMPLETED0:0 with real Qwen forward/backward,20,185,088 trainable LoRA parameters,
+finite loss0.6149674654,56 nonzero-gradient tensors and31,381,548,544B peak CUDA
+allocation. This is not teacher calibration or a trained-judge claim.
+See the new first section of `docs/DISTILLATION_RUNBOOK.md` for source release,
+runtime lock, exact module/env/model paths, timing scope and fixture limitations.
+
+Next meaningful choice: user was asked asynchronously whether to start an
+explicitly unqualified development pilot using newly teacher-labelled clips,
+or wait for calibrated training data. No answer yet. Do not fabricate a Gate-D
+pass, formal preregistration, human labels, training splits, or qualified base
+judge to start formal training. The existing single diagnostic has no quorum;
+it is framework-preflight-only. Preserve this explicit boundary.
+
+Final verification this continuation: **1,191 passed,6skipped**. Live API8787
+was restarted in LOCAL tmux `plumb-live` (PID95884 at restart), still using
+`data/live-integrated`; no active run was interrupted. It exposes15 diagnostic
+cards, including the new preflight report, whose HTTP link returns200.
+Real submission stays disabled and qualified=false. Trillium `squeue` is empty;
+939218 is complete and no training/monitor process is left running.
+Video-curation safeguards bound the reconstructed pixels and retained original
+raw media/reports; no generated human labels or substituted goal images.
+
+Other implemented work this continuation:
+
+- Real opt-in S3-compatible result persistence/readback for the Chain, conditional
+  immutable writes, secret-free pre-POST result keys, deployment-context secrets,
+  request/result identity/digest checks and bounded reads. Ambiguous POSTs can
+  recover by result key without a request ID. No store was provisioned or called;
+  no Baseten deployment/spend occurred. Missing config blocks before GPU work.
+  Actual SDK structure validates. A fresh60-episode simulated rehearsal passed:
+ 59completed/1injectedfailure/2droppedcallbacks, zero unresolved, gates NOT_RUN;
+  `data/rehearsal-run-aakd64k1`, run `run-e070853a3ebf465fa5ac9d8bcc4fb266`.
+- Source audit corrected production Octo to AutoEval's static PRNGKey(0) and
+  cached task with safe reset/restore. New RNG0v2 profile is distinct from the
+  earlier GPU smoke; no v2 GPU result is claimed. Raw LeRobot proprio is not
+  silently substituted for the source wrapper's converted history.
+- Rehashed staged Cosmos, OpenVLA, Octo and Bridge metadata on the cluster:
+ 4core staged-integrity passes,0fully-verified deployment profiles. See
+  `docs/STAGED-ASSET-AUDIT.md`; no weights copied to laptop.
+- Acquired only6MB Bridge metadata, audited53,192 source episodes and exact
+  instruction coverage. No basket/sink exact matches; no study starts selected.
+  Source gripper extrema0.046–1.112 conflict with the provisional0–0.39 profile;
+  no guessed rescaling. See `docs/GATE_C_RUNBOOK.md`.
+
+## Integrated continuation — 2026-09-19 late morning
+
+This section supersedes the branch, process, test and allocation snapshots below.
+**Delivered:** merge commit `3832de3` is pushed to origin/main. It preserves both
+parents: newer main `634a796` and num2 `dd8a12f`. The normal workspace
+`/Users/lucas/Desktop/tax_stuff/htn26` is now on main at this integration.
+The integration worktree `/Users/lucas/Desktop/tax_stuff/htn26-integration`
+retains the full rehearsal data and separate deploy-validation environment.
+The older num2 branch and all diagnostic evidence are preserved.
+
+The merged production backend, protocol/artifact/annotation UI and Training Jobs
+path remain intact. Older source-profile adapters are deliberately isolated in
+`plumb/policies/diagnostics`; offline distillation preparation is now
+`plumb.distillation_preparation`. The two Baseten outboxes remain distinct paths,
+not two dispatchers for one episode. Both fail closed on ambiguous POSTs.
+
+Integration fixes include terminal remote failure classification and raw failure
+artifact retention; simulated independent result-store recovery for lost webhooks;
+exact short terminal action segments; failed-row transport/request provenance;
+pre-POST dispatch persistence; strict protocol/asset/profile/human qualification;
+and cryptographically verified signed preregistration tags bound to exact remote
+tag object IDs. A remote tag does not establish an independent receipt timestamp.
+The existing prereg/protocol-v1 tag is unsigned and is not accepted.
+
+Verification: **1,149 Python tests passed, six optional tests skipped**;
+**136 frontend tests passed**, TypeScript/build passed; Truss 0.18.30's actual
+Chain SDK validator passed. Readiness check: **16 pass, seven pending, zero fail**.
+SDK definition validation is not deployment validation.
+
+Full fresh simulated production-path rehearsal:
+`data/rehearsal-run-e5wxygzy`, run `run-153c1964ba9849f5bc2638a9d67e14e4`.
+All 1,500 POSTs reached terminal state: **1,463 completed / 37 injected failures**;
+26 dropped and 37 duplicate webhooks; zero unresolved submissions or unexpected
+completion errors. All 1,500 rows preserve simulated provenance and request IDs;
+all 1,463 generated results preserve segment/timing fields; 30 analysis cells.
+All gates stayed NOT_RUN. Its 38.601s execution and 194.738s publication are
+simulation/harness timings, not model/platform throughput or cost measurements.
+Run-derived artifact writers passed; real calibration/economics/load-test/scenario
+inputs remain absent. The previous failing 1,500-row rehearsal is preserved at
+`data/rehearsal-run-nlsttg56` and must not be relabelled a success.
+
+Separate Octo production runtime: source
+`241fb3514b7c40957a86d869fecb7c7fc353f540`, new cluster checkout
+`source-octo-autoeval241fb`, copied environment `venv-octo-autoeval241fb`.
+Old 37951 checkout/environment/evidence remain untouched. New dlimp is pinned to
+`5edaa4691567873d495633f2708982b42edf1972`. Runtime lock:
+`/scratch/lchow432/plumb/evidence/octo-runtime-autoeval241fb-v1.json`, SHA
+`6f156bfa1e220e4573ecad68c993183ee84f1588cd9689ff1882892ad8a8f0bb`.
+It records exact package/freeze provenance and the known NumPy1.24.3→1.26.4 /
+TF2.15.0→2.15.1 Alliance deviations. Pip check is NOT clean; only that exact
+reviewed dlimp TF mismatch is accepted and recorded, unknown mismatches block.
+One-H100 job938918 failed before inference due to a harness runtime-field bug;
+raw report/log/lock are preserved in `data/live-integrated/cluster-evidence/
+octo-production-938918/`. Failure source release is
+`ba220f4c214b313d3b828ae82561278485cfbf8d318cc533e3a1eca82f9293c7`.
+
+**Production241fb retry938946 COMPLETED (0:0)**, source release
+`5788a3adaa49a6cae88bc7066b514f2a81f19c53c2860a2f7f04e051fb0cc7ba`.
+It exercised the actual production adapter, three native calls and exact reset/
+repeat with static canonical frame inputs. First call9.1691s includes JIT;
+second0.03036s and repeat0.03016s; full diagnostic29.4249s. JAX allocator peak
+577,332,736B is not total device memory. H100 UUID and driver are recorded.
+Report/log are in `data/live-integrated/cluster-evidence/octo-production-938946/`.
+This closes the production API runtime mismatch, not policy qualification:
+no certified execute prefix, generated-image feedback, physics or task outcome.
+The failed938918 harness is preserved, and its missing-runtime-field bug has
+a regression test. No job remains intentionally running after these checks.
+
+Original eight-H100 allocation937277 expired TIMEOUT at09:11 EDT. It is not
+running or awaiting cancellation. Model inference remains scheduler-only, with
+bounded one-H100 jobs; all weights remain on clusters.
+
+**Live app:** http://127.0.0.1:8787 in LOCAL tmux `plumb-live`, PID89195 at
+cutover. It runs the merged source from the normal workspace and uses
+`/Users/lucas/Desktop/tax_stuff/htn26/data/live-integrated`, a copied/migrated
+data directory. The original data directory's database and evidence remain
+untouched; the old idle API65815 was gracefully stopped after checking no active
+runs. Health, all19 report/media URLs (14 diagnostics/5 videos), and blocked real
+backend were verified. Both938918failure and938946success are visible, unscored.
+No live Baseten submission or cloud spending was enabled. Frontend production
+dependency audit reports zero vulnerabilities; three moderate dev-dependency
+advisories remain, with no forced dependency upgrades applied.
+
+To restart this exact local service after inspecting the current listener:
+
+```bash
+cd /Users/lucas/Desktop/tax_stuff/htn26
+PLUMB_DATA_DIR=/Users/lucas/Desktop/tax_stuff/htn26/data/live-integrated \
+  .venv/bin/python -m uvicorn plumb.api:create_app --factory --host 127.0.0.1 --port 8787
+```
+
+Tests were run in the integration worktree with the normal workspace's .venv.
+The Chain SDK validation venv is `.venv-deploy` in the integration worktree;
+it is excluded from git. Source staging is refreshed with
+`python deploy/baseten/stage_packages.py`. Never upload model/data directories
+as deployment source. No automatic long-running monitor remains after delivery.
+
+Still not done: acceptable causal world-model fidelity; remaining source-native
+policy/state/gripper/execution-prefix certification; real matched panels and
+independent humans; signed/reviewed preregistration; actual Baseten credentials,
+object store, deployment images/account lifecycle/capacity/pricing; qualified
+full study, fresh human recalibration after judge distillation, and three real
+1,500-episode cost/latency rehearsals. No fabricated labels or successful gates.
+WorldGym research found a causal single-action candidate but no pinned/license-
+verified weight package or approved gated SD3 support; no download/adoption or
+world-model training was performed.
+
+## Num2 continuation — 2026-09-19 06:09 EDT (supersedes the older snapshot below)
+
+**Morning entrypoint:** source implementation and bounded GPU checks are done
+for this continuation. Read this section first, then the workflow documents as
+needed. The full scientific project is not complete. Local API runs in tmux
+`plumb-api`; source code is separate from ignored local/cluster evidence.
+
+**Parallel-main update:** the tested continuation is preserved on branch
+`num2-verified-continuation` (implementation commit `f5eddee`). During execution
+Kevin advanced `origin/main` to `6625b17` with another substantial build.
+No force-push or automatic merge was performed. Read
+[INTEGRATION-HANDOFF.md](INTEGRATION-HANDOFF.md) before combining them:14 paths
+have conflicts, and their interfaces need deliberate integration. Test results
+here apply to the continuation branch, not the unreviewed combined system.
+
+The continuation implements additional control-plane and study tooling. The
+full scientific study is still blocked; no primary result, physical-fidelity,
+Baseten deployment, or speed/cost claim is established. All prior raw evidence
+is preserved. Source at the start of this continuation was commit `425a6dd`.
+
+Completed code tracks:
+
+- Durable Baseten outbox, one-POST ambiguity handling, exact raw signed callback
+  storage, callback-before-ack association, leased finalization, cancellation,
+  and local reconciliation. Fixture workers cannot claim/reclaim cloud-owned
+  episodes. The API exposes optional signed callback ingress and a sanitized
+  outbox view; it never submits cloud work automatically. See
+  `deploy/baseten/README.md`. Actual deployed serializers, independent object
+  storage and account-tested Chain lifecycle routes remain prerequisites.
+- Safe scenario import checks explicit real-robot provenance, local image/state/
+  goal hashes, finite 8-D states and disjoint source lineages. Calibration
+  selection is frozen before CLI export/report; packets use opaque identifiers
+  and a private resolver. Two distinct human owner attestations are required.
+  See `SCENARIO-CALIBRATION-WORKFLOW.md`; use `plumb scenarios --help` and
+  `plumb annotation --help`. No actual panels or annotations were invented.
+- Full-study planning and run-specific episode materialization retain all
+  6 × 5 × 50 slots and exact task horizons. Readiness binds actual gate and
+  component revisions. Native cost comparisons preserve each policy's feedback
+  boundaries; 1–6-request partition experiments are a separate unqualified
+  sensitivity. Rehearsal checks distinguish judging attempts from scientific
+  V/1,500 coverage. See `docs/STUDY-WORKFLOW.md` and `plumb study --help`.
+- Distillation preparation freezes an 80/20 development-only training/
+  validation split with teacher, rubric, sampling, media and raw-output
+  bindings. It rejects held-out/primary/cost lineage leakage and prepares a
+  no-submit Training Jobs readiness record. A distilled revision still needs
+  fresh held-out humans and paired-video evidence. See
+  `docs/DISTILLATION-WORKFLOW.md` and `plumb distillation --help`; no training
+  job, dataset upload or cloud spend occurred.
+- Source-backed policy candidates now cover Octo, MiniVLA, SuSIE/SuSIE_LL,
+  and OpenPiZero.
+  MiniVLA remains blocked by the unlicensed VQ dependency and unbound auxiliary
+  vision/language assets. Its pinned tokenizer exposes one action, despite
+  seven-future-action latent configuration; do not advertise a seven-action
+  proposal. SuSIE `gc_bc` replication and `gc_ddpm_bc` sensitivity have distinct
+  identities; corrected-arm weights remain missing. See
+  `docs/POLICY-DEPENDENCIES.md`. Unit fixtures do not certify live loaders.
+  OpenPiZero retains its four-row proposal and requires an explicitly tagged,
+  unit WXYZ quaternion pose; canonical Euler state is not silently accepted.
+  Its external execution wrapper/prefix, state conversion, checksum-bound
+  PaliGemma support assets and checkpoint remain unqualified/unavailable. See
+  `docs/OPENPI-DEPENDENCIES.md`.
+
+New actual GPU evidence:
+
+- Trillium H100 job **937822**, immutable source release
+  `a763859e977ce3a6baf6fe0f83f63137fa2cf6229921e11d021e0785b8f7ba83`,
+  completed successfully. It replays the saved 16 actions with a growing window
+  of up to 15 committed past latents, producing one new frame per request with
+  no future actions. This changes inference conditioning from training mask=1;
+  it is not a policy re-query run or qualification.
+- Runtime **187.265 seconds** includes loading, 16 ticks, their repeat, and
+  artifacts. All 16 pixel and final-latent hashes repeat exactly. Tick zero
+  also matches the earlier 937751 latent-carry replay. The inspected final
+  frame still has substantial blur and gripper/object distortion, so history
+  conditioning did **not** resolve fidelity. Different horizon/noise shapes
+  prevent treating cross-profile differences as a history-only causal effect.
+- The whole small bundle is mirrored at
+  `data/cluster-evidence/irasim-history-937822/`; original cluster location is
+  `/scratch/lchow432/plumb/evidence/irasim-history-937822/`. The API now exposes
+  its digest-checked video as an unscored diagnostic. Do not resubmit this run.
+
+Octo staging: Trillium now has the pinned MIT Octo-Small snapshot at
+`models/rail-berkeley--octo-small`, revision
+`03d88976c54a58e10480d2043a8c762b35bc2611`, checkpoint SHA
+`590df097f8a37bbc1c3aac2a488c0fb08e72bae8abaedfb89f0685677d848962`.
+Only the Apache-2.0 T5 config/tokenizer files were needed, not T5 model weights:
+the Octo checkpoint already restores encoder parameters. They are cached under
+`models/.hf-octo`, T5 revision `a9723ea7f1b39c1eae772870f3b547bf6ef7e6c1`.
+The clean `source-octo` checkout pins
+`37951e4e6d708fd76374f6e09e716763fe2673b1`. See
+`cluster/prepare_octo_assets.py` and `cluster/setup_octo_runtime.sh`.
+
+### Octo runtime and actual GPU results
+
+- Isolated Trillium `venv-octo`: Python3.10, Alliance JAX0.4.20 / CUDA12 JAXlib,
+  Flax0.7.5, Orbax0.4.3, TF2.15.1, exact pure-Python TFP0.23. TF2.15.1 is a
+  recorded compatibility deviation from the source lead2.15.0. Load modules
+  `StdEnv/2023 python/3.10 cuda/12.2 cudnn/8.9.5.29`; do not mix it with the
+  Python3.11 IRASim/OpenVLA environments. `pip check` and offline T5 imports pass.
+- Immutable runtime lock:
+  `/scratch/lchow432/plumb/evidence/octo-runtime-cuda12-jax0420-v2.json`, SHA
+  `5c10b8881e8ab97830ee84f565aeebe1cb689f1d161359a64a2ca450a62e74b9`.
+  Version1 is preserved separately. The v2 lock includes the actual package
+  inventory; no public CUDA wheel was installed. Assets total about550MB;
+  no full T5 weight download was needed.
+- Canonical lossless PNGs and provenance are in
+  `fixtures/octo-small-bridge-cv2-linear-rgb-256-v3/` on Trillium. The helper
+  records BGR→RGB decoding, source-compatible OpenCV linear resize, original
+  MP4 hash, source RGB/BGR hashes, and output file/pixel hashes. Source frame
+  indices are **0 and2** because0/1 decoded identically. Physical control
+  timestamps remain unknown. Manifest SHA:
+  `996bdb5294d27b5d0245aa93f61272364f0f1300dd386abb7eb5aa42ae5e34c1`.
+  This is a declared diagnostic input transform, not camera-pipeline parity.
+- Allocation937277 step0 failed after checkpoint loading: the pinned Octo
+  v0.1 API does not accept AutoEval's newer `unnormalization_statistics`
+  keyword. Preserve `data/cluster-evidence/octo-smoke-937277-step0/` and release
+  `7342b517935f7054db57b84b8e975a9bda816dc54c5537267405b7a3da1965ff`.
+  Failure report SHA is
+  `d91bd5a05357a865a40d52366652071c99426056c67706bce61deedc02a4857b`.
+- Corrected native-v0.1 profile calls the actual source API and unnormalizes
+  `actions * std + mean` on the native JAX array before host collection, as
+  the pinned source notebook does. This is explicitly **not** a verified
+  substitute for the newer AutoEval server profile. Its source history-mask
+  behavior is preserved; the code does not silently repair upstream semantics.
+- **937277.1 completed** from release
+  `b90de29b065e81586c3479301780acbeee63bc118cb08ab6bcfefd6c2c0d3645`:
+  three real native calls, each with a finite4×7 proposal; reset/repeat exact.
+  First call9.4596s includes JIT, subsequent calls0.03633/0.03674s;
+  total38.6858s includes loading/setup. JAX-reported peak577,332,736B is an
+  allocator measurement, not total device memory. Bundle:
+  `data/cluster-evidence/octo-smoke-937277-step1/`.
+- **937277.2 completed**: eight independent worker processes across
+  trig0010/trig0030, one visible allocated H100 each,24 native calls total.
+  Every worker reset/repeat was exact; both observations' proposals and
+  selected actions matched across all workers. Scheduler step elapsed28s;
+  worker totals23.52–24.85s. This is **not** a rollout/burst/cost result.
+  Immutable release:
+  `46c353e2786fd1b2dd86fc72223d26af716d2691df515082d5cfa0658c1b8392`.
+  All eight raw reports/logs and a hash-bound comparison summary are in
+  `data/cluster-evidence/octo-repro8-937277-step2/`. Physical GPU UUIDs were
+  not recorded; logical CUDA ordinal0 is per worker, not a global GPU identity.
+- All these diagnostics remain unqualified: no generated-image feedback,
+  primary task outcome, real-robot parity, or full AutoEval replication claim.
+
+All five SSH routes were rechecked successfully during this continuation.
+The historical eight-H100 request **937277 started at05:11 EDT** on two nodes
+and is scheduled to end at09:11 EDT. Its bounded GPU checks are complete.
+Cancellation permission was requested asynchronously after the checks because
+the prior handoff explicitly withheld it; absent a reply, the parent allocation
+is preserved. Recheck live state before touching it. No duplicate allocation
+was submitted. The site rejects `srun` from a login node even with `--jobid`:
+run a new bounded step only from the inspected idle allocated compute shell
+inside REMOTE `drac:0.0`. Never paste while that pane is running a step.
+
+Root verification: **212 passed, 5 skipped** in the lightweight
+local environment; frontend production build and TypeScript checks passed.
+The four original-IRASim tensor checks also passed inside the H100 batch job.
+Fresh synthetic integration `run-08d9b32ef23144d086bccc8d89ce5eee` completed
+1,500/1,500, exported 1,500 JSONL rows, and returned all30 API analysis cells
+with `qualified=false`. Its scratch test data is
+`/tmp/plumb-num2-integration.jjbXlK`; its timing is not model performance.
+
+The actual local API was restarted with current source in **LOCAL tmux
+`plumb-api:0.0`**, listening at `http://127.0.0.1:8787`. PID at final restart65815;
+inspect the pane/listener before any future restart. It exposes12 diagnostic
+cards and5 playable digest-checked clips, whose report/media HTTP links were
+all checked. Baseten outbox is empty; callback ingress and automatic cloud
+submission are disabled. No existing run was active during restart.
+
+### What remains (do not shrink the requested scope)
+
+1. A fidelity-acceptable causal world profile and exact remaining native
+   wrapper/state certification. Current IRASim profiles visibly distort; the
+   Octo native-v0.1 diagnostic is not certified AutoEval replication. OpenPi's
+   executed prefix/quaternion conversion and MiniVLA's support assets/license/
+   exposed-action contract remain unresolved.
+2. Real matched five-task panels plus disjoint development/calibration/cost
+   cohorts,150 selected generated calibration clips, and two actual human
+   annotators. The new CLI workflows are usable once those inputs exist.
+3. Real Baseten credentials, immutable deployment images/serializers, independent
+   object storage, account-tested lifecycle APIs, capacity and pricing; then
+   actual full-matrix execution, drift/cost sweeps, held-out confirmation,
+   distillation training/fresh calibration, and three complete rehearsals.
+4. Newer `origin/main` now contains `BUILD-SPEC.md`, `SCRIPT.md`, and
+   `reverse_validation.py`. They are not merged into this tested branch;
+   verify provenance and reconcile them with the reviewed spec before treating
+   the prior missing-original-material requirement as resolved.
+
+Model weights remain only on clusters. The private source repo deliberately
+excludes `data/`, environments and model artifacts. Preserve all failed and
+successful reports. Curation guidance was applied to the new fixture path:
+reuse existing media processing, preserve originals, and hash-bind every
+derived RGB input and transform.
+
+The following older sections retain useful asset/runtime details and historical
+evidence. Their process IDs, test counts and live scheduler descriptions are
+snapshots, not current guarantees.
+
+---
+
 **For the new context named num2:** also read [CLUSTER-OPERATIONS.md](CLUSTER-OPERATIONS.md)
 in full. It contains the verified local/remote tmux layout, exact SSH/Slurm
 commands, latest five-cluster capacity check and submission/recovery procedures.

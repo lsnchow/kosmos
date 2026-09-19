@@ -32,6 +32,7 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,6 +40,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from .calibration import (
+    Annotation,
+    AnnotatorOwnership,
     BLINDED_EXPORT_FIELDS,
     COLLISION_VALUES,
     COMPLETION_VALUES,
@@ -50,9 +53,20 @@ from .calibration import (
     ClipManifestRow,
     _FORBIDDEN_BLIND_FIELDS,
     build_calibration_report,
+    blinded_annotation_rows,
+    blinded_clip_id,
+    blinded_media_ref,
+    blinded_media_resolver,
     calibration_manifest_hash,
     deterministic_annotation_assignments,
+    export_annotation_packets,
+    freeze_calibration_selection,
+    import_annotations,
+    load_frozen_calibration_selection,
+    main as _calibration_main,
     validate_manifest,
+    validate_calibration_lineage_partition,
+    validate_annotator_ownership,
 )
 from .policies.tasks import BENCHMARK_TASK_REGISTRY
 
@@ -1404,6 +1418,16 @@ def _service_from_args(args: argparse.Namespace) -> AnnotationService:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entrypoint: ``python -m plumb.annotation <command>``."""
 
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # The interactive app surface owns sessions and its append-only store.  The
+    # offline packet/freeze workflow owns immutable selected manifests and is
+    # intentionally routed to calibration's stricter CLI.  ``--store`` is the
+    # unambiguous legacy/app marker for the overlapping export/report verbs.
+    if arguments and (
+        arguments[0] == "freeze" or (arguments[0] in {"export", "report"} and "--store" not in arguments)
+    ):
+        return _calibration_main(arguments)
+
     parser = argparse.ArgumentParser(description="Nightshift blinded annotation surface")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -1468,7 +1492,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report_command.add_argument("--manifest-id")
     report_command.add_argument("--scenario-manifest-sha256")
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
     try:
         if args.command == "register":
             annotators = []
@@ -1617,4 +1641,23 @@ __all__ = [
     "write_json_atomic",
     "write_judge_calibration_artifact",
     "write_judge_calibration_json",
+    # Offline immutable-selection and opaque-media helpers, re-exported so
+    # callers can remain on the public annotation namespace.
+    "Annotation",
+    "AnnotatorOwnership",
+    "CalibrationError",
+    "ClipManifestRow",
+    "blinded_annotation_rows",
+    "blinded_clip_id",
+    "blinded_media_ref",
+    "blinded_media_resolver",
+    "build_calibration_report",
+    "deterministic_annotation_assignments",
+    "export_annotation_packets",
+    "freeze_calibration_selection",
+    "import_annotations",
+    "load_frozen_calibration_selection",
+    "main",
+    "validate_calibration_lineage_partition",
+    "validate_annotator_ownership",
 ]

@@ -1,0 +1,28 @@
+{
+  "purpose": "framework_preflight_only",
+  "qualified": false,
+  "optimizer_steps": 0,
+  "student_model": {
+    "model_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "model_revision": "cc594898137f460bfe9f0759e9844b3ce807cfb5",
+    "output_contract": "rubric_json_schema"
+  },
+  "hyperparameters": {
+    "lora_r": 64,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "lora_target_modules": ["q_proj", "v_proj"],
+    "learning_rate": 0.001,
+    "num_train_epochs": 2
+  },
+  "training": {
+    "per_device_train_batch_size": 1,
+    "per_device_eval_batch_size": 1,
+    "gradient_accumulation_steps": 1
+  },
+  "limitations": [
+    "A forward/backward compatibility check only; learning_rate and epochs do not authorize optimizer steps.",
+    "This is not a preregistered search arm or a valid formal training-job configuration.",
+    "The diagnostic teacher sample is not a quorum label, calibrated target, or human annotation."
+  ]
+}

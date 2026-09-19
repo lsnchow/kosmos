@@ -35,6 +35,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
+import tempfile
 import threading
 import time
 import uuid
@@ -168,6 +170,8 @@ class RehearsalChainTransport:
         self._in_flight = 0
         self._started_at = time.monotonic()
         self._requests: Dict[str, Dict[str, Any]] = {}
+        self._result_dir = self.artifacts_dir / "result-store"
+        self._result_dir.mkdir(parents=True, exist_ok=True)
         # Completion runs on a thread pool rather than an asyncio task.  The
         # engine calls the backend from a worker thread via ``asyncio.run``, so
         # the event loop that serves a submission is torn down as soon as that
@@ -230,7 +234,18 @@ class RehearsalChainTransport:
             self.stats.submitted += 1
             self._in_flight += 1
             self.stats.peak_in_flight = max(self.stats.peak_in_flight, self._in_flight)
-            self._requests[request_id] = {"model_input": dict(model_input), "webhook": str(webhook)}
+            binding = model_input.get("result_store")
+            result_key = (
+                str(binding.get("result_key"))
+                if isinstance(binding, Mapping) and isinstance(binding.get("result_key"), str)
+                else request_id
+            )
+            self._requests[request_id] = {
+                "model_input": dict(model_input),
+                "webhook": str(webhook),
+                "result": None,
+                "result_key": result_key,
+            }
 
         # Schedule the callback the way the platform would: out of band, after
         # the work notionally completes.
@@ -327,32 +342,50 @@ class RehearsalChainTransport:
     def _complete_now(self, request_id: str, model_input: Mapping[str, Any], webhook: str) -> None:
         run_id = str(model_input.get("run_id"))
         episode_id = str(model_input.get("episode_id"))
+        result_binding = model_input.get("result_store")
+        result_key = (
+            str(result_binding.get("result_key"))
+            if isinstance(result_binding, Mapping) and isinstance(result_binding.get("result_key"), str)
+            else request_id
+        )
+        policy = model_input.get("policy") or {}
+        policy_payload = policy.get("payload") if isinstance(policy, Mapping) else {}
+        policy_payload = policy_payload if isinstance(policy_payload, Mapping) else {}
+        scoring = model_input.get("validity") or {}
+        scoring_payload = scoring.get("payload") if isinstance(scoring, Mapping) else {}
+        scoring_payload = scoring_payload if isinstance(scoring_payload, Mapping) else {}
+        # These are the exact locations the real controller reads: policy owns
+        # the requested action horizon while the scoring stage carries the
+        # frozen operating point. The world entrypoint payload intentionally
+        # has neither (it only supplies setup metadata).
+        horizon = int(policy_payload.get("horizon_actions") or 0)
+        operating_point = scoring_payload.get("operating_point") or {}
         freeplay = model_input.get("freeplay")
         if isinstance(freeplay, Mapping):
             result = self._build_freeplay_result(run_id, episode_id, freeplay)
-            self._deliver_result(request_id, run_id, episode_id, result, webhook)
+            self._deliver_result(request_id, result_key, run_id, episode_id, result, webhook)
             return
-        world = model_input.get("world") or {}
-        payload = world.get("payload") if isinstance(world, Mapping) else {}
-        payload = payload if isinstance(payload, Mapping) else {}
-        horizon = int(payload.get("horizon_actions") or 0)
-        operating_point = payload.get("operating_point") or {}
+        payload = {"horizon_actions": horizon, "operating_point": operating_point}
         chunk = int((operating_point or {}).get("action_chunk_size") or 16)
         chunks = max(1, -(-horizon // chunk)) if horizon else 1
         timings = self.profile.stage_seconds(chunks)
         time.sleep(sum(timings.values()))
 
         result = self._build_result(run_id, episode_id, chunks, timings, payload)
-        self._deliver_result(request_id, run_id, episode_id, result, webhook)
+        self._deliver_result(request_id, result_key, run_id, episode_id, result, webhook)
 
     def _deliver_result(
         self,
         request_id: str,
+        result_key: str,
         run_id: str,
         episode_id: str,
         result: Mapping[str, Any],
         webhook: str,
     ) -> None:
+        # A webhook is only a notification. Publish the result before trying
+        # delivery so an intentionally dropped webhook remains recoverable.
+        self._persist_result(result_key, result)
         with self._lock:
             self._in_flight = max(0, self._in_flight - 1)
             if result["status"] == "completed":
@@ -455,6 +488,56 @@ class RehearsalChainTransport:
             "world_calls": 1,
             "transport": SIMULATED_TRANSPORT,
         }
+    def _result_path(self, request_id: str) -> Path:
+        return self._result_dir / ("%s.json" % _safe(request_id))
+
+    def _persist_result(self, request_id: str, result: Mapping[str, Any]) -> None:
+        """Durably publish a completed result before attempting its webhook."""
+
+        path = self._result_path(request_id)
+        descriptor, temporary = tempfile.mkstemp(prefix="." + path.name + "-", dir=str(path.parent))
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(dict(result), handle, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        with self._lock:
+            record = self._requests.get(request_id)
+            if record is not None:
+                record["result"] = dict(result)
+
+    def get_result(self, binding_or_key: Any) -> Optional[Dict[str, Any]]:
+        """Read a durable simulated Chain result without relying on a webhook.
+
+        This rehearsal-only injected seam does not assert that production has a
+        matching Chain result endpoint.
+        """
+
+        result_key = getattr(binding_or_key, "result_key", binding_or_key)
+        if not isinstance(result_key, str):
+            return None
+        with self._lock:
+            record = self._requests.get(result_key)
+            if record is not None and isinstance(record.get("result"), Mapping):
+                return dict(record["result"])
+            for record in self._requests.values():
+                if isinstance(record.get("result_key"), str) and record["result_key"] == result_key:
+                    result = record.get("result")
+                    if isinstance(result, Mapping):
+                        return dict(result)
+        path = self._result_path(result_key)
+        if not path.is_file():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                result = json.load(handle)
+        except (OSError, ValueError):
+            return None
+        return dict(result) if isinstance(result, Mapping) else None
 
     def _segment_frames(self, run_id: str, episode_id: str, index: int, chunk: int) -> List[str]:
         """Persist one segment's frames and return their artifact URLs.
@@ -495,7 +578,12 @@ class RehearsalChainTransport:
 
         roll = _deterministic_unit("outcome", run_id, episode_id)
         chunk = int((payload.get("operating_point") or {}).get("action_chunk_size") or 16)
-        executed = chunks * chunk
+        horizon = int(payload.get("horizon_actions") or 0)
+        # The final segment is often shorter than the action chunk. Reporting a
+        # padded chunk count as executed would falsely certify actions the
+        # controller never requested and defeat the backend's exact-horizon
+        # contract.
+        executed = horizon if horizon > 0 else chunks * chunk
         base: Dict[str, Any] = {
             "run_id": run_id,
             "episode_id": episode_id,
@@ -508,14 +596,19 @@ class RehearsalChainTransport:
                 {
                     "index": index,
                     "status": "completed",
-                    "frame_urls": self._segment_frames(run_id, episode_id, index, chunk),
-                    "certified_frame_count": chunk,
+                    "frame_urls": self._segment_frames(
+                        run_id,
+                        episode_id,
+                        index,
+                        min(chunk, max(0, executed - index * chunk)),
+                    ),
+                    "certified_frame_count": min(chunk, max(0, executed - index * chunk)),
                     "provenance": "qualitative",
                 }
                 for index in range(chunks)
             ],
             "executed_actions": executed,
-            "horizon_actions": int(payload.get("horizon_actions") or executed),
+            "horizon_actions": horizon or executed,
             "timings": [
                 {"stage": name.replace("_seconds", ""), "seconds": round(value, 6)}
                 for name, value in timings.items()

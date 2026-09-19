@@ -1,5 +1,190 @@
 # PLUMB cluster operations — handoff for num2
 
+Final authentication recheck: Trillium BatchMode returned permission denied
+after job940190 completed and its evidence was mirrored. The last successful
+scheduler check was empty; no later job was submitted. No Duo retry was sent.
+Do not treat the earlier authenticated snapshots below as current access.
+
+## Current judge format-only pilot — do not deploy the adapter
+
+Training job 939998 and reload comparison 940000 completed from immutable release
+`f6b30d952be1b2e9cccf4c5915a4e85a636b22b620634e485dfde0ab77c08fc5`.
+The pilot used 12 development-train rows, 4 development rows, 24 steps, and a
+structure-only mask with zero semantic supervised tokens. Syntax loss changed
+1.71370849→0.02586903 and bare JSON 0/4→4/4, but judgments drifted 4/4 while
+both base and adapter remained schema-valid 4/4. Keep the adapter disabled.
+Evidence: local `data/live-integrated/cluster-evidence/judge-format-{pilot-939998,compare-940000}/report.json`; remote
+`/scratch/lchow432/plumb/experiments/judge-format-only-v1` and
+`evidence/judge-format-only-v1-comparison.json`. No new weights were downloaded;
+adapters stay cluster-only, gates are unchanged, and no human labels exist.
+Root verified live `/review` in isolated Chromium/temporary-DB QA: 16 clips and
+decoded images loaded; draft save/reload/resume, no JS errors, and no 390px
+horizontal overflow. Production review DB is absent and isolated
+`model_assisted` test drafts are not human labels. App tmux `plumb-live`
+PID19103 exposes24 diagnostics and all24 report URLs return200; health is
+`qualified=false`, all gates `not_run`, synthetic-only. Do not claim a live
+human-review outcome or full-scope completion. See `docs/JUDGE-FORMAT-PILOT.md`.
+
+SuSIE_LL job940190 COMPLETED0:0 in20 seconds on one H100, status
+`completed_unqualified`. It made two finite `[1,7]` gc_bc calls with exact
+reset/repeat on a static vendor first/final-frame fixture—not rollout, task
+success, Gate A/B, or primary evidence. Checkpoint:
+`/scratch/lchow432/plumb/models/patreya--gcbc-bridge/checkpoint/checkpoint`, SHA`80b354...`; publisher
+README declares MIT. Correct SOAR source is
+`/scratch/lchow432/plumb/source-soar-gcbc@eabd5f16a856e484884a22e257a941bb358cea08/model_training`,
+not wrong `bc60...`. Strict params-only inference restore used
+`target_params=None` and excluded optimizer state; it is not training resume.
+Full restore940180 and failures940172/940173/940174 are preserved locally.
+Evidence local `data/live-integrated/cluster-evidence/susie-ll-gcbc-940190/report.json`,
+remote `evidence/susie-ll-gcbc-static-goal-v5.json`, release `fdc52d...`. No
+adapter promotion; last successful scheduler check empty. Latest checks: Python1267 passed/6 skipped,
+frontend144 passed/build passed.
+
+## Access restored — latest continuation
+
+User reauthenticated; Trillium BatchMode SSH now works. Scheduler check showed
+no user jobs running. Completed model jobs were not repeated. Source review
+media23MB and the full v2 raw report bundle were mirrored locally; no model or
+adapter weights were copied. Actual development-review packets are ready; see
+HANDOFF.md's newest section. Earlier expired-session notes below are historical.
+
+## Latest — actual pilot and v2 diagnostic, SSH expired
+
+Teacher939423 COMPLETED0:0 (5m34s), optimizer training939451 COMPLETED0:0
+(46s), saved-adapter comparison939458 COMPLETED0:0 (1m42s). Actual adapter and
+metrics are in docs/JUDGE-PILOT-V1.md; never replay these jobs unchanged.
+Teacher-v2 diagnostic939753 reported a completed16-clip summary with75/80 valid
+sample slots butzero3-of-5 unique modes. Its raw bundle remains in
+`experiments/judge-teacher-v2-diagnostic`, not yet fully mirrored locally.
+
+Afterward Trillium's local control socket disappeared and BatchMode SSH failed
+with permission denied. LOCAL drac:0.0 is a laptop zsh prompt, no active SSH
+shell. One normal re-login sent a Duo push; it timed out and the agent-owned
+PTY was cancelled. User needs `ssh trillium-gpu` and Duo approval locally.
+Never repeatedly push, delete sockets, or disturb other cluster sessions.
+No new GPU task was launched after the completedv2 diagnostic. Recheck live
+Slurm state on reconnect. See docs/JUDGE-REVIEW-NEXT.md for transfer/audit steps.
+
+## Judge LoRA preflight — latest, 2026-09-19 afternoon
+
+Job939218 COMPLETED0:0 on one Trillium H100,57s Slurm elapsed. It checked
+Qwen LoRA forward/backward only: **no optimizer step, training run or adapter**.
+No jobs remained in `squeue` afterward. See docs/DISTILLATION_RUNBOOK.md's first
+section for actual metrics and pending user choice on an uncalibrated pilot.
+
+- Python: `/scratch/lchow432/plumb/venv-judge-lora-tf449/bin/python`.
+- Modules: `StdEnv/2023 python/3.11 arrow/19.0.1`; batch additionally loads
+  `cuda/12.2 cudnn/8.9.5.29`. Arrow module is required by Datasets/PyArrow.
+- Runtime lock: `evidence/judge-training-runtime-tf449-v1.json`.
+- Fixture: `fixtures/judge-lora-preflight-v1/row.json` with16 hash-bound PNGs
+  decoded from the original teacher MP4 and a separately bound scene reference.
+- Model view: `models/qwen-judge-training-view-cc594-v1`, a **hard-linked** view
+  of the existing Qwen files, excluding only downloader `.cache` metadata.
+  Every actual model/support file is independently hash-checked before load.
+  Do NOT edit weights in either view: their inodes are shared. No new weights
+  were downloaded. Only LoRA adapters may be saved to a fresh output directory.
+- Raw report/log: `evidence/judge-lora-preflight-939218.json` and
+  `logs/judge-lora-preflight-939218.log`; local copy is under
+  `data/live-integrated/cluster-evidence/judge-lora-preflight-939218/`.
+- Source release:82eb4ab6e401eea765857d7e568444d1dd9cc893ea774a35621d02f53c51fdf2.
+
+Do not relaunch this completed check unchanged. New training requires real
+dataset work and an explicit protocol/profile distinction; do not fabricate
+Gate D, preregistration or cohort proofs to satisfy the formal config parser.
+
+## Latest integration operations — 2026-09-19 late morning
+
+Allocation937277 expired TIMEOUT at09:11 EDT; the older running/pending notes
+are historical. Trillium BatchMode SSH works. One-H100 debug job938918 tested
+the newer production241fb Octo harness and FAILED before inference on a missing
+harness runtime field. Preserve its raw report/log. Retry938946 COMPLETED0:0
+with three actual production241fb native calls and exact reset/repeat. The new
+release and report locations are in HANDOFF.md. Do not repeat this successful
+check or mutate either release; neither check is a qualified policy evaluation.
+Both jobs are terminal; no new allocation is intentionally left running. Recheck
+live scheduler state before any future submission. The live local app is now
+LOCAL tmux `plumb-live`, port8787, using the merged main source; older plumb-api
+and PID65815 references below are historical. See HANDOFF.md for restart/data.
+
+Production241fb source and environment are separate from the old tested37951
+ones: `/scratch/lchow432/plumb/source-octo-autoeval241fb` and
+`/scratch/lchow432/plumb/venv-octo-autoeval241fb`. Runtime lock is
+`evidence/octo-runtime-autoeval241fb-v1.json` (SHA in HANDOFF.md). All weights and
+canonical input PNGs are reused, not re-downloaded. Its dlimp pinned dependency
+needs TF2.15.0 but the runtime uses reviewed2.15.1+computecanada; pip-check output
+and this explicit exception are in the lock. Do not call the environment exact
+upstream-equivalent or silently amend old runtime locks.
+
+Submit `cluster/octo_production_smoke.sbatch` from login with the immutable
+release directory, frame-00.png, frame-01.png, manifest.json, close_drawer.
+It requests one H100,24CPUs,15minutes, no explicit --mem. Imports/package locking
+on login use CUDA_VISIBLE_DEVICES=""; all actual inference runs in the job.
+Root exclusively owns cluster operations; coding agents must not SSH/tmux/srun.
+
+## Continuation update — 2026-09-19 morning
+
+This section supersedes the older capacity/allocation snapshot below.
+
+- All five SSH routes were successfully rechecked. Keep using the existing
+  multiplex connections; never delete sockets to recover an apparent error.
+- **937277 started at05:11 EDT**, with trig0010/trig0030 and eight H100s. Its
+  scheduled end is09:11 EDT. The new bounded Octo checks have completed; no
+  model step is still running. Root asked asynchronously whether to release
+  the now-idle parent allocation, because cancellation was previously withheld.
+  Without an explicit reply it remains intact; recheck `squeue` before acting.
+- Remote `drac:0.0` now contains the allocated compute shell on trig0010,
+  rather than a pending SALLOC request. The site rejects `srun --jobid=937277`
+  from a login node. Root launched steps from the **inspected idle compute
+  prompt** in that pane. Never send keys while a step or allocation wait is
+  active, and give cluster-control ownership to only one worker at a time.
+- Completed steps:937277.0 failed on the old Octo API keyword;937277.1 succeeded
+  with the corrected native-v0.1 API;937277.2 succeeded with eight workers.
+  Reports and logs are preserved. Source releases and artifact paths are in the
+  new first section of `HANDOFF.md`. These are policy diagnostics, not episodes.
+- Job937822 completed the new IRASim causal past-history replay on one H100.
+  It remains visibly distorted despite exact repeatability. Do not rerun it.
+- The LOCAL app now runs in tmux `plumb-api` on127.0.0.1:8787. This is unrelated
+  to all SSH/tmux allocation sessions; inspect its actual listener before restart.
+
+### Octo environment (do not mix with the older Python3.11 stacks)
+
+Use `/scratch/lchow432/plumb/venv-octo/bin/python` with
+`StdEnv/2023 python/3.10 cuda/12.2 cudnn/8.9.5.29`. It uses Alliance
+JAX/JAXlib0.4.20, Flax0.7.5, Orbax0.4.3, TF2.15.1 and exact TFP0.23.
+TF2.15.1 is a disclosed compatibility variation, not a source-equivalence claim.
+Runtime lockv2 and an inline package inventory live under `evidence/`; its SHA
+is `5c10b8881e8ab97830ee84f565aeebe1cb689f1d161359a64a2ca450a62e74b9`.
+
+`HF_HOME` must be `/scratch/lchow432/plumb/models/.hf-octo`, with both offline
+flags set. T5 config/tokenizer support is present; full T5 model weights were
+not needed. TensorFlow GPU visibility is disabled before model imports so JAX
+owns the allocated device. Preserve module `PYTHONPATH` when adding a release.
+
+`cluster/octo_smoke.sbatch` accepts a frozen source directory, two canonical
+PNG paths, their manifest, and a task ID. Reports now include job/step/rank to
+avoid overwriting a failure during retries inside the same allocation. Current
+verified RGB inputs are under
+`fixtures/octo-small-bridge-cv2-linear-rgb-256-v3/`: files `frame-00.png`,
+`frame-01.png`, and `manifest.json`, sourced from original frame indices0/2.
+Do not substitute the earlier0/1 fixture or the original480p MP4 silently.
+
+For a future *new hypothesis*, after checking an idle allocated shell:
+
+```bash
+srun --jobid=937277 --overlap --nodes=1 --ntasks=1 --gpus-per-node=1 \
+  --cpus-per-task=24 --time=00:15:00 \
+  --output=/scratch/lchow432/plumb/logs/octo-new-%J.log \
+  bash "$PLUMB_RELEASE/cluster/octo_smoke.sbatch" "$PLUMB_RELEASE" \
+  "$OCTO_INPUTS/frame-00.png" "$OCTO_INPUTS/frame-01.png" \
+  "$OCTO_INPUTS/manifest.json" close_drawer
+```
+
+Set those variables to inspected exact paths in that compute shell. If937277
+has expired, submit a bounded one-H100 batch job from login instead. Do not
+resubmit the completed conformance checks merely to reproduce their success.
+
+---
+
 Read with HANDOFF.md. Last capacity/auth check: 2026-09-19 at about04:11 EDT.
 Capacity is a snapshot: recheck before submitting. All five SSH connections worked.
 

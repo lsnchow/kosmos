@@ -167,6 +167,35 @@ def test_rollout_request_detects_identity_mismatch():
     assert wrong_protocol.matching_episode_requests() is False
 
 
+def test_rollout_request_requires_an_identity_bound_secret_free_result_key():
+    def stage() -> chain.StageRequest:
+        return chain.StageRequest(episode_id="ep-1", protocol_hash="ph-1")
+
+    unsigned = chain.RolloutRequest(
+        run_id="run-1", episode_id="ep-1", protocol_hash="ph-1", policy=stage(), world=stage(), validity=stage(), judge=stage()
+    )
+    binding = {
+        "result_key": "a" * 32,
+        "run_id": "run-1",
+        "episode_id": "ep-1",
+        "protocol_hash": "ph-1",
+        "request_payload_sha256": chain.request_payload_digest(unsigned.model_dump(mode="json")),
+    }
+    bound = unsigned.model_copy(update={"result_store": chain.ResultStoreBindingPayload(**binding)})
+    assert bound.matching_result_store_binding() is True
+    assert "bucket" not in bound.result_store.model_dump()
+    assert "endpoint" not in bound.result_store.model_dump()
+    assert bound.model_copy(update={"episode_id": "ep-2"}).matching_result_store_binding() is False
+
+
+def test_controller_declares_context_bound_result_store_credentials_before_execution():
+    source = CHAIN_PATH.read_text(encoding="utf-8")
+    assert "context: chains.DeploymentContext = chains.depends_context()" in source
+    assert "_result_store_credentials(self._deployment_context)" in source
+    assert "result_store_unavailable_before_execution" in source
+    assert "await self._run_remote(request)" in source
+
+
 def test_stage_result_rejects_unknown_stage_or_status():
     ok = chain.StageResult(stage="world", status="blocked", unresolved_contracts=["x"])
     assert ok.output is None

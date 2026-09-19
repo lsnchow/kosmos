@@ -93,6 +93,11 @@ class RunService:
         reasons: List[str] = []
         if not registered["requires_gates"]:
             return reasons
+        # A simulated transport exercises plumbing without claiming model gate
+        # evidence. This is a trusted adapter property, never a run-config flag.
+        adapter = self.backends.get(backend_name)
+        if adapter is not None and getattr(adapter, "transport_kind", None) == "simulated":
+            return reasons
         if backend_name not in self.backends and self.backend is None:
             reasons.append("no adapter is registered for backend '%s'" % backend_name)
         ledger = self.gate_ledger()
@@ -369,13 +374,29 @@ class RunService:
                 "message": str(exc),
                 "traceback": traceback.format_exc(limit=8),
             }
+            # A production adapter can persist raw remote-failure evidence
+            # before raising. Preserve its typed references in both the
+            # immutable terminal record and the ledger failure rather than
+            # replacing them with the generic traceback alone.
+            backend_failure_artifacts = getattr(exc, "artifact_refs", None)
+            backend_failure_projection = getattr(exc, "ledger_projection", None)
+            backend_failure = getattr(exc, "error", None)
+            if isinstance(backend_failure_artifacts, Mapping):
+                error["backend_failure_artifacts"] = dict(backend_failure_artifacts)
+            if isinstance(backend_failure_projection, Mapping):
+                error["backend_failure_projection"] = dict(backend_failure_projection)
+            if isinstance(backend_failure, Mapping):
+                error["backend_failure"] = dict(backend_failure)
             terminal = self._write_terminal_record(episode, "failed", error=error)
+            artifact_refs = {"terminal_record": terminal}
+            if isinstance(backend_failure_artifacts, Mapping):
+                artifact_refs = {**dict(backend_failure_artifacts), **artifact_refs}
             if self.ledger.cancellation_requested(str(episode["run_id"])):
                 self.ledger.cancel_episode(
                     str(episode["run_id"]),
                     episode_id,
                     "cancelled_during_execution",
-                    {"terminal_record": terminal},
+                    artifact_refs,
                     owner_token,
                     attempt_token,
                 )
@@ -384,9 +405,10 @@ class RunService:
                     str(episode["run_id"]),
                     episode_id,
                     error,
-                    {"terminal_record": terminal},
+                    artifact_refs,
                     owner_token,
                     attempt_token,
+                    metadata=backend_failure_projection if isinstance(backend_failure_projection, Mapping) else None,
                 )
 
     def _reconcile_terminal_artifact(self, episode: Mapping[str, Any], owner_token: str) -> bool:
