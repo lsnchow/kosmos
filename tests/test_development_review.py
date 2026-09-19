@@ -76,6 +76,18 @@ def test_lists_only_opaque_review_material_and_keeps_db_private(tmp_path):
     assert not review.db_path.exists(), "GET packet discovery must not create a ratings database"
 
 
+def test_session_does_not_coerce_null_or_numeric_reviewer_identity(tmp_path):
+    review = store(tmp_path)
+    with TestClient(app_with(review)) as client:
+        for invalid in (None, 123, True, {}, []):
+            response = client.post("/api/development-review/sessions", json={
+                "set_id": "pilot-review-v1", "reviewer_id": invalid,
+                "reviewer_kind": "human_self_reported",
+            })
+            assert response.status_code == 422
+    assert not review.db_path.exists()
+
+
 def test_explicit_human_post_creates_own_partial_draft_and_other_sessions_cannot_read_it(tmp_path):
     review = store(tmp_path)
     with TestClient(app_with(review)) as alice:

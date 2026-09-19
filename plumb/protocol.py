@@ -904,11 +904,11 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             asset_id="policy.susie_lowlevel",
             repo_id="patreya/gcbc-bridge",
             repo_type="model",
-            file_path="checkpoint_75000",
+            file_path="checkpoint/checkpoint",
             historical_size_estimate=258_718_956,
             license="MIT (advertised)",
             role="policy_component",
-            notices=("advertised MIT; confirm against repo contents before relying on it",),
+            notices=("publisher README advertises MIT; immutable Hub artifact is the direct Flax file checkpoint/checkpoint",),
         ),
         record(
             asset_id="judge.qwen2_5_vl_7b",

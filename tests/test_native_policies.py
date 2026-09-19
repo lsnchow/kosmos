@@ -1981,7 +1981,12 @@ def test_asset_plan_lock_entries_are_never_verified_and_keep_unknowns_null():
     sizes = {item["path"]: item["expected_bytes"] for item in vjepa["files"]}
     assert sizes == {"config.json": 785, "model.safetensors": 1303947864, "video_preprocessor_config.json": 1298}
     assert "original/*" in vjepa["ignore_patterns"]
-    assert _entry("susie-low-level")["files"][0]["expected_bytes"] == 258718956
+    susie_low_level = _entry("susie-low-level")
+    susie_files = {item["path"]: item["expected_bytes"] for item in susie_low_level["files"]}
+    assert susie_low_level["revision"] == "1a4c15dd9ad780a257e9494f0fac79cbe8e64793"
+    assert susie_low_level["license_status"] == "advertised_unverified"
+    assert susie_low_level["redistribution"] == "local_use_only"
+    assert susie_files == {"README.md": 24, "checkpoint/checkpoint": 258718956, "checkpoint/commit_success.txt": 162}
     assert _entry("openvla-7b")["files"] == []
     assert _entry("openvla-7b")["historical_total_estimate_bytes"] == 15085000000
 

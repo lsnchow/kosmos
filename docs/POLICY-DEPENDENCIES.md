@@ -61,8 +61,13 @@ still requires its own fixtures and Gate A/B evidence.
   specifies `gc_ddpm_bc`, horizon 4, and `delta_goals` for the low-level
   policy. The separate sensitivity ID is
   `susie-upstream-gc-ddpm-bc-sensitivity`; it must never replace or pool with
-  the AutoEval replication arm. Its agent/config source is [BridgeData V2
+  the AutoEval replication arm. Its corrected-agent/config source is [BridgeData V2
   `bc60a35b701a12021c8c95e9d8601274d3acd928`](https://github.com/rail-berkeley/bridge_data_v2/tree/bc60a35b701a12021c8c95e9d8601274d3acd928).
+- AutoEval's released `gc_bc` replication instead names the optional
+  [`rail-berkeley/soar/model_training`](https://github.com/rail-berkeley/soar/tree/eabd5f16a856e484884a22e257a941bb358cea08/model_training)
+  JAXRL source. The production static SuSIE_LL diagnostic uses that clean
+  checkout root (`source-soar-gcbc`) and its `model_training/` import subtree;
+  it does not substitute BridgeData V2's incompatible `gc_bc` API.
 - The low-level-only IDs are `susie-ll-autoeval-gc-bc-replication` and
   `susie-ll-upstream-gc-ddpm-bc-sensitivity`. SuSIE_LL requires a
   scenario-provenance goal image; it does not turn task text into a fabricated
@@ -79,6 +84,25 @@ still requires its own fixtures and Gate A/B evidence.
   `80b354db7a05d514d6df5b5a4395469902b0ff362d383edeeb4abb8c1c9d9e33`.
   That component is `gc_bc`; it is not evidence or weights for the corrected
   `gc_ddpm_bc` arm.
+- Its immutable Hub layout is a direct Flax file `checkpoint/checkpoint`, not
+  the historical original-GCS name `checkpoint_75000` retained in
+  `checkpoint/commit_success.txt`. Flax default directory discovery can return
+  an initialized target without error when given the parent directory, so the
+  direct path and an initialized-versus-restored tensor digest are mandatory.
+  A tiny SuSIE_LL diagnostic may use it without the high-level diffusion model,
+  but only with a hash-bound, distinct current/goal source-video pair and an
+  explicit source/runtime compatibility-deviation label.
+- **Actual unqualified static diagnostic:** job `940190` completed one
+  source-native released-arm `gc_bc` action on hash-bound vendor-video first/
+  final-frame conditioning. It used release
+  `fdc52dcb09cebae2bdcd3d213a4865aa28c43f87be425f483a456a01afca44ea`,
+  strict parameters-only (not optimizer/resume) restore, a finite 1×7 action,
+  and an exact reset repeat. First call `8.5735383 s` includes model load;
+  loaded repeat `0.00886015 s`. Report:
+  `data/live-integrated/cluster-evidence/susie-ll-gcbc-940190/report.json`.
+  This remains a static-goal engineering trace—never a task success, benchmark
+  policy result, generated-image feedback result, or Gate A/B pass. Four prior
+  failed diagnostics remain separately preserved.
 - The high-level path also needs a separately pinned, local,
   license-recorded `lodestones/stable-diffusion-v1-5-flax` snapshot. AutoEval
   did not pin its revision, so PLUMB refuses high-level loading until the
@@ -87,7 +111,7 @@ still requires its own fixtures and Gate A/B evidence.
   hashes that file against the recorded digest *and* verifies SHA-256 records
   for every regular file in the source-loaded `vae/`, `text_encoder/`, and
   `tokenizer/` subtrees. Paths outside those trees, symlinks, unrecorded files,
-  or revision/model-ID mismatches block loading. It also requires clean local SuSIE, BridgeData V2, and AutoEval
+  or revision/model-ID mismatches block loading. It also requires clean local SuSIE, SOAR model-training (for the released `gc_bc` arm), and AutoEval
   checkouts with exact reviewed HEADs, and verifies that imported sampler and
   JAXRL agent code resolve inside the corresponding checkout.
 - Runtime tuple from the source requirements: Python 3.10, JAX 0.4.11, Flax

@@ -210,6 +210,69 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                 item.update(model="Octo-Small v1.0 worker consistency", stage="policy_reproducibility",
                             timing_scope="no_episode_or_burst_timing",
                             notes=_replica_notes(path, report))
+            elif kind == "plumb_susie_ll_gcbc_static_goal_fixture":
+                source_release = report.get("source_release")
+                error = _mapping(report.get("error"))
+                item.update(
+                    model="SuSIE_LL published gc_bc low-level component",
+                    stage="policy_static_goal_fixture",
+                    source_release=source_release if isinstance(source_release, str) and len(source_release) == 64 else None,
+                    static_goal_fixture=True,
+                    high_level_subgoal_assets_imported=report.get("high_level_subgoal_assets_imported") is True,
+                    timing_scope="one_static_goal_fixture_policy_call_only",
+                    notes=[
+                        "Static current/goal vendor-video fixture only; not a rollout, task-success, physics, Gate, or primary-study result.",
+                        "No high-level SuSIE subgoal or gated component is imported by this diagnostic.",
+                    ],
+                )
+                if report.get("status") == "failed":
+                    item.update(
+                        error_type=error.get("type") if isinstance(error.get("type"), str) else "unknown",
+                        error_message=error.get("message") if isinstance(error.get("message"), str) else "no error message recorded",
+                    )
+                    item["notes"].insert(0, "Fixture diagnostic failed before a policy action was established; inspect the raw report.")
+                else:
+                    actions = _mapping(report.get("actions"))
+                    first = actions.get("transformed_physical")
+                    repeat = actions.get("repeat_transformed_physical")
+                    action_shape = actions.get("shape")
+                    action_ok = (
+                        isinstance(first, list)
+                        and len(first) == 1
+                        and isinstance(first[0], list)
+                        and len(first[0]) == 7
+                        and all(isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) for value in first[0])
+                    )
+                    runtime = _mapping(report.get("runtime"))
+                    module_versions = _mapping(runtime.get("module_versions"))
+                    restore = _mapping(report.get("restore"))
+                    fixture_timing = _mapping(report.get("timing"))
+                    first_seconds = _number(
+                        fixture_timing.get(
+                            "first_propose_wall_seconds_including_model_load",
+                            fixture_timing.get("first_call_wall_seconds"),
+                        )
+                    )
+                    repeat_seconds = _number(fixture_timing.get("repeat_propose_wall_seconds_model_already_loaded"))
+                    native_calls = _number(fixture_timing.get("total_native_calls"))
+                    item.update(
+                        action_shape=action_shape if action_shape == [1, 7] and action_ok else None,
+                        finite_action=bool(actions.get("finite") is True and action_ok),
+                        reset_repeat_matches=bool(action_ok and first == repeat),
+                        restore_changed=restore.get("changed") if isinstance(restore.get("changed"), bool) else None,
+                        jax_version=module_versions.get("jax") if isinstance(module_versions.get("jax"), str) else None,
+                        first_propose_seconds_including_model_load=first_seconds,
+                        repeat_propose_seconds_model_already_loaded=repeat_seconds,
+                        total_native_calls=native_calls,
+                        timing_scope=(
+                            "two_native_proposals_first_includes_model_load_repeat_already_loaded"
+                            if native_calls == 2 and first_seconds is not None and repeat_seconds is not None
+                            else "static_goal_fixture_two_proposal_timing_partially_reported"
+                        ),
+                    )
+                    item["notes"].append(
+                        "A completed 1×7 finite action/reset-repeat check is runtime conformance only and does not establish success or fidelity."
+                    )
             elif kind == "plumb_uncalibrated_judge_lora_pilot":
                 timing = {"wall_seconds": report.get("wall_seconds"),
                           "gpu_peak_memory_bytes": report.get("gpu_peak_memory_bytes")}

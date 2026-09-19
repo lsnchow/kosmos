@@ -175,6 +175,72 @@ def test_live_integrated_judge_format_reports_expose_only_structure_metrics_and_
     assert "teacher" not in json.dumps(rows) and "raw_output" not in json.dumps(rows)
 
 
+def test_susie_ll_static_goal_fixture_preserves_failure_without_claiming_an_action(tmp_path):
+    write(tmp_path / "live-integrated" / "cluster-evidence" / "susie-failed" / "report.json", {
+        "kind": "plumb_susie_ll_gcbc_static_goal_fixture",
+        "status": "failed",
+        "qualified": False,
+        "source_release": "a" * 64,
+        "high_level_subgoal_assets_imported": False,
+        "error": {"type": "SuSIEUnavailableError", "message": "runtime version mismatch", "traceback": "private traceback"},
+    })
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["status"] == "failed" and row["outcome"] == "unknown"
+    assert row["error_type"] == "SuSIEUnavailableError"
+    assert row["error_message"] == "runtime version mismatch"
+    assert row["qualified"] is False and "action_shape" not in row
+    assert "traceback" not in json.dumps(row)
+    assert "static" in " ".join(row["notes"]).lower()
+
+
+def test_susie_ll_static_goal_fixture_completed_runtime_shape_stays_unqualified(tmp_path):
+    write(tmp_path / "live-integrated" / "cluster-evidence" / "susie-completed" / "report.json", {
+        "kind": "plumb_susie_ll_gcbc_static_goal_fixture",
+        "status": "completed_unqualified",
+        "qualified": False,
+        "source_release": "b" * 64,
+        "high_level_subgoal_assets_imported": False,
+        "actions": {
+            "shape": [1, 7],
+            "finite": True,
+            "transformed_physical": [[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]],
+            "repeat_transformed_physical": [[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]],
+        },
+        "restore": {"changed": True, "private": "do not expose"},
+        "runtime": {"module_versions": {"jax": "0.4.20+computecanada", "private": "do not expose"}},
+        "timing": {"first_call_wall_seconds": 1.25},
+    })
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["status"] == "completed_unqualified" and row["qualified"] is False
+    assert (row["action_shape"], row["finite_action"], row["reset_repeat_matches"], row["restore_changed"]) == (
+        [1, 7],
+        True,
+        True,
+        True,
+    )
+    assert row["jax_version"] == "0.4.20+computecanada"
+    assert "success" in " ".join(row["notes"]).lower()
+    assert "private" not in json.dumps(row)
+
+
+def test_susie_ll_legacy_completed_fixture_keeps_old_timing_without_claiming_one_call(tmp_path):
+    write(tmp_path / "live-integrated" / "cluster-evidence" / "susie-legacy" / "report.json", {
+        "kind": "plumb_susie_ll_gcbc_static_goal_fixture",
+        "status": "completed_unqualified",
+        "qualified": False,
+        "source_release": "c" * 64,
+        "high_level_subgoal_assets_imported": False,
+        "actions": {"shape": [1, 7], "finite": True, "transformed_physical": [[0.0] * 7], "repeat_transformed_physical": [[0.0] * 7]},
+        "runtime": {"module_versions": {"jax": "0.4.20+legacy"}},
+        "restore": {"changed": False},
+        "timing": {"first_call_wall_seconds": 1.0},
+    })
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["first_propose_seconds_including_model_load"] == 1.0
+    assert row["repeat_propose_seconds_model_already_loaded"] is None
+    assert row["timing_scope"] == "static_goal_fixture_two_proposal_timing_partially_reported"
+
+
 def test_replica_summary_requires_digest_bound_complete_raw_reports(tmp_path):
     summary = tmp_path / "cluster-evidence" / "replicas" / "summary.json"
     worker = summary.parent / "reports" / "worker.json"

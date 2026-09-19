@@ -583,8 +583,10 @@ def register_development_review_routes(app: FastAPI, store: DevelopmentReviewSto
                 raise DevelopmentReviewError("session body must be valid JSON") from error
             if not isinstance(value, Mapping) or set(value) != {"set_id", "reviewer_id", "reviewer_kind"}:
                 raise DevelopmentReviewError("session requires set_id, reviewer_id, and reviewer_kind")
+            if any(not isinstance(value[field], str) for field in ("set_id", "reviewer_id", "reviewer_kind")):
+                raise DevelopmentReviewError("session identifiers and reviewer kind must be explicitly entered strings")
             payload, session_token = store.create_session(
-                str(value["set_id"]), str(value["reviewer_id"]), str(value["reviewer_kind"])
+                value["set_id"], value["reviewer_id"], value["reviewer_kind"]
             )
         except KeyError:
             raise HTTPException(404, "Development review set not found")
