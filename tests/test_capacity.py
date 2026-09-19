@@ -11,6 +11,7 @@ from plumb.capacity import (
     MeasuredLatencies,
     chunked_prefix,
     fallback_episode_count,
+    plan_burst,
     plan_capacity,
     required_world_latency,
     smallest_sufficient_cap,
@@ -174,3 +175,50 @@ def test_plan_serialises_json_safely_and_names_its_assumptions():
     assert payload["feedback_qualified"] is False
     assert payload["latencies_are_measured"] is False
     assert payload["binding_limit"] in ("per_episode_latency", "aggregate_throughput")
+
+
+def test_the_burst_sizes_itself_and_never_reduces_the_study():
+    """No capacity change is needed for the demo to run honestly."""
+
+    fast = _lat(world_peak_memory_bytes=int(36.52 * 1024**3))
+    small = plan_burst(
+        plan_capacity(fast, DeploymentCapacity(max_replicas=1, world_batch_size=2), chunked_prefix(16))
+    )
+    assert small.is_subset is True
+    assert 0 < small.achievable_episodes < small.requested_episodes
+    assert "subset" in small.caveat
+    assert small.to_mapping()["study_is_never_reduced"] is True
+
+    ample = plan_burst(
+        plan_capacity(fast, DeploymentCapacity(max_replicas=100, world_batch_size=2), chunked_prefix(16))
+    )
+    assert ample.is_subset is False
+    assert ample.meets_target is True
+    assert ample.caveat is None
+
+
+def test_a_latency_bound_burst_says_capacity_would_not_help():
+    """The honest answer when one episode alone exceeds the window."""
+
+    slow = _lat(policy_seconds=0.836, world_seconds=4.52)
+    burst = plan_burst(
+        plan_capacity(slow, DeploymentCapacity(max_replicas=100000), NATIVE_FEEDBACK)
+    )
+    assert burst.achievable_episodes == 0
+    assert burst.meets_target is False
+    assert "no amount of added capacity" in burst.caveat
+    assert burst.binding_limit == "per_episode_latency"
+
+
+def test_the_burst_caption_is_derived_not_typed():
+    """The headline must track the arithmetic, so a slide cannot drift from it."""
+
+    fast = _lat(world_peak_memory_bytes=int(36.52 * 1024**3))
+    for replicas in (1, 5, 30):
+        plan = plan_capacity(
+            fast, DeploymentCapacity(max_replicas=replicas, world_batch_size=2), chunked_prefix(16)
+        )
+        burst = plan_burst(plan)
+        assert str(burst.achievable_episodes) in burst.headline
+        if burst.is_subset:
+            assert str(burst.requested_episodes) in burst.headline

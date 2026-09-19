@@ -443,6 +443,116 @@ def required_world_latency(
     }
 
 
+@dataclass(frozen=True)
+class BurstPlan:
+    """A live burst sized to the capacity that actually exists.
+
+    The project's stated target is 1,500 episodes in 60 seconds.  Whether that
+    fits is a measurement, not a decision, and it depends on capacity nobody is
+    guaranteed to have.  Rather than requiring an account change before the demo
+    can run, this sizes the *live* burst to whatever is available and states
+    plainly what it is.
+
+    Spec section 7 draws the line this respects: the 1,500-episode **study** is
+    never reduced to fit a window.  Only the on-stage burst is a subset, and it
+    is labelled one.
+    """
+
+    requested_episodes: int
+    achievable_episodes: int
+    wall_seconds_for_achievable: float
+    wall_seconds_for_full: float
+    binding_limit: str
+    meets_target: bool
+    is_subset: bool
+    headline: str
+    caveat: Optional[str]
+
+    def to_mapping(self) -> Dict[str, Any]:
+        return {
+            "requested_episodes": self.requested_episodes,
+            "achievable_episodes": self.achievable_episodes,
+            "wall_seconds_for_achievable": round(self.wall_seconds_for_achievable, 2),
+            "wall_seconds_for_full": round(self.wall_seconds_for_full, 2),
+            "binding_limit": self.binding_limit,
+            "meets_60s_target": self.meets_target,
+            "is_subset_of_the_study": self.is_subset,
+            "headline": self.headline,
+            "caveat": self.caveat,
+            "study_is_never_reduced": True,
+        }
+
+
+def plan_burst(plan: CapacityPlan) -> BurstPlan:
+    """Size the live burst from a capacity plan, and write its honest caption.
+
+    The caption is generated here rather than typed into a slide so it cannot
+    drift from the arithmetic that produced it.  There are three cases and each
+    gets a different sentence:
+
+    * the whole matrix fits in the window;
+    * a subset fits, so the burst is a subset and says so;
+    * not even one episode fits, because the per-episode latency floor exceeds
+      the window -- in which case no capacity change would help and claiming
+      otherwise would be false.
+    """
+
+    achievable = plan.episodes_achievable_in_target()
+    full_wall = plan.wall_seconds
+
+    if achievable >= plan.episodes:
+        return BurstPlan(
+            requested_episodes=plan.episodes,
+            achievable_episodes=plan.episodes,
+            wall_seconds_for_achievable=min(full_wall, TARGET_SECONDS),
+            wall_seconds_for_full=full_wall,
+            binding_limit=plan.binding_limit,
+            meets_target=True,
+            is_subset=False,
+            headline="%d episodes in under %.0f seconds" % (plan.episodes, TARGET_SECONDS),
+            caveat=None,
+        )
+
+    if achievable <= 0:
+        return BurstPlan(
+            requested_episodes=plan.episodes,
+            achievable_episodes=0,
+            wall_seconds_for_achievable=plan.episode_latency_seconds,
+            wall_seconds_for_full=full_wall,
+            binding_limit=plan.binding_limit,
+            meets_target=False,
+            is_subset=True,
+            headline="one episode takes %.0f s; the %.0f s window fits none"
+            % (plan.episode_latency_seconds, TARGET_SECONDS),
+            caveat=(
+                "Latency-bound: a single episode's sequential policy/world loop already exceeds the "
+                "window, so no amount of added capacity changes this. The lever is per-round latency "
+                "or a Gate-B-qualified larger executed prefix."
+            ),
+        )
+
+    per_episode_gpu = plan.world_gpu_seconds / plan.episodes if plan.episodes else 0.0
+    seconds = (
+        per_episode_gpu * achievable / plan.capacity.max_replicas
+        if plan.capacity.max_replicas
+        else TARGET_SECONDS
+    )
+    return BurstPlan(
+        requested_episodes=plan.episodes,
+        achievable_episodes=achievable,
+        wall_seconds_for_achievable=max(plan.episode_latency_seconds, seconds),
+        wall_seconds_for_full=full_wall,
+        binding_limit=plan.binding_limit,
+        meets_target=False,
+        is_subset=True,
+        headline="%d of %d episodes in %.0f seconds" % (achievable, plan.episodes, TARGET_SECONDS),
+        caveat=(
+            "This live burst is a subset. The full %d-episode study still runs and is reported in "
+            "full; at this capacity it completes in %.0f s." % (plan.episodes, full_wall)
+        ),
+    )
+
+
 def fallback_episode_count(plan: CapacityPlan) -> Dict[str, Any]:
     """What to run live when the full matrix will not fit in the target window.
 
@@ -475,12 +585,14 @@ __all__ = [
     "TARGET_SECONDS",
     "TARGET_USD",
     "CapacityError",
+    "BurstPlan",
     "CapacityPlan",
     "DeploymentCapacity",
     "FeedbackProfile",
     "MeasuredLatencies",
     "chunked_prefix",
     "fallback_episode_count",
+    "plan_burst",
     "plan_capacity",
     "required_world_latency",
     "smallest_sufficient_cap",

@@ -15,7 +15,8 @@ credentials or people — with the blocker named) or **fail** (something is
 broken). It exits non-zero only on a `fail`. When the steps below are done, run
 `--require-qualified`, which turns every remaining `pending` into a failure.
 
-Current state: **15 pass, 8 pending, 0 fail.**
+Current state: **15 pass, 8 pending, 0 fail.** Nothing below requires an approval
+or a request to a third party: every remaining step is self-serve.
 
 ---
 
@@ -83,15 +84,41 @@ micro-batched H100 world worker, a CPU validity worker, and a GPU judge worker.
 The Chain has already been validated against the real `truss==0.18.30` framework
 validator — zero errors, all nine construct — so a push should not surprise you.
 
-Then record the Chain ID into `BASETEN_CHAIN_ASYNC_URL`, and ask Baseten to raise
-the replica cap. The exact wording to use at the booth is in `BUILD-SPEC.md`:
+Then record the Chain ID into `BASETEN_CHAIN_ASYNC_URL`. That is the whole step.
 
-> "can you raise our inference concurrency to a hundred replicas for a sixty-second
-> burst on Sunday morning — we want to reproduce a 1,500-trial robot study live on
-> stage."
+### You do not need a raised replica cap
 
-The default `max_replica` is 1. If the cap is not raised, `BUILD-SPEC.md`'s
-fallback is 400 rollouts at 30 replicas — and the number on the slide changes.
+`BUILD-SPEC.md` scripts a booth ask for 100 replicas. The arithmetic says that
+was the wrong knob, and `plumb/capacity.py` works it out from measured inputs:
+
+- **Per-episode latency is irreducible by replica count.** Each episode's
+  policy/world loop is sequential (spec section 7); only episodes parallelise. At
+  OpenVLA's certified native cadence a 100-tick task is 100 sequential rounds, so
+  with the recorded latencies one episode needs ~536 s. `smallest_sufficient_cap`
+  returns `None` there — not a large number, *impossible*.
+- **Batch packing is capped by memory, not preference.** The recorded 36.5 GB
+  peak per call means a batch of 16 does not fit on an 80 GB H100. The planner
+  reduces a requested 16 to 2 and says why.
+- **Per-call latency beats replicas.** Going from 4.52 s to 0.30 s per call buys
+  more than going from 1 to 100 replicas — and that is a resolution and
+  denoising-steps decision entirely in your control, which is what the
+  cost/fidelity sweep is for.
+
+So the burst sizes itself. `plan_burst()` reads the measured capacity and writes
+its own caption, so the number on screen can never drift from the arithmetic:
+
+```
+cap=1    68 of 1500 episodes in 60 seconds
+cap=5    344 of 1500 episodes in 60 seconds
+cap=30   1500 episodes in under 60 seconds
+```
+
+Spec section 7's line is preserved either way: the **1,500-episode study is never
+reduced** to fit a window. It runs in full and is reported in full. Only the live
+on-stage burst is a subset, and it is labelled one.
+
+If you happen to learn your actual cap, feed it in and the caption updates. No
+request to anyone is required for the demo to run or to be honest.
 
 ## Step 3 — stage the assets (1–3 hours, mostly download)
 
