@@ -1,5 +1,12 @@
 # Start message for a new chat named num2
 
+LATEST: user approved pilot andsaidkeepgoing. **Actualjudge fine-tune939451 and
+saved-adapter reload939458 completed**; not justpreflight. Read HANDOFF first
+and docs/JUDGE-PILOT-V1.md. Do NOT scalev1: all7 retainedteacher targets came
+fromsingleton votes andshareartifact/visible/5/met; adapter copiedthisbias.
+Next is the separateteacher-v2 prompt/selection diagnostic, with≥3/5agreement,
+not primarydeployment orclaimingcalibration. Older approval-pending textis stale.
+
 NEW PRIORITY: judge fine-tuning. Read HANDOFF.md's **Judge fine-tuning priority**
 section and the first section of docs/DISTILLATION_RUNBOOK.md. H100939218 passed
 real LoRA forward/backward compatibility, but no optimizer training or adapter

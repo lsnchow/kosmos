@@ -121,6 +121,18 @@ def test_judge_gradient_check_is_not_a_trained_adapter_or_task_score(tmp_path):
     assert row["latency_seconds"] == 12 and row["video_url"] is None
 
 
+def test_actual_unqualified_pilot_exposes_steps_not_scientific_score(tmp_path):
+    write(tmp_path / "cluster-evidence" / "pilot.json", {
+        "kind": "plumb_uncalibrated_judge_lora_pilot", "status": "completed_unqualified_exploratory_pilot",
+        "optimizer_steps": 8, "wall_seconds": 30, "validation_loss_before_training": .9,
+        "selected_checkpoint": {"development_validation_loss": .5}})
+    row = experiments_payload(tmp_path)["experiments"][0]
+    assert row["stage"] == "judge_training_pilot" and row["optimizer_steps"] == 8
+    assert row["qualified"] is False and row["outcome"] == "unknown"
+    assert row["development_loss_selected"] == .5 and row["total_seconds"] is None
+    assert "not human accuracy" in " ".join(row["notes"])
+
+
 def test_replica_summary_requires_digest_bound_complete_raw_reports(tmp_path):
     summary = tmp_path / "cluster-evidence" / "replicas" / "summary.json"
     worker = summary.parent / "reports" / "worker.json"

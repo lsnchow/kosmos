@@ -206,6 +206,23 @@ def experiments_payload(root: Path) -> Dict[str, Any]:
                 item.update(model="Octo-Small v1.0 worker consistency", stage="policy_reproducibility",
                             timing_scope="no_episode_or_burst_timing",
                             notes=_replica_notes(path, report))
+            elif kind == "plumb_uncalibrated_judge_lora_pilot":
+                timing = {"wall_seconds": report.get("wall_seconds"),
+                          "gpu_peak_memory_bytes": report.get("gpu_peak_memory_bytes")}
+                selected = _mapping(report.get("selected_checkpoint"))
+                item.update(model="Qwen2.5-VL-7B experimental LoRA pilot", stage="judge_training_pilot",
+                            timing_scope="training_and_validation_excludes_model_setup",
+                            optimizer_steps=_number(report.get("optimizer_steps")),
+                            development_loss_before=_number(report.get("validation_loss_before_training")),
+                            development_loss_selected=_number(selected.get("development_validation_loss")),
+                            notes=["Actual optimizer training on uncalibrated teacher-labelled development clips.",
+                                   "Development label loss is not human accuracy, calibration, or a primary study result.",
+                                   "Saved adapters stay on the cluster; no automatic scoring deployment."])
+            elif kind == "plumb_unqualified_judge_lora_adapter_reload_comparison":
+                item.update(model="Qwen2.5-VL saved-adapter comparison", stage="judge_adapter_reload",
+                            timing_scope="development_inference_diagnostic_only",
+                            notes=["Saved adapter reloaded and paired with the base model on development-validation clips.",
+                                   "Agreement is against an uncalibrated teacher, not human ground truth or Gate-E evidence."])
             elif kind == "plumb_judge_lora_framework_preflight":
                 timing = {"wall_seconds": report.get("wall_seconds"),
                           "gpu_peak_memory_bytes": report.get("gpu_peak_memory_bytes")}

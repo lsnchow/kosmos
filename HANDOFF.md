@@ -1,5 +1,81 @@
 # PLUMB execution handoff — implementation in progress
 
+## Actual judge pilot trained and reloaded — 2026-09-19 afternoon
+
+**Actual optimizer training is now complete.** User approved the unqualified
+pilot; do not revert to approval-pending/preflight-only instructions below.
+Teacher939423, training939451 and adapter-reload939458 all COMPLETED0:0.
+Two epochs/8 optimizer steps on4 accepted training clips;3 development clips.
+Dev loss0.7981337→0.6012993→0.3868534. Selected saved adapter epoch02 tree SHA
+7a0b7796a0ac8b78fbb8ba8f4c4db01fe8d35c2edc3cb7a0fbeec9f4fb20523e.
+
+**Do NOT scale or deploy this v1 judge.** All7 accepted labels came from a
+single valid vote (sample2), all artifact/visible/5/met; no3/5 teacher quorum.
+The reloaded adapter repeats that tuple onall3 dev clips, while the base says
+intact. This is observed label/selection bias, not improved human accuracy.
+See `docs/JUDGE-PILOT-V1.md` for complete measured results, artifact paths,
+source releases, preserved failure and raw-summary counter caveat.
+
+Work continues on a separate experimental teacher-v2 **prompt/selection
+diagnostic**, not more v1 training: explicit integrity/collision definitions,
+exact enum consistency reminder, require unique semantic mode≥3/5. It must
+not alter the global primary judge, repair old responses, or fill gates.
+The user asked to keep going; next is running the bounded v2 diagnostic on
+the existing16 developmental inputs and reviewing actual schema/agreement.
+
+Teacher-v2 diagnostic job939753 was submitted from immutable source release
+948d59d53df2e7ce644ba2177702d00fe89854a33b258e99acecd99cb46d1151.
+Output namespace: `/scratch/lchow432/plumb/experiments/judge-teacher-v2-diagnostic`.
+Same base model/runtime/16 source clips; it is NOT the v1 trained adapter.
+It produces raw reports and summary only, never training JSONL or gate records.
+Recheck scheduler and per-clip reports before resuming; all v1 artifacts remain
+untouched. Latest local full suite:1,221passed/6skipped.
+
+## Approved experimental judge pilot — acquisition/execution history
+
+The user explicitly approved the unqualified teacher-labelled development
+pilot and instructed continued execution. The earlier approval-pending text
+below is superseded. Do not ask the same permission again.
+
+Frozen selection:16 distinct real Bridge close-drawer episodes,12 train and4
+development validation, from dataset revision0e9d76d07e9df3ea3eba257b2520d4913833fad2.
+Selection SHA18717375576b9fb3e08606a7e09b30d73f2dd731b167b3e99c0866f122cf5bf8;
+local `data/judge-pilot-v1-selection.json`, remote `fixtures/judge-pilot-v1-selection.json`.
+All16 source lineages, including later abstentions, remain excluded from future
+formal study/calibration. This pilot does NOT replace the full6×5×50 scope.
+
+Remote prepared data:
+`/scratch/lchow432/plumb/experiments/judge-lora-pilot-v1-prepared`.
+Each clip has16 distinct lossless RGB PNGs sampled from its actual video,
+Parquet nominal timestamps, and initial scene context (NOT a fabricated goal).
+No robot-state/gripper conversion occurs. Original source receipts and media
+are preserved. Only2,666,878 bytes of selected video/Parquet were acquired;
+no model weights were downloaded.
+
+Acquisition caught a real large-Hub-listing bug: repo_info.siblings omitted12
+selected videos. `cluster/download_assets.py` now queries exact explicit paths
+or a paginated tree, checks the full byte ceiling, and writes no-clobber named
+receipts. Old20-file receipt `evidence/IPEC-COMMUNITY--bridge_orig_lerobot-download.json`
+and partial prepared directory `experiments/judge-lora-pilot-v1` are preserved.
+Complete32-file receipt: `evidence/judge-pilot-v1-source-complete-download.json`.
+
+Teacher job939398 failed before model inference because a new collector expected
+model_id rather than the existing download manifest's repo field. It is fixed
+by reusing the same full file/hash/revision validator as the training path;
+the failed job/log and immutable release80a737fb... are preserved.
+Teacher retry939423 later COMPLETED; the earlier running snapshot is historical. Its immutable release is
+`cacf20c6120b4511c6bb5a2fe76c249dea2842b61d538bcfec26a87b59f1832d`.
+It uses existing Qwen7B weights and venv-judge-lora-tf449, one H100 debug15min.
+Check actual `squeue`/`sacct` and rawteacher per-clip files before any retry.
+
+Next actions: finish teacher collection (resumable completed hash-matched clips),
+validate finalinputs/splits, then actually run `cluster/judge_lora_pilot.sbatch`
+with `cluster/judge_lora_pilot_config.json`, a NEW outputdir and the pinned model
+view. Two manual AdamW epochs, r64/alpha32/lr1e-4/batch1/seed20260919; every real
+optimizer step/checkpoint/loss is recorded. Then run the saved-adapter reload
+comparison on the originally assigned dev-validation clips only. No Gate-D/E,
+human accuracy, formal search, primary score, or calibrated-judge claim.
+
 ## Judge fine-tuning priority — 2026-09-19 afternoon
 
 User explicitly requested judge fine-tuning ASAP. **Actual optimizer training
