@@ -1,4 +1,4 @@
-import { Expand, Layers } from "lucide-react";
+import { Expand, Gamepad2, Layers, Target } from "lucide-react";
 import { formatCount } from "../lib/format";
 import { cn } from "../lib/utils";
 import {
@@ -16,7 +16,7 @@ import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
  * Per-tile provenance. Without it a replayed clip and a live one are the same
  * pixels, which is the single easiest way for this demo to mislead somebody.
  */
-function ProvenanceBadge({ slot }: { slot: TileSlot }) {
+export function ProvenanceBadge({ slot }: { slot: TileSlot }) {
   const mixed = provenanceIsMixed(slot);
   if (!slot.provenance) {
     return (
@@ -59,10 +59,14 @@ function RolloutTile({
   slot,
   index,
   onExpand,
+  onDrive,
+  outOfScope,
 }: {
   slot?: TileSlot;
   index: number;
   onExpand?: (slot: TileSlot) => void;
+  onDrive?: (slot: TileSlot) => void;
+  outOfScope?: boolean;
 }) {
   const label = `#${String(index + 1).padStart(2, "0")}`;
 
@@ -90,9 +94,11 @@ function RolloutTile({
   const igniting = slot.frames.length > 0;
   return (
     <article
-      className={cn("rollout-tile", igniting && "rollout-tile-lit")}
+      className={cn("rollout-tile", igniting && "rollout-tile-lit", outOfScope && "rollout-tile-unscoped")}
       style={{ animationDelay: `${ignitionDelayMs(index)}ms` }}
-      aria-label={`Viewport slot ${label}: ${slot.policy} on ${slot.task}`}
+      aria-label={`Viewport slot ${label}: ${slot.policy} on ${slot.task}${
+        outOfScope ? ", outside the selected task scope" : ""
+      }`}
     >
       <FramePlayer
         frames={slot.frames}
@@ -110,9 +116,19 @@ function RolloutTile({
               type="button"
               className="tile-expand"
               onClick={() => onExpand(slot)}
-              aria-label={`Open free-play control for ${slot.policy} on ${slot.task}`}
+              aria-label={`Enlarge the persisted clip for ${slot.policy} on ${slot.task}`}
             >
               <Expand aria-hidden="true" className="size-3.5" />
+            </button>
+          )}
+          {onDrive && (
+            <button
+              type="button"
+              className="tile-expand"
+              onClick={() => onDrive(slot)}
+              aria-label={`Open free-play control for ${slot.policy} on ${slot.task}`}
+            >
+              <Gamepad2 aria-hidden="true" className="size-3.5" />
             </button>
           )}
         </div>
@@ -144,16 +160,25 @@ export function RolloutWall({
   wall,
   runId,
   onExpand,
+  onDrive,
   streamNote,
+  scopedTask,
+  scopedInstruction,
 }: {
   wall: WallState;
   runId?: string;
   onExpand?: (slot: TileSlot) => void;
+  onDrive?: (slot: TileSlot) => void;
   streamNote?: React.ReactNode;
+  /** A task id from the frozen registry, chosen on the landing page. */
+  scopedTask?: string;
+  /** The verbatim instruction for `scopedTask`, for the disclosure line. */
+  scopedInstruction?: string;
 }) {
   const assigned = wall.slots.filter((slot): slot is TileSlot => slot !== undefined);
   const withFrames = assigned.filter((slot) => slot.frames.length > 0);
   const totalFrames = assigned.reduce((sum, slot) => sum + slot.frames.length, 0);
+  const inScope = scopedTask ? assigned.filter((slot) => slot.task === scopedTask).length : undefined;
 
   return (
     <Panel
@@ -178,6 +203,14 @@ export function RolloutWall({
             viewport
           </span>
         )}
+        {scopedTask !== undefined && (
+          <span className="wall-scope">
+            <Target aria-hidden="true" className="size-3.5" />
+            Scoped to {scopedInstruction ? `“${scopedInstruction}”` : scopedTask} ·{" "}
+            <b className="tabular-nums">{formatCount(inScope)}</b> matching slots, the rest dimmed rather
+            than dropped
+          </span>
+        )}
       </div>
       {assigned.length === 0 ? (
         <EmptyState className="wall-empty" icon={<Layers aria-hidden="true" className="size-5" />}>
@@ -187,7 +220,14 @@ export function RolloutWall({
       ) : (
         <div className="rollout-grid">
           {wall.slots.map((slot, index) => (
-            <RolloutTile key={slot?.key ?? `slot-${index}`} slot={slot} index={index} onExpand={onExpand} />
+            <RolloutTile
+              key={slot?.key ?? `slot-${index}`}
+              slot={slot}
+              index={index}
+              onExpand={onExpand}
+              onDrive={onDrive}
+              outOfScope={scopedTask !== undefined && slot !== undefined && slot.task !== scopedTask}
+            />
           ))}
         </div>
       )}

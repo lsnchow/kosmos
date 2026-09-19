@@ -11,8 +11,17 @@ treatment, the display/body/mono type pairing, the fullscreen-video landing
 treatment with a dark overlay, the centered tab navigation with an accent
 underline, and the example-gallery card pattern.
 
-What was **not** taken: none of Mirage's application code, pipeline, models, or
-data. PLUMB's components, state, data model and accessibility work are its own.
+Three component *shapes* were also ported, rewritten rather than copied:
+
+| PLUMB | Adapted from |
+|---|---|
+| `TabSelector` | `TabSelector.tsx` — generalised, with `role="tablist"`, `aria-selected` and arrow-key navigation added |
+| `StageLadder` | `ProgressSteps.tsx` — the labelled left-rail pipeline, re-aimed at PLUMB's four-stage Chain and given a "not reported" state |
+| `GalleryModal` | `GalleryModal.tsx` — keeps its portal-to-`document.body` fix (commit `db98e0f`), adds a focus trap and focus restoration |
+
+What was **not** taken: none of Mirage's stylesheet, pipeline, models, or data,
+and none of its application logic. PLUMB's state, data model, copy and
+accessibility work are its own.
 
 Mirage is MIT licensed. Its notice is reproduced in full below as that licence
 requires.

@@ -5,15 +5,18 @@ import { BurstPanel } from "./components/BurstPanel";
 import { CalledShotPanel, calledShotFromProtocol } from "./components/CalledShotPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FreeplayDialog } from "./components/FreeplayDialog";
+import { GalleryModal } from "./components/GalleryModal";
 import { GatePanel, gateBlockers } from "./components/GatePanel";
 import { HeroRollout } from "./components/HeroRollout";
+import { LandingPage } from "./components/LandingPage";
 import { Note } from "./components/Primitives";
 import { pushSample, type ReplicaSample } from "./components/ReplicaChart";
-import { RolloutWall } from "./components/RolloutWall";
+import { ProvenanceBadge, RolloutWall } from "./components/RolloutWall";
 import { RunLedgerPanel } from "./components/RunLedgerPanel";
 import { Scoreboard } from "./components/Scoreboard";
 import { SixClipPanel } from "./components/SixClipPanel";
 import { SmokeEvidencePanel } from "./components/SmokeEvidencePanel";
+import { StageLadder } from "./components/StageLadder";
 import { SweepPanel } from "./components/SweepPanel";
 import { TelemetryStrip } from "./components/TelemetryStrip";
 import { useNow, usePolling, usePresentationMode } from "./hooks/usePolling";
@@ -33,7 +36,8 @@ import {
   type Telemetry,
 } from "./lib/api";
 import { burstIdempotencyKey, burstIdentity, burstRequestBody } from "./lib/burst";
-import { isTerminalStatus, pickNumber, pickString, toDate } from "./lib/format";
+import { formatCount, isTerminalStatus, pickNumber, pickString, toDate } from "./lib/format";
+import { taskInstruction } from "./lib/tasks";
 import { cn } from "./lib/utils";
 import { applyEpisodes, applySegment, createWall, type TileSlot } from "./lib/wall";
 
@@ -75,6 +79,10 @@ export default function App() {
   const [freeplayOpen, setFreeplayOpen] = useState(false);
   const [freeplaySubject, setFreeplaySubject] = useState<string>();
   const [cancelOpen, setCancelOpen] = useState(false);
+  /** A task id from the frozen registry, chosen on the landing page. */
+  const [scopedTask, setScopedTask] = useState<string>();
+  /** The wall tile currently blown up to full screen. */
+  const [viewerSlot, setViewerSlot] = useState<TileSlot>();
   const [presentation, setPresentation] = usePresentationMode();
   const now = useNow();
   const lastSampleAt = useRef<number>();
@@ -250,6 +258,17 @@ export default function App() {
     setFreeplayOpen(true);
   };
 
+  /**
+   * Move from the landing page to a console region. The console is below the
+   * landing in the same document, so this is a scroll plus a focus move — there
+   * is no route to break and nothing unmounts mid-pitch.
+   */
+  const enterConsole = (anchor: string) => {
+    const target = typeof document === "undefined" ? null : document.getElementById(anchor);
+    target?.scrollIntoView({ block: "start" });
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  };
+
   const backends = Array.isArray(health?.available_backends)
     ? health.available_backends.filter((item): item is string => typeof item === "string")
     : [];
@@ -260,11 +279,12 @@ export default function App() {
         Skip to console
       </a>
       <header className="topbar">
-        <a className="brand" href="#console" aria-label="PLUMB measurement console home">
+        <a className="brand" href="#main" aria-label="PLUMB landing page">
           <span className="brand-mark">P</span>
           <span>PLUMB</span>
         </a>
         <nav aria-label="Console sections">
+          <a href="#stages">Chain</a>
           <a href="#sixclip">Clips</a>
           <a href="#calledshot">Called shot</a>
           <a href="#rollouts">Wall</a>
@@ -295,7 +315,26 @@ export default function App() {
         </div>
       </header>
 
-      <main id="console" className="console">
+      <main id="main">
+        <ErrorBoundary region="Landing page">
+          <LandingPage
+            runs={runs}
+            episodes={episodes}
+            gates={gates}
+            protocol={protocol}
+            scopedTask={scopedTask}
+            onScopeTask={setScopedTask}
+            onEnterConsole={enterConsole}
+            onOpenFreeplay={() => openFreeplay()}
+          />
+        </ErrorBoundary>
+
+        {/*
+          The console keeps its own id and stays in the document below the
+          landing, so the skip link, every in-page anchor and the whole stage
+          sequence work exactly as before.
+        */}
+        <div id="console" className="console" tabIndex={-1}>
         <section className="masthead">
           <div>
             <p className="eyebrow">
@@ -357,10 +396,30 @@ export default function App() {
           </ErrorBoundary>
         </section>
 
-        <section id="rollouts" className="workspace-grid">
-          <ErrorBoundary region="Rollout viewport">
-            <RolloutWall wall={wall} runId={activeRun?.id} onExpand={openFreeplay} />
-          </ErrorBoundary>
+        <section id="rollouts" className="workspace-grid" tabIndex={-1}>
+          {/* The Chain ladder sits directly under the wall it describes: the
+              tiles show frames arriving, the ladder shows which of the four
+              stages actually reported them. */}
+          <div className="workspace-main">
+            <ErrorBoundary region="Rollout viewport">
+              <RolloutWall
+                wall={wall}
+                runId={activeRun?.id}
+                onExpand={setViewerSlot}
+                onDrive={openFreeplay}
+                scopedTask={scopedTask}
+                scopedInstruction={taskInstruction(scopedTask)}
+              />
+            </ErrorBoundary>
+            <ErrorBoundary region="Chain stages">
+              <StageLadder
+                wall={wall}
+                episodes={episodes}
+                runId={activeRun?.id}
+                runTerminal={runIsTerminal}
+              />
+            </ErrorBoundary>
+          </div>
           <aside className="side-stack">
             <ErrorBoundary region="Run ledger">
               <RunLedgerPanel runs={runs} activeRun={activeRun} onSelect={(run) => void loadRun(run)} />
@@ -427,6 +486,9 @@ export default function App() {
             Sources: application ledger, persisted artifacts, declared platform telemetry, and published
             reference.
           </span>
+          <a href="/THIRD-PARTY-NOTICES.md" target="_blank" rel="noreferrer">
+            Third-party notices <ExternalLink aria-hidden="true" className="size-3" />
+          </a>
           <a href="/api/protocol" target="_blank" rel="noreferrer">
             Protocol record <ExternalLink aria-hidden="true" className="size-3" />
           </a>
@@ -436,7 +498,50 @@ export default function App() {
           stream. Every number carries the source that produced it; where a source reported nothing, the panel
           says so rather than showing a zero.
         </Note>
+        </div>
       </main>
+
+      {/* One wall tile at full screen. Provenance travels with the clip: a
+          replayed frame must not lose its label by being made bigger. */}
+      <GalleryModal
+        open={viewerSlot !== undefined}
+        onClose={() => setViewerSlot(undefined)}
+        title={viewerSlot ? `${viewerSlot.policy} · ${viewerSlot.task}` : ""}
+        subtitle={viewerSlot?.episodeId ?? "episode id not reported"}
+        frames={viewerSlot?.frames ?? []}
+        emptyReason="No persisted segment event has reached this slot, so there is no frame to enlarge."
+        badge={viewerSlot ? <ProvenanceBadge slot={viewerSlot} /> : undefined}
+        meta={
+          viewerSlot
+            ? [
+                { label: "Run", value: viewerSlot.runId ?? "not reported" },
+                { label: "Segments", value: formatCount(viewerSlot.segmentCount) },
+                {
+                  label: "Frames",
+                  value:
+                    viewerSlot.certifiedFrameCount === undefined
+                      ? `${formatCount(viewerSlot.frames.length)} · certified count not reported`
+                      : `${formatCount(viewerSlot.certifiedFrameCount)} certified`,
+                },
+                { label: "Resolution", value: viewerSlot.resolution ?? "not reported" },
+              ]
+            : []
+        }
+        footer={
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => {
+              const slot = viewerSlot;
+              setViewerSlot(undefined);
+              openFreeplay(slot);
+            }}
+          >
+            <Expand aria-hidden="true" className="size-4" />
+            Take the controls
+          </button>
+        }
+      />
 
       <FreeplayDialog open={freeplayOpen} onOpenChange={setFreeplayOpen} subjectLabel={freeplaySubject} />
 

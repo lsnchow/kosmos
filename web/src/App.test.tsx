@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 import App from "./App";
-import { http, installEventSource, mockFetch } from "./test/harness";
+import { FakeEventSource, http, installEventSource, mockFetch } from "./test/harness";
 
 const PROTOCOL = {
   policies: ["OpenVLA", "OpenPiZero", "Octo", "MiniVLA", "SuSIE", "SuSIE_LL"],
@@ -376,5 +376,153 @@ describe("PLUMB console against the current backend responses", () => {
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
     expect(screen.getByText(/No replica counts have been reported/)).toBeInTheDocument();
     expect(screen.getByText(/No telemetry event has arrived yet\./)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The landing page and the console share one document: the landing is the first
+ * screen, the console sits below it, and every in-page anchor the stage sequence
+ * uses still resolves. Nothing routes, so nothing can unmount mid-pitch.
+ */
+describe("PLUMB landing page over the console", () => {
+  it("opens on the wordmark with the console still in the document", async () => {
+    await renderConsole();
+    expect(screen.getByRole("heading", { level: 1, name: "PLUMB" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Measure the ruler before trusting the ranking/i }),
+    ).toBeInTheDocument();
+    // One main landmark, with both screens inside it.
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(document.getElementById("console")).not.toBeNull();
+  });
+
+  it("resolves every landing destination to a console region that exists", async () => {
+    await renderConsole();
+    for (const anchor of ["console", "rollouts", "gates"]) {
+      expect(document.getElementById(anchor), anchor).not.toBeNull();
+    }
+    for (const region of ["#stages", "#sixclip", "#calledshot", "#rollouts", "#burst", "#sweep", "#scoreboard", "#gates"]) {
+      const link = document.querySelector(`.topbar nav a[href="${region}"]`);
+      expect(link, region).not.toBeNull();
+      expect(document.getElementById(region.slice(1)), region).not.toBeNull();
+    }
+  });
+
+  it("has no free-text input anywhere, including the surface that calls the world model", async () => {
+    await renderConsole();
+    const assertNoFreeText = (where: string) => {
+      expect(document.querySelectorAll("textarea"), where).toHaveLength(0);
+      expect(document.querySelectorAll("[contenteditable]"), where).toHaveLength(0);
+      const typed = [...document.querySelectorAll("input")].map((input) => input.type);
+      expect(typed.filter((type) => type !== "range"), where).toEqual([]);
+    };
+    assertNoFreeText("landing and console");
+
+    // Free-play is the only surface that dispatches to the world model directly.
+    fireEvent.click(screen.getByRole("button", { name: /Drive the world model/i }));
+    expect(await screen.findByRole("dialog", { name: /Free-play control/i })).toBeInTheDocument();
+    assertNoFreeText("free-play dialog");
+    expect(screen.getByText(/Fixed instruction, clamped actions, release to stop/i)).toBeInTheDocument();
+  });
+
+  it("advances the Chain ladder when a real segment event lands", async () => {
+    await renderConsole();
+    const stages = screen.getByRole("heading", { name: /Chain stages/i }).closest(".panel") as HTMLElement;
+
+    // Before any segment event the world stage waits; it does not assume.
+    expect(within(stages).getByText(/No segment_completed event has arrived yet/)).toBeInTheDocument();
+    // The other three stages have records but not their own fields.
+    expect(within(stages).getAllByText("not reported")).toHaveLength(3);
+    expect(within(stages).getByText(/action horizon not reported/)).toBeInTheDocument();
+    expect(within(stages).getByText(/validity not reported/)).toBeInTheDocument();
+    expect(within(stages).getByText(/no binary outcome reported/)).toBeInTheDocument();
+
+    const source = FakeEventSource.latest();
+    expect(source?.url).toBe("/api/runs/run-1/events");
+    act(() =>
+      source?.emit("segment_completed", {
+        episode_id: "ep-1",
+        run_id: "run-1",
+        policy: "OpenVLA",
+        task: "close_drawer",
+        segment_index: 0,
+        frame_urls: ["run-1/ep-1/2.png"],
+        certified_frame_count: 14,
+        provenance: "live",
+      }),
+    );
+
+    // Both episode rows already carried 16 certified frames each before any event
+    // arrived; this event adds its own 14. One event, forty-six frames — the two
+    // counts keep separate subjects instead of being folded into one number.
+    expect(
+      within(stages).getByText("1 segment event · 46 certified frames accumulated"),
+    ).toBeInTheDocument();
+    expect(within(stages).getByRole("status")).toHaveTextContent("1 of 4 stages have reported");
+  });
+
+  it("reports the certified count as absent when a segment omits it", async () => {
+    await renderConsole();
+    const stages = screen.getByRole("heading", { name: /Chain stages/i }).closest(".panel") as HTMLElement;
+    act(() =>
+      FakeEventSource.latest()?.emit("segment_completed", {
+        episode_id: "ep-1",
+        run_id: "run-1",
+        policy: "OpenVLA",
+        task: "close_drawer",
+        segment_index: 0,
+        frame_urls: ["run-1/ep-1/2.png", "run-1/ep-1/3.png"],
+      }),
+    );
+    expect(
+      within(stages).getByText(
+        "1 segment event · 32 certified frames accumulated · 1 without a certified count",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("scopes the viewport from a task chip without dropping a slot", async () => {
+    await renderConsole();
+    fireEvent.click(screen.getByRole("button", { name: "Close the drawer" }));
+    expect(screen.getByText(/the rest dimmed rather than dropped/i)).toBeInTheDocument();
+    expect(screen.getByText(/Scoped to “Close the drawer”/)).toBeInTheDocument();
+    expect(document.querySelectorAll(".rollout-tile")).toHaveLength(12);
+    expect(
+      screen.getByLabelText(/Viewport slot #02: OpenVLA on open_drawer, outside the selected task scope/i),
+    ).toBeInTheDocument();
+  });
+
+  it("blows a wall tile up to full screen and gives the focus back on close", async () => {
+    await renderConsole();
+    const expand = screen.getByRole("button", {
+      name: /Enlarge the persisted clip for OpenVLA on close_drawer/i,
+    });
+    expand.focus();
+    fireEvent.click(expand);
+
+    const dialog = screen.getByRole("dialog", { name: "OpenVLA · close_drawer" });
+    expect(within(dialog).getByText("run-1")).toBeInTheDocument();
+    expect(within(dialog).getByText("16 certified")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Take the controls/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "OpenVLA · close_drawer" })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(expand);
+  });
+
+  it("hands a tile straight to free-play, which is the stage path", async () => {
+    await renderConsole();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Open free-play control for OpenVLA on close_drawer/i }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: /Free-play control/i });
+    expect(dialog).toHaveAccessibleName(/OpenVLA · close_drawer/);
+  });
+
+  it("links the third-party notices from both footers", async () => {
+    await renderConsole();
+    const links = screen.getAllByRole("link", { name: /Third-party notices/i });
+    expect(links.length).toBeGreaterThanOrEqual(2);
+    for (const link of links) expect(link).toHaveAttribute("href", "/THIRD-PARTY-NOTICES.md");
   });
 });

@@ -8,6 +8,10 @@ import { cn } from "../lib/utils";
  * because an evidence clip that plays itself invites the reader to treat it as
  * live. The accumulated-frame players below are the presentation surfaces.
  */
+export function isVideoSource(src: string | undefined): boolean {
+  return typeof src === "string" && /\.(mp4|webm|mov)(\?|$)/i.test(src);
+}
+
 export function MediaFrame({
   src,
   alt,
@@ -27,7 +31,7 @@ export function MediaFrame({
       </div>
     );
   }
-  const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(src);
+  const isVideo = isVideoSource(src);
   return isVideo ? (
     <video className={cn("media", className)} controls muted playsInline src={src} aria-label={alt} />
   ) : (
