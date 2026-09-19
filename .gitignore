@@ -11,7 +11,13 @@ __pycache__/
 web/node_modules/
 web/dist/
 data/
-results/
+# Run outputs stay untracked, but provenance evidence is cited by source files
+# (cluster/asset_plan.py license_evidence/mirror_evidence), so a dangling
+# citation would be worse than a tracked file.
+results/*
+!results/provenance/
+results/provenance/*
+!results/provenance/*.json
 models/
 *.sqlite*
 *.safetensors

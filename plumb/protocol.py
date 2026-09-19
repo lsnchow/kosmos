@@ -842,8 +842,16 @@ def _plan_record_from_cluster_entry(entry: Mapping[str, Any]) -> AssetRecord:
 
     license_status = str(entry.get("license_status") or "unresolved")
     access = str(entry.get("access") or "unknown")
-    # Only a checked license on a publicly reachable asset counts as resolved.
-    access_status = "resolved" if (license_status == "verified" and access == "public") else "unresolved"
+    # A checked licence on a reachable asset counts as resolved. "Reachable"
+    # includes a source repository: cluster/resolve_licenses.py retrieves and
+    # hashes those LICENSE files at their pinned revision exactly as it does for
+    # a model repo, so excluding them left genuinely verified rows unresolved.
+    # A gated asset is never resolved here, whatever its licence says.
+    access_status = (
+        "resolved"
+        if (license_status == "verified" and access in ("public", "source_repository"))
+        else "unresolved"
+    )
 
     notices = []
     for key in ("notes", "notices", "traps"):

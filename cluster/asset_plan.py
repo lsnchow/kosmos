@@ -14,6 +14,27 @@ This module is data plus validation, not a downloader.  It exists so that:
 Sizes here are discovery aids.  ``expected_bytes`` is used only where the spec
 states an exact byte count; everything else is
 ``historical_estimate_bytes`` and is never treated as verification.
+
+Three vocabularies are deliberately separate, because collapsing them is what
+made runnable assets look blocked:
+
+``license_status``
+    How well the terms are *established*.  ``advertised_unverified`` is a claim
+    on a model card that nobody checked; ``verified`` means
+    ``cluster/resolve_licenses.py`` retrieved and hashed a real license file at
+    the pinned revision and recorded it in :class:`LicenseEvidence`.  A status
+    may not be hand-edited to ``verified``: :meth:`AssetPlanEntry.errors` refuses
+    the row without that evidence.
+``local_use``
+    Whether PLUMB may *run* the bytes.  This is what the primary matrix needs.
+``redistribution``
+    Whether PLUMB may *ship* the bytes.  PLUMB ships none, so an unresolved
+    redistribution term is recorded and then does not block anything.
+
+``cluster/compare_mirror.py`` fills :class:`MirrorEvidence` for a ``mirror_of``
+row.  ``byte_identity`` is ``proven`` only when every compared file matched a
+retrieved official hash; a size match alone never proves it, and the governing
+license travels with the weights rather than with the host.
 """
 from __future__ import annotations
 
@@ -36,10 +57,31 @@ AUTOEVAL_CODE_REVISION = "3ea3ff44c6950433cfbcb4294a3deaa616533745"
 OPEN_PI_ZERO_CODE_REVISION = "c3df7fb062175c16f69d7ca4ce042958ea238fb7"
 OPENVLA_CODE_REVISION = "c8f03f48af692657d3060c19588038c7220e9af9"
 
+#: The commits the saved comparison in
+#: ``results/provenance/mirror-comparison-paligemma.json`` ran at.  Both rows keep
+#: ``revision=None``: resolving a head commit is a lookup, and adopting it as a
+#: pin is a reviewed act the operator performs, not something a tool infers.
+PALIGEMMA_COMPARED_OFFICIAL_REVISION = "35e4f46485b4d07967e7e9935bc3786aad50687c"
+PALIGEMMA_COMPARED_MIRROR_REVISION = "39996beb6fb17c5d16a50d3ef8f7a96ad9d03986"
+
 UNRESOLVED_REVISION_BLOCKER = "unresolved_immutable_revision"
 UNRESOLVED_LICENSE_BLOCKER = "unresolved_license_or_access_terms"
 MISSING_HASH_BLOCKER = "no_downloaded_file_hashes"
 GATED_TERMS_BLOCKER = "gated_access_terms_not_recorded_as_accepted"
+MISSING_LICENSE_EVIDENCE_BLOCKER = "no_retrieved_license_file_evidence"
+LOCAL_USE_BLOCKER = "local_use_terms_unresolved"
+UNPROVEN_BYTE_IDENTITY_BLOCKER = "mirror_byte_identity_unproven"
+
+#: Where ``cluster/resolve_licenses.py`` and ``cluster/compare_mirror.py`` save
+#: their evidence, repository-relative so a lock row can cite a stable path.
+PROVENANCE_EVIDENCE_DIR = "results/provenance"
+LICENSES_EVIDENCE_PATH = PROVENANCE_EVIDENCE_DIR + "/licenses.json"
+
+
+def mirror_evidence_path(asset: str) -> str:
+    """The saved comparison report path for one mirror candidate."""
+
+    return "%s/mirror-comparison-%s.json" % (PROVENANCE_EVIDENCE_DIR, asset)
 
 
 class RepoType(str, Enum):
@@ -50,10 +92,18 @@ class RepoType(str, Enum):
 
 
 class LicenseStatus(str, Enum):
-    """How well the license/access terms are actually established."""
+    """How well the license/access terms are actually established.
+
+    ``VERIFIED`` is the only value that asserts somebody read the license.  It
+    requires a :class:`LicenseEvidence` record naming the retrieved file, its
+    SHA-256, and the revision it was read at, so the status can never be typed
+    in by hand.  ``ADVERTISED_UNVERIFIED`` means a repository *claims* a license
+    that nobody has checked, which is not the same thing.
+    """
 
     DECLARED = "declared"
     ADVERTISED_UNVERIFIED = "advertised_unverified"
+    VERIFIED = "verified"
     GATED_TERMS_REQUIRED = "gated_terms_required"
     ABSENT_CARD_DATA_NULL = "absent_cardData_null"
     UNRESOLVED = "unresolved"
@@ -64,6 +114,31 @@ class Redistribution(str, Enum):
     LOCAL_USE_ONLY = "local_use_only"
     PROHIBITED_PENDING_RESOLUTION = "prohibited_pending_resolution"
     UNRESOLVED = "unresolved"
+
+
+class LocalUse(str, Enum):
+    """Whether PLUMB may run these bytes locally -- *not* whether it may ship them.
+
+    The two questions are independent and the plan used to conflate them, which
+    made rows look blocked when only their redistribution term was open.  The
+    primary matrix needs local use; it never needed a redistribution answer.
+
+    ``PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS`` is a recorded decision with its
+    basis, not a license claim: the publisher distributes the bytes publicly, we
+    read no express grant, we run them locally, and we redistribute nothing.
+    """
+
+    PERMITTED_BY_LICENSE = "permitted_by_license"
+    PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS = "permitted_local_only_no_express_terms"
+    REQUIRES_ACCEPTED_TERMS = "requires_accepted_terms"
+    UNRESOLVED = "unresolved"
+
+
+class ByteIdentity(str, Enum):
+    """Whether a mirror's bytes were *proved* identical to the official host's."""
+
+    PROVEN = "proven"
+    UNPROVEN = "unproven"
 
 
 class Access(str, Enum):
@@ -112,6 +187,119 @@ class PlannedFile:
 
 
 @dataclass(frozen=True)
+class LicenseEvidence:
+    """What a license resolution actually retrieved, hashed, and read it at.
+
+    Every field describes a real retrieval.  ``spdx`` is populated only when the
+    retrieved text was positively identified; an unrecognised license file keeps
+    ``spdx=None`` with its bytes still hashed, so a human can read the file the
+    tool could not classify.  ``reason`` explains a failure instead of letting a
+    guess fill the gap.
+    """
+
+    evidence_path: str
+    spdx: Optional[str] = None
+    license_file_path: Optional[str] = None
+    license_file_sha256: Optional[str] = None
+    revision: Optional[str] = None
+    retrieved_at: Optional[str] = None
+    source_url: Optional[str] = None
+    reason: Optional[str] = None
+
+    @property
+    def retrieved_a_license_file(self) -> bool:
+        return bool(self.license_file_path and _is_sha256(self.license_file_sha256))
+
+    def errors(self) -> Tuple[str, ...]:
+        problems: List[str] = []
+        if not self.evidence_path:
+            problems.append("license evidence must cite the saved report it came from")
+        if self.license_file_sha256 is not None and not _is_sha256(self.license_file_sha256):
+            problems.append("license_file_sha256 must be a 64-character hexadecimal digest")
+        if self.spdx is not None and not self.retrieved_a_license_file:
+            problems.append("an SPDX identifier may only be recorded for a license file that was retrieved and hashed")
+        if self.revision is not None and not _is_commit(self.revision):
+            problems.append("license evidence revision must be a full 40-character commit")
+        return tuple(problems)
+
+    def payload(self) -> Dict[str, Any]:
+        return {
+            "evidence_path": self.evidence_path,
+            "spdx": self.spdx,
+            "license_file_path": self.license_file_path,
+            "license_file_sha256": self.license_file_sha256,
+            "revision": self.revision,
+            "retrieved_at": self.retrieved_at,
+            "source_url": self.source_url,
+            "reason": self.reason,
+            "retrieved_a_license_file": self.retrieved_a_license_file,
+        }
+
+
+@dataclass(frozen=True)
+class MirrorEvidence:
+    """A saved file-by-file mirror comparison for one gated asset.
+
+    ``byte_identity`` is copied from the saved report, never assumed, and the
+    plan refuses ``PROVEN`` unless every compared file matched.  ``governing_license``
+    records that using a mirror changes the delivery path, not the license.
+    """
+
+    evidence_path: str
+    official_repo_id: str
+    byte_identity: ByteIdentity
+    files_compared: int = 0
+    files_matched: int = 0
+    governing_license: Optional[str] = None
+    unproven_reasons: Tuple[str, ...] = ()
+    #: The commits the comparison actually ran at.  Recorded here rather than as
+    #: the rows' ``revision``, because adopting a commit as a pin is the
+    #: operator's reviewed act (see ``download_assets.py --resolve-revision``).
+    official_revision: Optional[str] = None
+    mirror_revision: Optional[str] = None
+
+    def errors(self) -> Tuple[str, ...]:
+        problems: List[str] = []
+        if not self.evidence_path:
+            problems.append("mirror evidence must cite the saved comparison report")
+        if not self.official_repo_id:
+            problems.append("mirror evidence must name the official repository it was compared against")
+        for label, value in (("official_revision", self.official_revision), ("mirror_revision", self.mirror_revision)):
+            if value is not None and not _is_commit(value):
+                problems.append("mirror evidence %s must be a full 40-character commit" % label)
+        if self.byte_identity is ByteIdentity.PROVEN and not (self.official_revision and self.mirror_revision):
+            problems.append("proven byte identity must record both commits it was proved at")
+        if self.files_compared < 0 or self.files_matched < 0:
+            problems.append("mirror file counts cannot be negative")
+        if self.files_matched > self.files_compared:
+            problems.append("more files matched than were compared")
+        if self.byte_identity is ByteIdentity.PROVEN:
+            if self.files_compared == 0:
+                problems.append("byte identity cannot be proven from zero compared files")
+            elif self.files_matched != self.files_compared:
+                problems.append(
+                    "byte identity cannot be proven while %d of %d files did not match a retrieved official hash"
+                    % (self.files_compared - self.files_matched, self.files_compared)
+                )
+        elif not self.unproven_reasons:
+            problems.append("unproven byte identity must record why it is unproven")
+        return tuple(problems)
+
+    def payload(self) -> Dict[str, Any]:
+        return {
+            "evidence_path": self.evidence_path,
+            "official_repo_id": self.official_repo_id,
+            "byte_identity": self.byte_identity.value,
+            "files_compared": int(self.files_compared),
+            "files_matched": int(self.files_matched),
+            "governing_license": self.governing_license,
+            "unproven_reasons": list(self.unproven_reasons),
+            "official_revision": self.official_revision,
+            "mirror_revision": self.mirror_revision,
+        }
+
+
+@dataclass(frozen=True)
 class AssetPlanEntry:
     """One pinned asset: what to fetch, under what terms, and what to watch for."""
 
@@ -138,6 +326,16 @@ class AssetPlanEntry:
     notes: Tuple[str, ...] = ()
     traps: Tuple[str, ...] = ()
     blockers: Tuple[str, ...] = field(default_factory=tuple)
+    #: Whether PLUMB may run these bytes locally, independently of whether it may
+    #: ship them.  ``redistribution`` answers the other question.
+    local_use: LocalUse = LocalUse.UNRESOLVED
+    #: Populated by ``cluster/resolve_licenses.py``; the only thing that may turn
+    #: ``license_status`` into ``verified``.
+    license_evidence: Optional[LicenseEvidence] = None
+    #: Set on a mirror row to name the official asset it stands in for.
+    mirror_of: Optional[str] = None
+    #: Populated by ``cluster/compare_mirror.py`` for a ``mirror_of`` row.
+    mirror_evidence: Optional[MirrorEvidence] = None
 
     def allow_patterns(self) -> Tuple[str, ...]:
         """Literal Hub-API patterns; never the percent-encoded URL form."""
@@ -186,6 +384,9 @@ class AssetPlanEntry:
             problems.append("an unresolved license must record the %r blocker" % UNRESOLVED_LICENSE_BLOCKER)
         if self.access is Access.GATED_ACCEPT_TERMS and GATED_TERMS_BLOCKER not in self.blockers:
             problems.append("gated access must record the %r blocker until terms are accepted" % GATED_TERMS_BLOCKER)
+        problems.extend(self._license_evidence_errors())
+        problems.extend(self._local_use_errors())
+        problems.extend(self._mirror_errors())
         if self.revision is None:
             if UNRESOLVED_REVISION_BLOCKER not in self.blockers:
                 problems.append("a missing revision must record the %r blocker" % UNRESOLVED_REVISION_BLOCKER)
@@ -202,6 +403,88 @@ class AssetPlanEntry:
             problems.append("%s entries describe a whole artifact, not Hub file paths" % self.repo_type.value)
         return tuple(problems)
 
+    def _license_evidence_errors(self) -> Tuple[str, ...]:
+        """A ``verified`` license must cite evidence somebody actually retrieved."""
+
+        problems: List[str] = []
+        evidence = self.license_evidence
+        if evidence is not None:
+            problems.extend(evidence.errors())
+        if self.license_status is LicenseStatus.VERIFIED:
+            if evidence is None:
+                problems.append(
+                    "license_status is verified but no license evidence is cited; run cluster/resolve_licenses.py "
+                    "rather than hand-editing the status"
+                )
+            else:
+                if not evidence.retrieved_a_license_file:
+                    problems.append("a verified license needs a retrieved license file path and its SHA-256")
+                if evidence.retrieved_at is None:
+                    problems.append("a verified license must record when it was retrieved")
+                if evidence.revision is None:
+                    problems.append("a verified license must record the revision it was read at")
+                elif self.revision is not None and evidence.revision != self.revision:
+                    problems.append("license evidence was read at a different revision than the pinned one")
+                if self.license is None:
+                    problems.append("license_status is verified but no license string was recorded")
+                elif evidence.spdx is not None and evidence.spdx != self.license:
+                    problems.append(
+                        "a verified license must be the identifier that was read (%r), not %r"
+                        % (evidence.spdx, self.license)
+                    )
+        elif evidence is not None and evidence.spdx is not None:
+            problems.append(
+                "license evidence identified %r, so license_status must be verified rather than %s"
+                % (evidence.spdx, self.license_status.value)
+            )
+        return tuple(problems)
+
+    def _local_use_errors(self) -> Tuple[str, ...]:
+        problems: List[str] = []
+        if self.local_use is LocalUse.PERMITTED_BY_LICENSE and self.license_status is not LicenseStatus.VERIFIED:
+            problems.append("local use may only be attributed to a license that was actually verified")
+        if self.local_use is LocalUse.REQUIRES_ACCEPTED_TERMS and not (
+            self.access is Access.GATED_ACCEPT_TERMS or self.mirror_of is not None
+        ):
+            problems.append("only a gated asset or a mirror of one requires accepted terms for local use")
+        if self.access is Access.GATED_ACCEPT_TERMS and self.local_use in (
+            LocalUse.PERMITTED_BY_LICENSE,
+            LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
+        ):
+            problems.append("gated access cannot report permitted local use until the terms are accepted")
+        return tuple(problems)
+
+    def _mirror_errors(self) -> Tuple[str, ...]:
+        problems: List[str] = []
+        if self.mirror_evidence is not None:
+            problems.extend(self.mirror_evidence.errors())
+            if self.mirror_of is None:
+                problems.append("mirror evidence was recorded without naming the asset it mirrors")
+        if self.mirror_of is not None and self.mirror_of == self.name:
+            problems.append("an asset cannot be its own mirror")
+        return tuple(problems)
+
+    def local_use_blockers(self) -> Tuple[str, ...]:
+        """Only what stops PLUMB running these bytes locally.
+
+        Redistribution is deliberately absent.  A row whose redistribution term is
+        unresolved is still runnable locally, and the primary matrix needs local
+        use rather than a redistribution right.
+        """
+
+        blockers: List[str] = []
+        if self.revision is None:
+            blockers.append(UNRESOLVED_REVISION_BLOCKER)
+        if self.local_use is LocalUse.UNRESOLVED:
+            blockers.append(LOCAL_USE_BLOCKER)
+        elif self.local_use is LocalUse.REQUIRES_ACCEPTED_TERMS:
+            blockers.append(GATED_TERMS_BLOCKER)
+            if self.mirror_of is not None and (
+                self.mirror_evidence is None or self.mirror_evidence.byte_identity is not ByteIdentity.PROVEN
+            ):
+                blockers.append(UNPROVEN_BYTE_IDENTITY_BLOCKER)
+        return tuple(dict.fromkeys(blockers))
+
     def verification_blockers(self) -> Tuple[str, ...]:
         """Everything that must stop this entry from being marked ``verified``."""
 
@@ -213,6 +496,13 @@ class AssetPlanEntry:
                 blockers.append(MISSING_HASH_BLOCKER)
         if self.license_status is LicenseStatus.UNRESOLVED and UNRESOLVED_LICENSE_BLOCKER not in blockers:
             blockers.append(UNRESOLVED_LICENSE_BLOCKER)
+        if self.license_status is not LicenseStatus.VERIFIED and MISSING_LICENSE_EVIDENCE_BLOCKER not in blockers:
+            blockers.append(MISSING_LICENSE_EVIDENCE_BLOCKER)
+        if self.mirror_of is not None and (
+            self.mirror_evidence is None or self.mirror_evidence.byte_identity is not ByteIdentity.PROVEN
+        ):
+            if UNPROVEN_BYTE_IDENTITY_BLOCKER not in blockers:
+                blockers.append(UNPROVEN_BYTE_IDENTITY_BLOCKER)
         return tuple(blockers)
 
     def lock_entry(self) -> Dict[str, Any]:
@@ -231,6 +521,10 @@ class AssetPlanEntry:
             "license": self.license,
             "license_status": self.license_status.value,
             "redistribution": self.redistribution.value,
+            "local_use": self.local_use.value,
+            "license_evidence": self.license_evidence.payload() if self.license_evidence is not None else None,
+            "mirror_of": self.mirror_of,
+            "mirror_evidence": self.mirror_evidence.payload() if self.mirror_evidence is not None else None,
             "license_notices_preserved": True,
             "access": self.access.value,
             "files": [planned.payload() for planned in self.files],
@@ -253,6 +547,7 @@ class AssetPlanEntry:
             "status": "planned",
             "verified": False,
             "verification_blockers": list(self.verification_blockers()),
+            "local_use_blockers": list(self.local_use_blockers()),
         }
 
 
@@ -264,11 +559,40 @@ def _is_commit(value: Any) -> bool:
     )
 
 
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value.lower())
+    )
+
+
 _MIRRORING_NOTE = (
     "Automatic mirroring is removed. Private hosting is not a substitute for redistribution rights; "
     "preserve upstream notices for any authorized archival copy."
 )
 _SIZE_NOTE = "Historical sizes are discovery aids, not proof of a local download or of byte identity."
+
+#: Using a mirror changes the delivery path, not the license.  Recorded on both
+#: PaliGemma rows so the obligation cannot be lost by swapping hosts, and copied
+#: into every ``cluster/compare_mirror.py`` report.
+GEMMA_LICENSE_NOTE = (
+    "The Gemma Terms of Use still govern these weights regardless of which host supplied the bytes. A mirror "
+    "changes the delivery path, not the license: proven byte identity removes the gated *download* dependency, "
+    "never the license obligation."
+)
+
+#: What clears an ``advertised_unverified`` row, in the operator's own hands.
+_LICENSE_RESOLUTION_NOTE = (
+    "Run cluster/resolve_licenses.py at the pinned revision to retrieve and hash the actual license file; only a "
+    "retrieved file turns license_status into 'verified'."
+)
+
+#: The distinction the plan used to conflate.
+_LOCAL_USE_NOTE = (
+    "local_use and redistribution are independent verdicts. PLUMB runs these bytes locally and redistributes "
+    "nothing, so an open redistribution term does not block the primary matrix."
+)
 
 
 _ENTRIES: Tuple[AssetPlanEntry, ...] = (
@@ -283,6 +607,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=COSMOS3_NANO_REVISION,
         extra_allow_patterns=("*",),
         max_gb=40.0,
@@ -293,6 +618,10 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
             "Download size, parameter count, and peak inference memory are different quantities; record measured "
             "memory for the selected runtime.",
             _SIZE_NOTE,
+            "cluster/resolve_licenses.py reached this repository at the pinned revision and found no license file: "
+            "the card sets license=other with license_name 'openmdw1.1-license' and an off-repo license_link. The "
+            "advertised OpenMDW-1.1 therefore stays advertised_unverified. Read that page and record the result by "
+            "hand to finish this row.",
         ),
     ),
     AssetPlanEntry(
@@ -305,6 +634,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=("*",),
         max_gb=14.0,
@@ -322,6 +652,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.GATED_TERMS_REQUIRED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.GATED_ACCEPT_TERMS,
+        local_use=LocalUse.REQUIRES_ACCEPTED_TERMS,
         revision=None,
         fetch=False,
         max_gb=4.0,
@@ -345,6 +676,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.UNRESOLVED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.EXTERNAL_URL,
+        local_use=LocalUse.UNRESOLVED,
         max_gb=40.0,
         historical_total_estimate_bytes=32_000_000_000,
         loader_revision=IRASIM_CODE_REVISION,
@@ -365,6 +697,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=("vae/*", "scheduler/*", "model_index.json"),
         max_gb=2.0,
@@ -382,6 +715,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=OPENVLA_REVISION,
         extra_allow_patterns=("*",),
         max_gb=20.0,
@@ -406,6 +740,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(
@@ -442,6 +777,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(
@@ -471,6 +807,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.UNRESOLVED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(
@@ -491,7 +828,11 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
             "This is a legacy .pt pickle: convert it in an isolated, credential-free, network-free environment "
             "and keep the converted artifact hash. A pickle scan or strict=True alone does not establish safety.",
         ),
-        notes=("MiniVLA remains required for the full matrix, with license resolution tracked as a dependency.",),
+        notes=(
+            "MiniVLA remains required for the full matrix, with license resolution tracked as a dependency.",
+            _LOCAL_USE_NOTE,
+            _LICENSE_RESOLUTION_NOTE,
+        ),
     ),
     AssetPlanEntry(
         name="minivla-pretrain-vq",
@@ -503,6 +844,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ABSENT_CARD_DATA_NULL,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(
@@ -521,7 +863,12 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
             "This repository declares NO license (cardData: null). Flag it to the user; do not redistribute.",
             "Legacy .pt pickle: isolate the conversion and retain the converted artifact hash.",
         ),
-        notes=(_MIRRORING_NOTE,),
+        notes=(
+            _MIRRORING_NOTE,
+            "cardData is null, so license stays null and redistribution stays prohibited_pending_resolution. "
+            "cluster/resolve_licenses.py records that absence as a finding; it never writes a license nobody read.",
+            _LOCAL_USE_NOTE,
+        ),
     ),
     AssetPlanEntry(
         name="open-pi-zero",
@@ -533,6 +880,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(
@@ -563,6 +911,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.GATED_TERMS_REQUIRED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.GATED_ACCEPT_TERMS,
+        local_use=LocalUse.REQUIRES_ACCEPTED_TERMS,
         revision=None,
         files=(
             PlannedFile(path="tokenizer.json"),
@@ -578,27 +927,78 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         required_for_primary_matrix=True,
         blockers=(UNRESOLVED_REVISION_BLOCKER, GATED_TERMS_BLOCKER),
         traps=("Prefer this official access path under accepted terms rather than any mirror.",),
-        notes=("Configure an explicit application cache directory before fetching.",),
+        notes=(
+            "Configure an explicit application cache directory before fetching.",
+            GEMMA_LICENSE_NOTE,
+            "Only these seven support files are needed; the gated 3B weights are not part of this entry.",
+            "The Hub's metadata endpoint publishes this gated repository's file sizes, git blob ids and LFS "
+            "SHA-256s anonymously, so all seven official hashes were obtained without a gated download and are "
+            "recorded in " + mirror_evidence_path("paligemma") + " at commit "
+            + PALIGEMMA_COMPARED_OFFICIAL_REVISION
+            + ". Adopt that commit as this row's revision once it has been reviewed.",
+            "cluster/compare_mirror.py proved the mirror's bytes identical at this revision, which removes the gated "
+            "*download*. Accepting the Gemma terms is a human act that no tool here performs or records as done.",
+        ),
     ),
     AssetPlanEntry(
         name="paligemma-mirror-candidate",
         repo_id="leo009/paligemma-3b-pt-224",
         repo_type=RepoType.MODEL,
-        purpose="Candidate PaliGemma mirror; usable only after provenance, hashes, and terms are resolved.",
+        purpose="PaliGemma mirror with proven byte identity; still governed by the Gemma terms.",
         source_url="https://huggingface.co/leo009/paligemma-3b-pt-224",
-        license=None,
-        license_status=LicenseStatus.UNRESOLVED,
+        # Read from the mirror's own card at the pinned revision; see
+        # results/provenance/licenses.json. A card is not a license file, so this
+        # stays advertised_unverified.
+        license="gemma",
+        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.PUBLIC,
+        local_use=LocalUse.REQUIRES_ACCEPTED_TERMS,
         revision=None,
         fetch=False,
         max_gb=0.5,
-        blockers=(UNRESOLVED_REVISION_BLOCKER, UNRESOLVED_LICENSE_BLOCKER),
+        mirror_of="paligemma-official",
+        mirror_evidence=MirrorEvidence(
+            evidence_path=mirror_evidence_path("paligemma"),
+            official_repo_id="google/paligemma-3b-pt-224",
+            byte_identity=ByteIdentity.PROVEN,
+            files_compared=7,
+            files_matched=7,
+            governing_license="Gemma Terms of Use",
+            official_revision=PALIGEMMA_COMPARED_OFFICIAL_REVISION,
+            mirror_revision=PALIGEMMA_COMPARED_MIRROR_REVISION,
+        ),
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            revision=PALIGEMMA_COMPARED_MIRROR_REVISION,
+            retrieved_at="2026-09-19T11:14:18.934315+00:00",
+            reason="card_advertises_a_license_but_no_license_file_was_retrieved",
+        ),
+        blockers=(UNRESOLVED_REVISION_BLOCKER, GATED_TERMS_BLOCKER),
+        files=(
+            PlannedFile(path="tokenizer.json"),
+            PlannedFile(path="tokenizer.model"),
+            PlannedFile(path="tokenizer_config.json"),
+            PlannedFile(path="added_tokens.json"),
+            PlannedFile(path="special_tokens_map.json"),
+            PlannedFile(path="preprocessor_config.json"),
+            PlannedFile(path="config.json"),
+        ),
         traps=(
             "Do not claim byte identity with google/paligemma-3b-pt-224 without a saved file-by-file comparison.",
             "Applicable terms travel with the original model, not with the mirror's convenience.",
         ),
-        notes=("fetch=False until a comparison report and the applicable terms are recorded.",),
+        notes=(
+            "Byte identity is proven, not assumed: %s records all seven files matching a hash retrieved from "
+            "google/paligemma-3b-pt-224 -- two against its LFS SHA-256 and five against its git blob id, each with "
+            "an exact byte-length match. Re-run cluster/compare_mirror.py with the two commits in mirror_evidence "
+            "to reproduce it." % mirror_evidence_path("paligemma"),
+            GEMMA_LICENSE_NOTE,
+            "The mirror's own card advertises license 'gemma', which is the same obligation the official repository "
+            "carries: the license travelled with the bytes exactly as expected.",
+            "fetch stays False: what remains is a human accepting the Gemma terms, not a provenance question. "
+            "Proven bytes changed which host can serve them, nothing else.",
+        ),
     ),
     AssetPlanEntry(
         name="susie-subgoal",
@@ -610,6 +1010,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.UNRESOLVED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=("*",),
         max_gb=5.0,
@@ -620,6 +1021,8 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
             "SuSIE needs separate subgoal and low-level components plus a pinned JAX/Flax Stable Diffusion stack.",
             "AutoEval's released configuration uses gc_bc while upstream specifies gc_ddpm_bc; keep the "
             "replication arm and the corrected arm as separate named policy identities.",
+            _LOCAL_USE_NOTE,
+            _LICENSE_RESOLUTION_NOTE,
         ),
     ),
     AssetPlanEntry(
@@ -632,6 +1035,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(PlannedFile(path="checkpoint_75000", expected_bytes=258_718_956, is_directory=True),),
         max_gb=1.0,
@@ -651,6 +1055,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=("*",),
         max_gb=24.0,
@@ -669,6 +1074,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         files=(
             PlannedFile(path="config.json", expected_bytes=785),
@@ -695,6 +1101,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.LOCAL_USE_ONLY,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=("meta/*",),
         max_gb=20.0,
@@ -718,6 +1125,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.UNRESOLVED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.PUBLIC,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         extra_allow_patterns=(),
         max_gb=40.0,
@@ -743,12 +1151,22 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         purpose="Pinned OpenVLA Bridge control loop reviewed before trust_remote_code is enabled.",
         source_url="https://github.com/openvla/openvla/tree/" + OPENVLA_CODE_REVISION,
         license="MIT",
-        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
+        license_status=LicenseStatus.VERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_BY_LICENSE,
         revision=OPENVLA_CODE_REVISION,
         max_gb=0.5,
         loader_revision=OPENVLA_CODE_REVISION,
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            spdx="MIT",
+            license_file_path="LICENSE",
+            license_file_sha256="c4ee2ba5958af03d74b1d3dfa174e3749171d689fb4c23cc170749c05ae3eeb5",
+            revision=OPENVLA_CODE_REVISION,
+            retrieved_at="2026-09-19T11:14:19.315517+00:00",
+            source_url="https://api.github.com/repos/openvla/openvla/license?ref=c8f03f48af692657d3060c19588038c7220e9af9",
+        ),
     ),
     AssetPlanEntry(
         name="code-auto-eval",
@@ -757,12 +1175,22 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         purpose="Released AutoEval policy wrappers and eval configuration for the replication arm.",
         source_url="https://github.com/zhouzypaul/auto_eval/tree/" + AUTOEVAL_CODE_REVISION,
         license="MIT",
-        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
+        license_status=LicenseStatus.VERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_BY_LICENSE,
         revision=AUTOEVAL_CODE_REVISION,
         max_gb=0.5,
         loader_revision=AUTOEVAL_CODE_REVISION,
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            spdx="MIT",
+            license_file_path="LICENSE",
+            license_file_sha256="8cfd8b80d66c39a9bcbb33b64d4c33a6565b27f36f209063fcad8bb943526d66",
+            revision=AUTOEVAL_CODE_REVISION,
+            retrieved_at="2026-09-19T11:14:19.674008+00:00",
+            source_url="https://api.github.com/repos/zhouzypaul/auto_eval/license?ref=3ea3ff44c6950433cfbcb4294a3deaa616533745",
+        ),
         notes=("Its eval config uses gc_bc for SuSIE while upstream specifies gc_ddpm_bc.",),
     ),
     AssetPlanEntry(
@@ -772,12 +1200,22 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         purpose="Pinned OpenPiZero loader and action normalization source.",
         source_url="https://github.com/allenzren/open-pi-zero/tree/" + OPEN_PI_ZERO_CODE_REVISION,
         license="MIT",
-        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
+        license_status=LicenseStatus.VERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_BY_LICENSE,
         revision=OPEN_PI_ZERO_CODE_REVISION,
         max_gb=0.5,
         loader_revision=OPEN_PI_ZERO_CODE_REVISION,
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            spdx="MIT",
+            license_file_path="LICENSE",
+            license_file_sha256="b09a282d0dfa3d993af15b9b193648b423dda8ae5749dfb6bd3090e07cab0367",
+            revision=OPEN_PI_ZERO_CODE_REVISION,
+            retrieved_at="2026-09-19T11:14:20.016026+00:00",
+            source_url="https://api.github.com/repos/allenzren/open-pi-zero/license?ref=c3df7fb062175c16f69d7ca4ce042958ea238fb7",
+        ),
     ),
     AssetPlanEntry(
         name="code-irasim",
@@ -786,12 +1224,22 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         purpose="Pinned IRASim Bridge configuration and data adapter.",
         source_url="https://github.com/bytedance/IRASim/tree/" + IRASIM_CODE_REVISION,
         license="Apache-2.0",
-        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
+        license_status=LicenseStatus.VERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_BY_LICENSE,
         revision=IRASIM_CODE_REVISION,
         max_gb=0.5,
         loader_revision=IRASIM_CODE_REVISION,
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            spdx="Apache-2.0",
+            license_file_path="LICENSE",
+            license_file_sha256="1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+            revision=IRASIM_CODE_REVISION,
+            retrieved_at="2026-09-19T11:14:20.414063+00:00",
+            source_url="https://api.github.com/repos/bytedance/IRASim/license?ref=c72b6dade6fcd65971e0aa8ab49ea39b15108c90",
+        ),
     ),
     AssetPlanEntry(
         name="code-cosmos-framework",
@@ -799,13 +1247,28 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         repo_type=RepoType.GIT,
         purpose="Pinned Bridge pose conventions and action normalization for the Cosmos compiler.",
         source_url="https://github.com/NVIDIA/cosmos-framework/tree/" + COSMOS_FRAMEWORK_REVISION,
-        license="Apache-2.0",
-        license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
+        license="OpenMDW-1.1",
+        license_status=LicenseStatus.VERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_BY_LICENSE,
         revision=COSMOS_FRAMEWORK_REVISION,
         max_gb=0.5,
         loader_revision=COSMOS_FRAMEWORK_REVISION,
+        license_evidence=LicenseEvidence(
+            evidence_path=LICENSES_EVIDENCE_PATH,
+            spdx="OpenMDW-1.1",
+            license_file_path="LICENSE",
+            license_file_sha256="6bd3fdb9356edb6e4c1f00ad9cd6639a1cf06ca0a415a5071fd70d68799209e6",
+            revision=COSMOS_FRAMEWORK_REVISION,
+            retrieved_at="2026-09-19T11:14:20.805610+00:00",
+            source_url="https://api.github.com/repos/NVIDIA/cosmos-framework/license?ref=c23e51f2f157ae3e51cfcd86ebfb5464850894f2",
+        ),
+        notes=(
+            "This entry used to claim Apache-2.0 without anyone checking. The LICENSE file retrieved and hashed at "
+            "the pinned commit is the OpenMDW License Agreement, version 1.1, and GitHub's own API reports "
+            "spdx_id=NOASSERTION for it. The hashed text is the record; the earlier claim was wrong.",
+        ),
     ),
     AssetPlanEntry(
         name="code-octo",
@@ -817,6 +1280,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         max_gb=0.5,
         blockers=(UNRESOLVED_REVISION_BLOCKER,),
@@ -836,6 +1300,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.UNRESOLVED,
         redistribution=Redistribution.PROHIBITED_PENDING_RESOLUTION,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         max_gb=0.5,
         blockers=(UNRESOLVED_REVISION_BLOCKER, UNRESOLVED_LICENSE_BLOCKER),
@@ -850,6 +1315,7 @@ _ENTRIES: Tuple[AssetPlanEntry, ...] = (
         license_status=LicenseStatus.ADVERTISED_UNVERIFIED,
         redistribution=Redistribution.PERMITTED_WITH_NOTICES,
         access=Access.SOURCE_REPOSITORY,
+        local_use=LocalUse.PERMITTED_LOCAL_ONLY_NO_EXPRESS_TERMS,
         revision=None,
         max_gb=0.5,
         blockers=(UNRESOLVED_REVISION_BLOCKER,),
