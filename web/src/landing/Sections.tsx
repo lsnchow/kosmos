@@ -70,7 +70,7 @@ export function ProblemSection() {
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
           <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
             Comparing two policies costs a person{" "}
-            <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">a week standing next to an arm.</em>
+            <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">a week standing next to an arm.</em>
           </h2>
         </Reveal>
 
@@ -136,7 +136,7 @@ export function CalledShotSection() {
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
           <h2 className="font-display-serif m-0 mt-6 max-w-4xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-6xl">
             The cheap substitute is{" "}
-            <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">eighty-eight points wrong.</em>
+            <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">eighty-eight points wrong.</em>
           </h2>
         </Reveal>
 
@@ -222,7 +222,7 @@ export function PipelineSection() {
       <div className="relative mx-auto max-w-6xl">
         <Reveal from={{ y: 40 }} duration={0.8}>
           <h2 className="font-display-serif m-0 text-4xl leading-[1.05] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
-            Four steps, <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">four</em> hardware profiles.
+            Four steps, <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">four</em> hardware profiles.
           </h2>
         </Reveal>
 
@@ -455,7 +455,7 @@ export function StackSection() {
         <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-16">
           <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
             <h2 className="font-display-serif m-0 text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-5xl">
-              Everything ungated. <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">Nothing waits on a human.</em>
+              Everything ungated. <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">Nothing waits on a human.</em>
             </h2>
             <p className="m-0 mt-6 text-base leading-relaxed text-fg-muted">
               A thousand rollouts is an inference bill, not a lab booking. GPU-seconds, cost per
@@ -519,7 +519,7 @@ export function LimitsSection() {
 
         <Reveal from={{ y: 40 }} delay={0.1} duration={0.8}>
           <h2 className="font-display-serif m-0 mt-6 max-w-3xl text-4xl leading-[1.1] tracking-tight text-fg-strong md:text-5xl">
-            Goalposts we cannot move <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">until we cross them.</em>
+            Goalposts we cannot move <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">until we cross them.</em>
           </h2>
         </Reveal>
 
@@ -552,7 +552,7 @@ export function CtaSection() {
       <div className="relative mx-auto max-w-4xl text-center">
         <Reveal from={{ y: 40 }} duration={0.8}>
           <h2 className="font-display-serif m-0 text-4xl leading-[1.05] tracking-tight text-fg-strong md:text-6xl lg:text-7xl">
-            We measured the ruler <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.3em] decoration-accent/50">before we trusted it.</em>
+            We measured the ruler <em className="not-italic text-fg-dim underline decoration-1 underline-offset-[0.14em] decoration-accent/60">before we trusted it.</em>
           </h2>
           <p className="m-0 mt-6 text-base leading-relaxed text-fg-muted md:text-lg">
             Everything above is a claim. The console is where it runs.
@@ -564,7 +564,7 @@ export function CtaSection() {
             <Glass className="rounded-none liquid-glass-accent">
               <Link
                 to={CONSOLE_PATH}
-                className="flex items-center gap-2 px-8 py-3.5 text-sm font-medium text-fg-strong no-underline"
+                className="flex items-center gap-2 px-8 py-3.5 text-sm font-medium text-accent-ink no-underline"
               >
                 Open the console
                 <Glyph name="arrowRight" />

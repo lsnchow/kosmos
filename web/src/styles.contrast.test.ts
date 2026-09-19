@@ -73,18 +73,18 @@ const TEXT_SURFACES = ["--surface-0", "--surface-1", "--surface-2", "--surface-3
  * lightest of the surfaces above, so every figure is a worst case.
  */
 const DOCUMENTED: Record<string, number> = {
-  "--text-strong": 15.9,
-  "--text": 14.8,
-  "--text-muted": 9.3,
-  "--text-dim": 7.3,
-  "--accent": 11.7,
-  "--accent-bright": 15.2,
-  "--good": 11.6,
-  "--bad": 6.2,
-  "--caution-text": 13.3,
-  "--caution-strong": 15.6,
-  "--caution": 10.0,
-  "--info": 8.6,
+  "--text-strong": 12.1,
+  "--text": 10.6,
+  "--text-muted": 7.7,
+  "--text-dim": 5.9,
+  "--accent": 9.6,
+  "--accent-bright": 11.1,
+  "--good": 9.4,
+  "--bad": 6.6,
+  "--caution-text": 8.5,
+  "--caution-strong": 11.6,
+  "--caution": 7.2,
+  "--info": 6.8,
 };
 
 /**

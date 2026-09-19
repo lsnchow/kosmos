@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { cn } from "../lib/utils";
 
 export function statusClass(status: unknown) {
@@ -53,10 +53,46 @@ export function Panel({
 }
 
 /**
- * A single metric with its source attribution. The `source` line is not
- * decoration: it is the difference between "the platform reported this" and "we
- * computed this", and it stays attached to every number on the page.
+ * A source attribution, on demand.
+ *
+ * Every figure in this console says where it came from — that attribution is
+ * the product, not decoration, and it is the difference between "the platform
+ * reported this" and "we computed this". But printing it as a permanent third
+ * line under all thirty-odd metrics meant two thirds of the ink on a panel was
+ * provenance, and a reader scanning for the number had to skip past it every
+ * time.
+ *
+ * So it moves behind an `i`. The text is still in the DOM, still associated
+ * with its control by `aria-describedby`, and still reachable by keyboard —
+ * this hides it from the eye, never from the accessibility tree or from
+ * anything reading the page. Hover or focus brings it back.
  */
+export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  const id = useId();
+  // WCAG 1.4.13 asks that content revealed on hover or focus can be dismissed
+  // without moving the pointer or the focus. Escape does that; the next hover
+  // or focus clears the flag, so dismissing one tooltip does not disable it.
+  const [dismissed, setDismissed] = useState(false);
+  return (
+    <span
+      className={cn("infotip", dismissed && "infotip-dismissed")}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setDismissed(true);
+      }}
+      onPointerEnter={() => setDismissed(false)}
+      onFocus={() => setDismissed(false)}
+    >
+      <button type="button" className="infotip-trigger" aria-label={`Source for ${label}`} aria-describedby={id}>
+        <span aria-hidden="true">i</span>
+      </button>
+      <span id={id} role="tooltip" className="infotip-body">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/** A single metric: a label, the figure, and its source one `i` away. */
 export function DataValue({
   label,
   value,
@@ -72,9 +108,11 @@ export function DataValue({
 }) {
   return (
     <div className={cn("metric", size === "large" && "metric-large", tone && `metric-${tone}`)}>
-      <p>{label}</p>
+      <p>
+        {label}
+        <InfoTip label={label}>{source}</InfoTip>
+      </p>
       <strong className="tabular-nums">{value}</strong>
-      <span>{source}</span>
     </div>
   );
 }

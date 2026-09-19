@@ -2,7 +2,7 @@ import { Glyph, Meter, TreeBranch, type CellTone } from "./Terminal";
 import type { Episode } from "../lib/api";
 import { STAGE_ORDER, stageLadder, type StageState } from "../lib/stages";
 import type { WallState } from "../lib/wall";
-import { Note, Panel, SourceChip, StatusPill } from "./Primitives";
+import { InfoTip, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 
 /**
  * The Chain, drawn.
@@ -89,9 +89,9 @@ export function StageLadder({
               <div className="ladder-head">
                 <span className="ladder-label">{stage.label}</span>
                 <StatusPill status={PILL_STATUS[stage.state]}>{PILL_WORDS[stage.state]}</StatusPill>
+                <InfoTip label={stage.label}>{stage.source}</InfoTip>
               </div>
               <p className="ladder-detail">{stage.detail}</p>
-              <p className="ladder-source">{stage.source}</p>
             </div>
           </li>
         ))}

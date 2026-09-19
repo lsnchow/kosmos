@@ -1,7 +1,7 @@
 import { CellBar, Glyph } from "./Terminal";
 import type { Run, Telemetry } from "../lib/api";
 import { formatCount, formatUsd, isTerminalStatus, pickNumber, formatCountPair} from "../lib/format";
-import { DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
+import { InfoTip, DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 import { ReplicaChart, type ReplicaSample } from "./ReplicaChart";
 
 /**
@@ -88,8 +88,11 @@ export function BurstPanel({
       </div>
       {disabledReason && (
         <p className="burst-disabled" id="burst-disabled-reason">
-          Button disabled: {disabledReason}. Repeat submissions carry the same derived idempotency key, so the
-          ledger returns the existing run instead of starting a second one.
+          Disabled: {disabledReason}.
+          <InfoTip label="why the button is disabled">
+            Repeat submissions carry the same derived idempotency key, so the ledger returns the existing run
+            instead of starting a second one.
+          </InfoTip>
         </p>
       )}
 
