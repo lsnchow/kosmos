@@ -5,7 +5,7 @@
  * category already has three entrants. What none of them published is the
  * second line.
  */
-import { ArrowRight, Play } from "lucide-react";
+import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
 import { CONSOLE_PATH, LIVE_PATH, NAV_LINKS, PRODUCT } from "./content";
 import { VIDEO } from "./media";
@@ -106,7 +106,7 @@ export function Hero() {
               className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-white no-underline"
             >
               Open the console
-              <ArrowRight aria-hidden="true" className="size-4" />
+              <Glyph name="arrowRight" />
             </Link>
           </Glass>
           <Glass className="rounded-full">
@@ -114,7 +114,7 @@ export function Hero() {
               to={LIVE_PATH}
               className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-white no-underline"
             >
-              <Play aria-hidden="true" className="size-4" />
+              <Glyph name="play" />
               Watch a live run
             </Link>
           </Glass>

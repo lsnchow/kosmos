@@ -1,4 +1,4 @@
-import { BadgeCheck, CircleSlash, Expand, Gamepad2, Layers, Target } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { MetaList } from "./MetaList";
 import { formatCount, formatFrameCaption} from "../lib/format";
 import { cn } from "../lib/utils";
@@ -65,12 +65,12 @@ export function GroundTruthBadge({ benchmark }: { benchmark?: boolean }) {
   if (benchmark === undefined) return null;
   return benchmark ? (
     <p className="truth-badge truth-badge-benchmark">
-      <BadgeCheck aria-hidden="true" className="size-3.5 shrink-0" />
+      <Glyph name="badge" className="shrink-0" />
       ground truth available
     </p>
   ) : (
     <p className="truth-badge truth-badge-off">
-      <CircleSlash aria-hidden="true" className="size-3.5 shrink-0" />
+      <Glyph name="slash" className="shrink-0" />
       off-benchmark — no human score to compare against
     </p>
   );
@@ -147,7 +147,7 @@ function RolloutTile({
               onClick={() => onExpand(slot)}
               aria-label={`Enlarge the persisted clip for ${slot.policy} on ${slot.task}`}
             >
-              <Expand aria-hidden="true" className="size-3.5" />
+              <Glyph name="expand" />
             </button>
           )}
           {onDrive && (
@@ -157,7 +157,7 @@ function RolloutTile({
               onClick={() => onDrive(slot)}
               aria-label={`Open free-play control for ${slot.policy} on ${slot.task}`}
             >
-              <Gamepad2 aria-hidden="true" className="size-3.5" />
+              <Glyph name="drive" />
             </button>
           )}
         </div>
@@ -222,14 +222,14 @@ export function RolloutWall({
         </span>
         {wall.overflowKeys.length > 0 && (
           <span className="wall-overflow">
-            <Layers aria-hidden="true" className="size-3.5" />
+            <Glyph name="layers" />
             {formatCount(wall.overflowKeys.length)} further policy/task identities are running outside this
             viewport
           </span>
         )}
         {scopedTask !== undefined && (
           <span className="wall-scope">
-            <Target aria-hidden="true" className="size-3.5" />
+            <Glyph name="target" />
             Scoped to {scopedInstruction ? `“${scopedInstruction}”` : scopedTask} ·{" "}
             <b className="tabular-nums">{formatCount(inScope)}</b> matching slots, the rest dimmed rather
             than dropped
@@ -237,7 +237,7 @@ export function RolloutWall({
         )}
       </div>
       {assigned.length === 0 ? (
-        <EmptyState className="wall-empty" icon={<Layers aria-hidden="true" className="size-5" />}>
+        <EmptyState className="wall-empty" icon={<Glyph name="layers" />}>
           No episode events have arrived for this run, so no slot has an identity yet. Tiles extend only when
           the application persists a segment; nothing here is pre-rendered to fill the grid.
         </EmptyState>

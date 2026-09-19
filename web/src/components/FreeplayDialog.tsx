@@ -1,14 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Loader2,
-  ShieldAlert,
-  Square,
-  X,
-} from "lucide-react";
+import { AsciiSpinner, Glyph } from "./Terminal";
 import {
   useCallback,
   useEffect,
@@ -245,7 +236,7 @@ export function FreeplayDialog({
               </Dialog.Title>
             </div>
             <Dialog.Close className="icon-button" aria-label="Close free-play">
-              <X aria-hidden="true" className="size-5" />
+              <Glyph name="close" />
             </Dialog.Close>
           </header>
           <Dialog.Description id="freeplay-description" className="dialog-description text-pretty">
@@ -258,7 +249,7 @@ export function FreeplayDialog({
             <div className="freeplay-stage">
               {unavailable ? (
                 <div className="freeplay-unavailable" role="alert">
-                  <ShieldAlert aria-hidden="true" className="size-8" />
+                  <Glyph name="alert" />
                   <strong>No certified world backend for free-play</strong>
                   <p className="text-pretty">{unavailable}</p>
                   <p className="text-pretty freeplay-unavailable-note">
@@ -281,7 +272,7 @@ export function FreeplayDialog({
 
               {generating && (
                 <div className="generating-overlay" role="status" aria-live="polite">
-                  <Loader2 aria-hidden="true" className="size-6 spin" />
+                  <AsciiSpinner className="freeplay-spinner" />
                   <strong>Generating</strong>
                   <span>
                     Inventing the next chunk of video from the {DIRECTION_LABELS[generating]} command
@@ -310,21 +301,21 @@ export function FreeplayDialog({
               <div className="dpad" aria-label="Directional world-model commands">
                 <span />
                 <button type="button" aria-label="Command the arm up" {...buttonHandlers("up")}>
-                  <ArrowUp aria-hidden="true" />
+                  <Glyph name="arrowUp" />
                 </button>
                 <span />
                 <button type="button" aria-label="Command the arm left" {...buttonHandlers("left")}>
-                  <ArrowLeft aria-hidden="true" />
+                  <Glyph name="arrowLeft" />
                 </button>
                 <button type="button" aria-label="Send a stop command" onClick={() => void dispatch("stop")}>
-                  <Square aria-hidden="true" className="size-4" />
+                  <Glyph name="stop" />
                 </button>
                 <button type="button" aria-label="Command the arm right" {...buttonHandlers("right")}>
-                  <ArrowRight aria-hidden="true" />
+                  <Glyph name="arrowRight" />
                 </button>
                 <span />
                 <button type="button" aria-label="Command the arm down" {...buttonHandlers("down")}>
-                  <ArrowDown aria-hidden="true" />
+                  <Glyph name="arrowDown" />
                 </button>
                 <span />
               </div>

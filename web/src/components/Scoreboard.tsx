@@ -1,5 +1,4 @@
-import { Gauge, Scale } from "lucide-react";
-import { ArrowRight } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { Link } from "react-router-dom";
 import { MetaList } from "./MetaList";
 import {
@@ -233,7 +232,7 @@ export function Scoreboard({
       {provisional && summary && <ProvisionalBand summary={summary} />}
 
       {sortedCells.length === 0 ? (
-        <EmptyState className="scoreboard-empty" icon={<Gauge aria-hidden="true" className="size-5" />}>
+        <EmptyState className="scoreboard-empty" icon={<Glyph name="gauge" />}>
           No persisted analysis exists for the selected run. Provisional rollout counts are not presented as
           study statistics, and no cell is filled with a zero.
         </EmptyState>
@@ -380,7 +379,7 @@ export function Scoreboard({
             <p className="compact-more">
               <Link to="/results">
                 All {formatCount(sortedCells.length)} cells
-                <ArrowRight aria-hidden="true" className="size-3.5" />
+                <Glyph name="arrowRight" />
               </Link>
             </p>
           )}
@@ -405,7 +404,7 @@ export function Scoreboard({
 
       {macroRanking && (
         <div className="ranking-verdict">
-          <Scale aria-hidden="true" className="size-4" />
+          <Glyph name="scale" />
           <div>
             <strong>
               Macro ordering: {String(macroRanking.ordering ?? "indeterminate")}

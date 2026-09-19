@@ -1,4 +1,4 @@
-import { SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { useEffect, useState } from "react";
 import type { SweepPoint, SweepResponse } from "../lib/api";
 import {
@@ -50,7 +50,7 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
       action={<SourceChip>{pickString(sweeps.status) ?? "status not reported"}</SourceChip>}
     >
       {points.length === 0 ? (
-        <EmptyState icon={<SlidersHorizontal aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="sliders" />}>
           {pickString(sweeps.reason) ??
             "No persisted sweep points are available."}{" "}
           The slider will not generate, estimate, or imply a cheaper setting that was never measured.
@@ -97,7 +97,7 @@ export function SweepPanel({ sweeps }: { sweeps: SweepResponse }) {
           </ol>
           {firstFailure >= 0 && (
             <p className="sweep-break" role="note">
-              <TriangleAlert aria-hidden="true" className="size-4" />
+              <Glyph name="alert" />
               Preregistered tolerances first fail at point {firstFailure + 1} of {points.length} (
               {pointLabel(points[firstFailure], firstFailure)}). Cheaper than that point, the ranking is not
               supported.

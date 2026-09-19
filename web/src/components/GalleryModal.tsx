@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { MetaList } from "./MetaList";
 import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -147,7 +147,7 @@ export function GalleryModal({
               onClick={onClose}
               aria-label="Close viewer"
             >
-              <X aria-hidden="true" className="size-5" />
+              <Glyph name="close" />
             </button>
           </div>
         </header>

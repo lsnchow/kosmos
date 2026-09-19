@@ -10,7 +10,7 @@
  * the wall it came from.
  */
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { CircleAlert, Expand, ExternalLink, Menu, Presentation, RotateCcw } from "lucide-react";
+import { Glyph } from "./components/Terminal";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAppData } from "./AppData";
@@ -64,7 +64,7 @@ export function AppShell() {
           aria-controls="sidebar-region"
           onClick={() => setNavOpen((open) => !open)}
         >
-          <Menu aria-hidden="true" className="size-4" />
+          <Glyph name="menu" />
           Sections
         </button>
         <Link className="brand" to="/console" aria-label="Nightshift console home">
@@ -83,11 +83,11 @@ export function AppShell() {
             onClick={() => setPresentation(!presentation)}
             aria-pressed={presentation}
           >
-            <Presentation aria-hidden="true" className="size-4" />
+            <Glyph name="present" />
             Presentation mode
           </button>
           <button type="button" className="button button-quiet" onClick={() => void refresh()}>
-            <RotateCcw aria-hidden="true" className="size-4" />
+            <Glyph name="refresh" />
             Refresh
           </button>
         </div>
@@ -101,7 +101,7 @@ export function AppShell() {
         <main id="page" className="page" tabIndex={-1}>
           {(loadError ?? actionError) && (
             <div className="error-banner" role="alert">
-              <CircleAlert aria-hidden="true" className="size-5" />
+              <Glyph name="alert" />
               <span>{actionError ?? loadError}</span>
             </div>
           )}
@@ -112,10 +112,10 @@ export function AppShell() {
           <footer className="footer-note">
             <span>Nightshift</span>
             <a href="/THIRD-PARTY-NOTICES.md" target="_blank" rel="noreferrer">
-              Third-party notices <ExternalLink aria-hidden="true" className="size-3" />
+              Third-party notices <Glyph name="arrowUpRight" />
             </a>
             <a href="/api/protocol" target="_blank" rel="noreferrer">
-              Protocol record <ExternalLink aria-hidden="true" className="size-3" />
+              Protocol record <Glyph name="arrowUpRight" />
             </a>
           </footer>
         </main>
@@ -158,7 +158,7 @@ export function AppShell() {
               openFreeplay(slot);
             }}
           >
-            <Expand aria-hidden="true" className="size-4" />
+            <Glyph name="expand" />
             Take the controls
           </button>
         }

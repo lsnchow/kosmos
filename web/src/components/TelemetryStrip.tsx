@@ -1,4 +1,4 @@
-import { Clock3, Radio, WifiOff } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { Run, Telemetry } from "../lib/api";
 import {
   ageSeconds,
@@ -91,9 +91,9 @@ export function TelemetryStrip({
     <section className="telemetry">
       <h2 className="telemetry-title">
         {degraded ? (
-          <WifiOff aria-hidden="true" className="size-5" />
+          <Glyph name="offline" />
         ) : (
-          <Radio aria-hidden="true" className="size-5" />
+          <Glyph name="live" />
         )}
         <span>Live telemetry</span>
         <StatusPill status={degraded ? "degraded" : streamStatus}>{streamStatus}</StatusPill>
@@ -150,7 +150,7 @@ export function TelemetryStrip({
       />
 
       <div className={stale || degraded ? "freshness freshness-stale" : "freshness"}>
-        <Clock3 aria-hidden="true" className="size-4" />
+        <Glyph name="clock" />
         <div>
           <span>
             {freshness.source === undefined

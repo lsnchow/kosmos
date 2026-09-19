@@ -1,4 +1,4 @@
-import { ShieldAlert } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { Gate } from "../lib/api";
 import { pickString } from "../lib/format";
 import { EmptyState, Panel, StatusPill } from "./Primitives";
@@ -22,7 +22,7 @@ export function GatePanel({ gates }: { gates: Gate[] }) {
   return (
     <Panel title="Qualification gates" className="gates-panel" id="gates">
       {ordered.length === 0 ? (
-        <EmptyState icon={<ShieldAlert aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="alert" />}>
           No gate ledger was returned. Qualified claims remain unavailable.
         </EmptyState>
       ) : (

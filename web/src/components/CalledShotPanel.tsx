@@ -1,4 +1,4 @@
-import { FileLock2, Target } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { isRecord, type CalledShot, type JsonRecord } from "../lib/api";
 import { formatCount, formatRateAsPercent, pickNumber, pickString } from "../lib/format";
 import { Note, Panel, SourceChip, StatusPill } from "./Primitives";
@@ -95,14 +95,14 @@ export function CalledShotPanel({ calledShot }: { calledShot?: CalledShot }) {
 
       {gapPoints !== undefined && (
         <p className="calledshot-gap">
-          <Target aria-hidden="true" className="size-4" />
+          <Glyph name="target" />
           The simulator and the real robot disagree by{" "}
           <b className="tabular-nums">{gapPoints.toFixed(0)} percentage points</b> on this one cell.
         </p>
       )}
 
       <div className="prereg-row">
-        <FileLock2 aria-hidden="true" className="size-4" />
+        <Glyph name="lock" />
         {prereg ? (
           <div>
             <a href={prereg} target="_blank" rel="noreferrer">

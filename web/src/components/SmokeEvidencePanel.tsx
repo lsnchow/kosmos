@@ -1,4 +1,4 @@
-import { Activity, ExternalLink, ShieldAlert } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { artifactUrl, type Experiment } from "../lib/api";
 import {
   formatBytes,
@@ -88,7 +88,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
   return (
     <Panel title="Real model smoke evidence" className="smoke-panel">
       {experiments.length === 0 ? (
-        <EmptyState className="smoke-empty" icon={<Activity aria-hidden="true" className="size-5" />}>
+        <EmptyState className="smoke-empty" icon={<Glyph name="activity" />}>
           No imported real-model smoke report has been returned by the API.
         </EmptyState>
       ) : (
@@ -193,7 +193,7 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                       rel="noreferrer"
                       aria-label={`Open report for ${label}, ${experiment.id ?? profile.title} (new tab)`}
                     >
-                      Report <ExternalLink aria-hidden="true" className="size-3" />
+                      Report <Glyph name="arrowUpRight" />
                     </a>
                   )}
                   {videoUrl && (
@@ -203,13 +203,13 @@ export function SmokeEvidencePanel({ experiments }: { experiments: Experiment[] 
                       rel="noreferrer"
                       aria-label={`Open video for ${label}, ${experiment.id ?? profile.title} (new tab)`}
                     >
-                      Open video <ExternalLink aria-hidden="true" className="size-3" />
+                      Open video <Glyph name="arrowUpRight" />
                     </a>
                   )}
                 </div>
                 {profile.needsIntegrityWarning && (
                   <p className="smoke-warning text-pretty">
-                    <ShieldAlert aria-hidden="true" className="size-4" />
+                    <Glyph name="alert" />
                     World-video integrity: unknown. Inspecting a distorted frame does not establish fidelity.
                   </p>
                 )}

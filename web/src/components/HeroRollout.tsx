@@ -1,4 +1,4 @@
-import { MonitorPlay } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { artifactUrl, artifactUrls, readProvenance, type Episode } from "../lib/api";
 import { formatCount, pickNumber, pickString } from "../lib/format";
 import { FramePlayer, MediaFrame } from "./MediaFrame";
@@ -33,7 +33,7 @@ export function HeroRollout({ episodes }: { episodes: Episode[] }) {
       action={<SourceChip>{resolution ?? "resolution not reported"}</SourceChip>}
     >
       {!hero ? (
-        <EmptyState icon={<MonitorPlay aria-hidden="true" className="size-5" />}>
+        <EmptyState icon={<Glyph name="monitor" />}>
           No episode declares <code>presentation_track = &quot;{HERO_TRACK}&quot;</code>, so there is no hero
           rollout to show. A 256p scoring episode is not promoted here and relabelled 480p.
         </EmptyState>

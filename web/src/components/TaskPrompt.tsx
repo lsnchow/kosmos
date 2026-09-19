@@ -11,7 +11,7 @@
  * not. That is stated before submission, not only after: the button itself says
  * which kind of run is about to start, so nobody has to be told.
  */
-import { CornerDownLeft, Sparkles } from "lucide-react";
+import { Glyph } from "./Terminal";
 import { useState } from "react";
 import { BENCHMARK_TASKS, SUGGESTED_PROMPTS } from "../lib/tasks";
 import { cn } from "../lib/utils";
@@ -61,7 +61,7 @@ export function TaskPrompt({ onSubmit, busy }: TaskPromptProps) {
         />
         <button type="submit" className="button button-primary" disabled={!trimmed || busy}>
           {busy ? "Starting…" : "Run"}
-          <CornerDownLeft aria-hidden="true" className="size-4" />
+          <Glyph name="enter" />
         </button>
       </form>
 
@@ -100,7 +100,7 @@ export function TaskPrompt({ onSubmit, busy }: TaskPromptProps) {
         </div>
         <div>
           <p className="task-prompt-legend">
-            <Sparkles aria-hidden="true" className="size-3" />
+            <Glyph name="sparkle" />
             Off-benchmark · within the policies&rsquo; training distribution
           </p>
           <ul className="chip-row">

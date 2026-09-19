@@ -5,7 +5,7 @@
  * gates. The primary action goes to the run, because the run is what the rest
  * of the console is about — free-play is a demonstration, not the flow.
  */
-import { ArrowRight, Expand } from "lucide-react";
+import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
 import { STARTS_PER_TASK, useAppData } from "../AppData";
 import { CalledShotPanel } from "../components/CalledShotPanel";
@@ -36,10 +36,10 @@ export function OverviewPage() {
           <>
             <Link className="button button-primary" to="/live">
               Start a run
-              <ArrowRight aria-hidden="true" className="size-4" />
+              <Glyph name="arrowRight" />
             </Link>
             <button type="button" className="button button-quiet" onClick={() => openFreeplay()}>
-              <Expand aria-hidden="true" className="size-4" />
+              <Glyph name="expand" />
               Drive the world model
             </button>
           </>

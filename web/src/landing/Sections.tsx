@@ -7,7 +7,7 @@
  * final call to action rather than in a footnote, because a product whose pitch
  * is "we put error bars on it" cannot bury its own.
  */
-import { ArrowRight, ArrowUpRight, Check, Minus } from "lucide-react";
+import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
 import { cn } from "../lib/utils";
 import {
@@ -161,7 +161,7 @@ export function CalledShotSection() {
                   className="flex items-center gap-2 px-8 py-3 text-sm font-medium text-white no-underline"
                 >
                   See the full table
-                  <ArrowUpRight aria-hidden="true" className="size-4" />
+                  <Glyph name="arrowUpRight" />
                 </Link>
               </Glass>
             </div>
@@ -337,7 +337,7 @@ export function NumbersSection() {
                       {item.tag}
                     </span>
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/5 text-white/70 transition-colors group-hover:bg-white/10 group-hover:text-white">
-                      <ArrowUpRight aria-hidden="true" className="size-4" />
+                      <Glyph name="arrowUpRight" />
                     </span>
                   </div>
                   <h3 className="m-0 mt-4 text-xl tracking-tight text-white md:text-2xl">
@@ -352,7 +352,7 @@ export function NumbersSection() {
                         Value
                       </dt>
                       <dd className="m-0 flex items-center gap-2 font-mono text-sm text-caution">
-                        <Minus aria-hidden="true" className="size-3.5" />
+                        <Glyph name="minus" />
                         {item.value}
                       </dd>
                     </dl>
@@ -375,7 +375,7 @@ export function NumbersSection() {
               {METHOD_CHIPS.map((chip) => (
                 <li key={chip}>
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3.5 py-1.5 text-[0.6875rem] text-white/80">
-                    <Check aria-hidden="true" className="size-3 text-accent" />
+                    <Glyph name="check" className="text-accent" />
                     {chip}
                   </span>
                 </li>
@@ -424,7 +424,7 @@ export function ServicesSection() {
                         {service.tag}
                       </span>
                       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/5 text-white/70 transition-colors group-hover:bg-white/10 group-hover:text-white">
-                        <ArrowUpRight aria-hidden="true" className="size-4" />
+                        <Glyph name="arrowUpRight" />
                       </span>
                     </div>
                     <h3 className="m-0 mt-4 text-xl tracking-tight text-white md:text-2xl">
@@ -567,7 +567,7 @@ export function CtaSection() {
                 className="flex items-center gap-2 px-8 py-3.5 text-sm font-medium text-white no-underline"
               >
                 Open the console
-                <ArrowRight aria-hidden="true" className="size-4" />
+                <Glyph name="arrowRight" />
               </Link>
             </Glass>
             <Glass className="rounded-full">

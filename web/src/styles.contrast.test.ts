@@ -77,13 +77,13 @@ const DOCUMENTED: Record<string, number> = {
   "--text": 14.8,
   "--text-muted": 9.3,
   "--text-dim": 7.3,
-  "--accent": 11.0,
-  "--accent-bright": 12.6,
-  "--good": 11.0,
-  "--bad": 5.9,
-  "--caution-text": 12.0,
+  "--accent": 11.7,
+  "--accent-bright": 15.2,
+  "--good": 11.6,
+  "--bad": 6.2,
+  "--caution-text": 13.3,
   "--caution-strong": 15.6,
-  "--caution": 8.5,
+  "--caution": 10.0,
   "--info": 8.6,
 };
 
@@ -95,7 +95,7 @@ const INK_EXCEPTIONS: Record<string, { against: string; minimum: number; why: st
   "--accent-ink": {
     against: "--accent",
     minimum: 4.5,
-    why: "black ink on the lime fill of .button-primary and .skip-link",
+    why: "black ink on the cyan fill of .button-primary and .skip-link",
   },
 };
 

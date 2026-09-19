@@ -60,55 +60,74 @@
  * Palette and type scale as custom properties.
  *
  * ---------------------------------------------------------------------------
- * CONTRAST — recomputed for the black surfaces, not carried over.
+ * A TERMINAL PALETTE — the ANSI 16, raised until every ink is legible.
  * ---------------------------------------------------------------------------
- * The previous sheet measured every ink against --surface-1 (#0b1220) and quoted
- * that single number. Those figures are void here: the surfaces changed, and
- * measuring against the *darkest* panel flatters every ink. The ratios below are
- * therefore measured against --surface-3 (#1a1a1a) — the lightest surface any
- * text actually sits on (rollout tiles, d-pad keys, and the hover fill of
- * .button-secondary, which shares that value with --line-1). Every other surface
- * is darker, so each number is a floor rather than a best case.
+ * The semantic register is ported from the Rich TUI in longshot/dashboard.py,
+ * which assigns colour the way a terminal does: cyan is the chrome, green is
+ * success, yellow is caution, red is failure, blue is reference, magenta is a
+ * secondary frame. Those roles are carried over verbatim. The *values* are not:
+ * true ANSI on a black field is unreadable as web ink — bright blue #5555ff
+ * measures 1.9:1 and base green #00aa00 measures 2.7:1 against --surface-3.
+ * Each hue is therefore lifted to the nearest value that clears the 4.5:1 ink
+ * bar with margin, keeping the hue relationship and discarding the luminance.
  *
- *   --text-strong    15.9:1    --accent        11.0:1    --caution-text  12.0:1
- *   --text           14.8:1    --accent-bright 12.6:1    --caution-strong 15.6:1
- *   --text-muted      9.3:1    --good          11.0:1    --caution        8.5:1
- *   --text-dim        7.3:1    --bad            5.9:1    --info           8.6:1
+ * Ratios are measured against --surface-3 (#1a1a1a) — the lightest surface any
+ * text actually sits on (rollout tiles, d-pad keys, and the hover fill of
+ * .button-secondary, which shares that value with --line-1). Every other
+ * surface is darker, so each number is a floor rather than a best case.
+ *
+ *   --text-strong    15.9:1    --accent        11.7:1    --caution-text  13.3:1
+ *   --text           14.8:1    --accent-bright 15.2:1    --caution-strong 15.6:1
+ *   --text-muted      9.3:1    --good          11.6:1    --caution       10.0:1
+ *   --text-dim        7.3:1    --bad            6.2:1    --info           8.6:1
  *
  * Against pure --surface-0 the same inks land at 19.3 / 17.9 / 11.3 / 8.8 : 1.
  *
- * Two Mirage greys were lifted rather than copied, and this is why:
+ * The four greys are unchanged and the reasoning behind them still holds:
  *   - Mirage sets secondary copy at #666 (3.7:1 here) and tertiary at #555
  *     (2.3:1). Both fail WCAG AA at any size. --text-muted is #bebebe and
  *     --text-dim is #a8a8a8, which hold 9.3:1 and 7.3:1 at our 12 px floor.
- *   - Mirage's #999 detail grey reaches only 6.1:1 on --surface-3, under the
- *     7.2:1 the previous sheet held for --text-dim, so it was not used as an ink.
+ *   - Mirage's #999 detail grey reaches only 6.1:1 on --surface-3, so it was
+ *     not used as an ink.
  *   - Mirage's error red #ee4444 is 4.6:1 on --surface-3 — passing, but with no
- *     margin at 12 px. --bad/--danger-text lighten it to #f56a6a (5.9:1). The
- *     full-strength #ee4444 is kept for hairlines (--danger-line), where 3:1 is
- *     the bar.
+ *     margin at 12 px. --bad/--danger-text lift it to #ff6b6b (6.2:1), which is
+ *     also the closer match to ANSI bright red. The full-strength #ee4444 is
+ *     kept for hairlines (--danger-line), where 3:1 is the bar.
  *
  * --line-interactive exists because a 1 px hairline is sometimes the only
  * affordance a control has (select, .button-secondary, the d-pad, .tile-expand).
  * At #6e6e6e it clears the 3:1 non-text minimum on every surface — 3.4:1 on
- * --surface-3. The old sheet's --line-4 was 2.4:1 there, i.e. it failed.
- * --line-1..--line-4 stay decorative: they group, they never carry meaning.
+ * --surface-3.  --line-1..--line-4 stay decorative: they group, they never
+ * carry meaning. The TUI's bright_black register — frame corners, tree rails,
+ * empty bar cells — is --text-dim recessed with opacity rather than a fifth
+ * grey, because anything used as a `color:` in this sheet has to clear 4.5:1
+ * and a true bright_black cannot.
  *
  * ---------------------------------------------------------------------------
- * SEMANTICS — lime is brand and active, amber is only ever caution.
+ * TWO REGISTERS — the signature of the donor TUI.
  * ---------------------------------------------------------------------------
- * The previous sheet used one amber for both the brand and every warning, so on
- * a status-heavy console "this is PLUMB" and "this number is not qualified"
- * were the same colour. They are now disjoint:
- *   lime  (--accent, --good)        brand, active, pass, live
- *   amber (--caution*, --warn)      unqualified, stale, blocked, cached, partial
- *   red   (--bad, --danger*)        failed, invalid, error
- *   blue  (--info)                  replayed provenance, the reference series
+ * dashboard.py paints metrics and chrome in the saturated bright_* set and the
+ * log tail in the desaturated base set, so a glance separates "this is the
+ * instrument" from "this is what it just said". Both registers are reproduced:
+ *   saturated   --accent --good --caution --bad --info --magenta
+ *   log tail    --log-info --log-ok --log-warn --log-err   (5.2-6.0:1)
+ * The log register is dimmer, never illegible; it still clears 4.5:1.
+ *
+ * ---------------------------------------------------------------------------
+ * SEMANTICS — cyan is the instrument, and only failure is red.
+ * ---------------------------------------------------------------------------
+ *   cyan    (--accent)              brand, chrome, active, focus
+ *   green   (--good)                pass, complete, live
+ *   amber   (--caution*)            unqualified, stale, blocked, cached, partial
+ *   red     (--bad, --danger*)      failed, invalid, error
+ *   blue    (--info)                replayed provenance, the reference series
+ *   magenta (--magenta)             secondary frames, the merge-queue register
  * Colour is never the only carrier: every pill, badge and series prints its own
  * word, and the two chart series differ in dash and end label as well as hue.
  */
 :root {
-  /* Mirage's ramp: #000 · #0a0a0a · #111 · #1a1a1a · #222 · #333 · #555 · #ededed */
+  /* The terminal field. A black ramp, exactly as a TUI inherits it:
+     #000 · #0a0a0a · #111 · #1a1a1a · #222 · #333 · #555 · #ededed */
   --surface-0: #000000;
   --surface-1: #0a0a0a;
   --surface-2: #111111;
@@ -129,35 +148,53 @@
   --text-muted: #bebebe;
   --text-dim: #a8a8a8;
 
-  --accent: #7be660;
-  --accent-bright: #9cf085;
+  --accent: #5ce8e8;
+  --accent-bright: #a5ffff;
   --accent-ink: #000000;
 
-  --good: #7be660;
-  --bad: #f56a6a;
+  --good: #5cf05c;
+  --bad: #ff6b6b;
   --info: #8fb8ff;
+  --magenta: #e88ce8;
+
+  /* The desaturated log register: dimmer than the instrument, still legible. */
+  --log-ok: #5aa85a;
+  --log-info: #4f9e9e;
+  --log-warn: #a88a3a;
+  --log-err: #d47a7a;
 
   --danger-line: #ee4444;
   --danger-surface: #1a0a0a;
   --danger-deep: #0f0505;
   --danger-hover: #2a0f0f;
-  --danger-text: #f56a6a;
+  --danger-text: #ff6b6b;
 
-  --caution: #f5a524;
+  --caution: #e8c14a;
   --caution-line: #8a5c0a;
   --caution-surface: #191104;
-  --caution-text: #fcd34d;
-  --caution-strong: #fef3c7;
+  --caution-text: #ffe066;
+  --caution-strong: #fff3c4;
 
-  /* Chart series. Both clear 3:1 on the panel surface (lime 12.6:1, blue 9.9:1)
+  /* Chart series. Both clear 3:1 on the panel surface (green 12.7:1, blue 9.9:1)
      and are additionally separated by dash pattern and a direct end label, so
      neither series depends on hue to be read. */
-  --series-active: #7be660;
+  --series-active: #5cf05c;
   --series-desired: #8fb8ff;
 
+  /*
+   * Everything is monospace. A terminal has one cell width, so prose, labels
+   * and figures all sit on the same grid — this is the single change that does
+   * most of the work, because ~200 rules already say `var(--font-sans)` and now
+   * resolve to the mono stack without one of them being touched.
+   *
+   * The Geist Sans @font-face blocks are deliberately left declared above. No
+   * token points at them, so no browser downloads them; they stay because the
+   * sheet's six local faces are an asserted contract, and because reinstating a
+   * proportional register should be a one-line edit rather than an asset hunt.
+   */
   --font-display: "Bitcount Grid Double", "Geist Mono", ui-monospace, monospace;
-  --font-sans: "Geist Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-mono);
 
   /* Type scale. Presentation mode re-declares every step. */
   --fs-3xs: 0.75rem;
@@ -170,11 +207,16 @@
   --fs-2xl: 1.75rem;
   --fs-3xl: 2.25rem;
 
-  --radius-sm: 0.25rem;
-  --radius: 0.375rem;
-  --radius-lg: 0.5rem;
-  /* Pills were `9999px` hand-typed in six places. */
-  --radius-pill: 9999px;
+  /*
+   * Terminal corners. Rich's ROUNDED box draws ╭╮╰╯, which at cell scale reads
+   * as one or two pixels of relief, not a radius — so the scale collapses from
+   * 4/6/8 px to 0/2/2. --radius-pill goes to 0 outright: a status pill becomes
+   * a bracket tag, [ PASS ], which is how a terminal has always written one.
+   */
+  --radius-sm: 0;
+  --radius: 2px;
+  --radius-lg: 2px;
+  --radius-pill: 0;
 
   /* Spacing. The sheet previously had none: 39 distinct literals across 284
      padding/margin/gap declarations, including clusters a pixel apart
@@ -211,11 +253,29 @@
   --border-width: 1px;
   --border-width-thick: 2px;
 
-  /* Motion. Durations sit in the 150-340 ms band the sheet already used. */
+  /*
+   * Motion. A terminal does not ease — it repaints. Every animation in this
+   * sheet is therefore steps() or linear, and the durations stay inside the
+   * 150-340 ms band so nothing outlasts a glance. --ease-out survives only for
+   * the landing's scroll reveals, where a scroll-linked fade genuinely wants a
+   * curve; --ease-step is the default everywhere else.
+   */
   --duration-fast: 150ms;
   --duration-base: 240ms;
   --duration-slow: 340ms;
+  --duration-blink: 1060ms;
+  --ease-step: steps(1, end);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /*
+   * Cell geometry. Character-cell widgets (bars, sparklines, meters, tree
+   * connectors) are laid out in `ch` so they quantise exactly as they do in a
+   * terminal: a bar is N cells wide and fills a whole cell at a time.
+   */
+  --cell: 1ch;
+  --bar-width-wide: 50;
+  --bar-width: 20;
+  --meter-width: 4;
 
   /* Leading. Twelve distinct values collapse to four; the 1.45/1.5/1.55/1.6
      cluster was four near-identical numbers doing one job. */
@@ -291,6 +351,9 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Caret. One second on, one second off, no fade: a cursor is a square wave. */
+@keyframes caret-blink { 50% { opacity: 0; } }
+
 .app-shell { min-height: 100dvh; background: var(--surface-0); }
 
 .skip-link {
@@ -322,8 +385,13 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
   padding: calc(var(--space-3) + env(safe-area-inset-top)) max(var(--space-4), env(safe-area-inset-right)) var(--space-3) max(var(--space-4), env(safe-area-inset-left));
 }
 
-.brand { display: inline-flex; align-items: center; gap: var(--space-3); text-decoration: none; color: var(--text-strong); font-family: var(--font-display); font-weight: 400; font-size: var(--fs-lg); letter-spacing: -0.02em; }
-.brand-mark { display: grid; place-items: center; width: 1.6em; height: 1.6em; border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent-bright); }
+.brand { display: inline-flex; align-items: center; gap: var(--space-2); text-decoration: none; color: var(--text-strong); font-family: var(--font-display); font-weight: 400; font-size: var(--fs-lg); letter-spacing: 0.04em; text-transform: lowercase; }
+/* The wordmark reads as a shell would print it: a bracketed sigil, then the
+   name. Brackets are generated content, so the accessible name is untouched. */
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0; color: var(--accent); font-weight: 600; }
+.brand-mark::before { content: "["; color: var(--text-dim); }
+.brand-mark::after { content: "]"; color: var(--text-dim); }
+.brand::after { content: "_"; margin-left: -0.15ch; color: var(--accent); animation: caret-blink var(--duration-blink) var(--ease-step) infinite; }
 .topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
 .topbar nav a { color: var(--text-muted); text-decoration: none; font-size: var(--fs-xs); }
 .topbar nav a:hover { color: var(--text-strong); }
@@ -346,14 +414,23 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 
 .sidebar-region { position: sticky; top: 4rem; align-self: start; height: calc(100dvh - 4rem); overflow-y: auto; border-right: var(--border-width) solid var(--line-1); padding: var(--space-4) var(--space-3); }
 .sidebar ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.sidebar-link { display: flex; align-items: flex-start; gap: var(--space-2); border: var(--border-width) solid transparent; border-radius: var(--radius); padding: var(--space-2) var(--space-3); min-height: 2.75rem; color: var(--text-muted); text-decoration: none; transition: background-color var(--duration-fast) ease-out, color var(--duration-fast) ease-out; }
+/*
+ * The section list is drawn as a tree, the way a shell prints one. The
+ * connector is generated content in --text-dim recessed with opacity, so it
+ * stays chrome: it is never read, and it never competes with the label.
+ */
+.sidebar-link { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); border: var(--border-width) solid transparent; border-radius: 0; padding: var(--space-2) var(--space-3) var(--space-2) 0; min-height: 2.5rem; color: var(--text-muted); text-decoration: none; transition: background-color var(--duration-fast) var(--ease-step), color var(--duration-fast) var(--ease-step); }
+.sidebar-link::before { content: "\251C\2500 "; flex: none; color: var(--text-dim); opacity: 0.55; font-family: var(--font-mono); }
+.sidebar li:last-child .sidebar-link::before { content: "\2514\2500 "; }
 .sidebar-link:hover { background: var(--surface-2); color: var(--text-strong); }
-/* The active page is named by aria-current; this rail is only its echo. */
-.sidebar-link-active { border-color: var(--line-2); background: var(--surface-2); color: var(--text-strong); box-shadow: inset 2px 0 0 var(--accent); }
+/* The active page is named by aria-current; reverse video is only its echo. */
+.sidebar-link-active { border-color: transparent; background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.sidebar-link-active::before { color: var(--accent-ink); opacity: 0.7; }
+.sidebar-link-active:hover { background: var(--accent-bright); color: var(--accent-ink); }
 .sidebar-text { display: grid; gap: var(--space-0-5); min-width: 0; }
 .sidebar-text strong { font-size: var(--fs-2xs); font-weight: 600; }
 .sidebar-hint { color: var(--text-dim); font-size: var(--fs-3xs); line-height: var(--leading-snug); }
-.sidebar-link-active .sidebar-hint { color: var(--text-muted); }
+.sidebar-link-active .sidebar-hint { color: var(--accent-ink); opacity: 0.78; }
 
 .page { width: min(var(--container-max), 100%); margin: 0 auto; padding: var(--space-8) max(var(--space-5), env(safe-area-inset-right)) var(--space-8) max(var(--space-5), env(safe-area-inset-left)); min-width: 0; }
 .page:focus { outline: none; }
@@ -378,7 +455,8 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .masthead-actions { display: flex; align-items: flex-start; flex-direction: column; gap: var(--space-3); border-left: 1px solid var(--line-2); padding-left: var(--space-6); }
 .masthead-actions p { margin: 0; color: var(--text-muted); font-size: var(--fs-2xs); line-height: 1.5; }
 
-.button { display: inline-flex; min-height: 2.5em; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: var(--radius); padding: 0.5em 0.85em; font-size: var(--fs-xs); font-weight: 700; text-decoration: none; }
+/* Square, tracked, uppercase: a key you would press in a TUI, not a chip. */
+.button { display: inline-flex; min-height: 2.5em; align-items: center; justify-content: center; gap: var(--space-2); border: 1px solid transparent; border-radius: 0; padding: 0.5em 0.9em; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-decoration: none; text-transform: uppercase; transition: background-color var(--duration-fast) var(--ease-step), border-color var(--duration-fast) var(--ease-step), color var(--duration-fast) var(--ease-step); }
 .button-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .button-primary:not(:disabled):hover { background: var(--accent-bright); border-color: var(--accent-bright); }
 .button-secondary { border-color: var(--line-interactive); background: var(--surface-2); color: var(--text); }
@@ -396,9 +474,39 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .burst-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; margin: var(--space-4) 0; }
 .side-stack, .right-lower, .workspace-main { display: grid; gap: var(--space-4); min-width: 0; }
 
-.panel { min-width: 0; border: 1px solid var(--line-1); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-4); }
-.panel-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-4); }
+/*
+ * A panel is a drawn frame with its title inlaid in the top rule, which is how
+ * Rich renders every Panel in the donor TUI (`╭──── METRICS ─────╮`). The rule
+ * is a 1 px border and the title is a box sitting on it, painted in the panel's
+ * own background so it reads as a gap cut into the line.
+ *
+ * Rich centres the title. Here it is left-inlaid instead, because a Panel may
+ * carry an `action` on the same row and a centred title collides with it on a
+ * narrow column — a wrong that shows up on stage at 1216 px, where the split
+ * grid is at its tightest. Left-inlaid is the other standard TUI form and has
+ * no collision at any width.
+ */
+.panel { position: relative; min-width: 0; border: 1px solid var(--line-2); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-5) var(--space-4) var(--space-4); }
+.panel-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2) var(--space-4); min-height: 0; margin-bottom: var(--space-3); }
 .panel-heading .eyebrow { margin-bottom: var(--space-1); color: var(--text-muted); }
+.panel-heading > h2 {
+  position: absolute;
+  top: 0;
+  left: var(--space-3);
+  max-width: calc(100% - var(--space-6));
+  transform: translateY(-50%);
+  margin: 0;
+  background: var(--surface-1);
+  padding: 0 0.75ch;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+/* Headings nested deeper than the frame title keep the ordinary treatment. */
 .panel h2 { margin: 0; color: var(--text-strong); font-size: var(--fs-lg); line-height: 1.2; }
 .source-chip { max-width: 18rem; overflow: hidden; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-3xs); text-overflow: ellipsis; white-space: nowrap; }
 
@@ -423,8 +531,16 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 }
 .tab:hover { color: var(--text-muted); }
 .tab::after { content: ""; position: absolute; right: 0.75em; bottom: -1px; left: 0.75em; height: 2px; background: transparent; }
-.tab[aria-selected="true"] { color: var(--text-strong); }
-.tab[aria-selected="true"]::after { background: var(--accent); }
+/*
+ * The selected tab is reverse video — background and ink swapped — which is
+ * literally what `[reverse] Agent Grid [/]` does in the donor. The underline
+ * stays, so selection is still carried by two things and not by fill alone.
+ * The ink is --accent-ink rather than a surface token: it is the one colour in
+ * this sheet allowed to sit below 4.5:1 on a surface, because it is only ever
+ * painted on the accent fill, where it measures 14.2:1.
+ */
+.tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; letter-spacing: 0.04em; }
+.tab[aria-selected="true"]::after { background: var(--accent-bright); }
 .tab-display { font-family: var(--font-display); font-size: var(--fs-md); font-weight: 400; letter-spacing: -0.01em; }
 
 /* --- The wall ------------------------------------------------------------- */
@@ -438,13 +554,14 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .rollout-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
 .rollout-tile { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-3); }
 .rollout-tile-idle { opacity: 0.72; }
-.rollout-tile-lit { animation: ignite 340ms ease-out both; }
+.rollout-tile-lit { animation: ignite var(--duration-slow) steps(3, end) both; }
 /* Out-of-scope tiles are dimmed, never removed: a slot keeps its identity. */
 .rollout-tile-unscoped { opacity: 0.4; }
 
+/* A cell does not slide into place, it lights up. Three steps, no transform. */
 @keyframes ignite {
-  from { opacity: 0.35; transform: scale(0.985); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0.25; }
+  to { opacity: 1; }
 }
 
 /*
@@ -462,7 +579,7 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .tile-expand { display: grid; place-items: center; width: 1.6em; height: 1.6em; border: 1px solid var(--line-interactive); border-radius: var(--radius-sm); background: rgb(0 0 0 / 80%); color: var(--text); }
 .tile-expand:hover { border-color: var(--accent); color: var(--accent-bright); }
 
-.provenance-badge { border: 1px solid currentColor; border-radius: 9999px; padding: 0.1em 0.45em; font-family: var(--font-sans); font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; background: rgb(0 0 0 / 82%); }
+.provenance-badge { max-width: 100%; border: 1px solid currentColor; border-radius: 0; padding: 0.1em 0.5em; font-family: var(--font-mono); font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; background: rgb(0 0 0 / 82%); }
 .provenance-live { color: var(--good); }
 .provenance-cached { color: var(--caution-text); }
 .provenance-replayed { color: var(--info); }
@@ -490,7 +607,9 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .tile-meta dd { margin: 0; color: var(--text); font-family: var(--font-mono); font-size: var(--fs-3xs); font-variant-numeric: tabular-nums; text-align: right; }
 .tile-id { margin: var(--space-1-5) 0 0; padding: 0 var(--space-2) var(--space-2); color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-3xs); }
 
-.status-pill { display: inline-flex; width: max-content; align-items: center; border: 1px solid currentColor; border-radius: 9999px; padding: 0.15em 0.5em; font-size: var(--fs-3xs); font-weight: 700; line-height: 1.2; text-transform: uppercase; letter-spacing: 0.02em; }
+/* Square corners and wide tracking: a terminal writes a state as a tag, not a
+   lozenge. Still bordered in currentColor, so the word and its frame agree. */
+.status-pill { display: inline-flex; width: max-content; max-width: 100%; align-items: center; border: 1px solid currentColor; border-radius: 0; padding: 0.15em 0.55em; font-size: var(--fs-3xs); font-weight: 700; line-height: 1.2; text-transform: uppercase; letter-spacing: 0.08em; }
 .status-good { color: var(--good); }
 .status-bad { color: var(--bad); }
 .status-active { color: var(--accent-bright); }
@@ -518,8 +637,8 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .note { margin: var(--space-4) 0 0; border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }
 .note > summary { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; color: var(--text-dim); font-size: var(--fs-3xs); list-style: none; }
 .note > summary::-webkit-details-marker { display: none; }
-.note > summary::before { content: "+"; display: inline-flex; align-items: center; justify-content: center; width: 1.1em; height: 1.1em; border: var(--border-width) solid var(--line-3); border-radius: var(--radius-sm); font-family: var(--font-mono); line-height: 1; }
-.note[open] > summary::before { content: "\2212"; }
+.note > summary::before { content: "[+]"; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0; color: var(--text-dim); font-family: var(--font-mono); line-height: 1; }
+.note[open] > summary::before { content: "[\2212]"; }
 .note > summary:hover { color: var(--text-muted); }
 .note-body { max-width: 72ch; margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--fs-3xs); line-height: var(--leading-relaxed); }
 .note-body code { font-size: inherit; }
@@ -915,6 +1034,81 @@ td span { display: block; margin-top: var(--space-0-5); color: var(--text-muted)
 .inline-error { margin: var(--space-3) 0 0; color: var(--bad); font-size: var(--fs-3xs); line-height: 1.5; }
 .alert-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); }
 
+/* ---------------------------------------------------------------------------
+ * Character-cell widgets.
+ *
+ * These back `components/Terminal.tsx`. Everything here is a run of glyphs in
+ * the mono grid, so the geometry is a cell count rather than a length and the
+ * drawing cannot imply a precision the count does not have. The filled run
+ * takes the semantic colour; the track is --text-dim recessed with opacity,
+ * which is this sheet's stand-in for the TUI's bright_black — a true
+ * bright_black cannot clear the 4.5:1 bar every `color:` here has to meet.
+ * ------------------------------------------------------------------------- */
+
+.cell-bar, .cell-meter, .cell-spark, .tree-branch, .ascii-spinner, .caret, .cell-dots, .glyph {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.cell-bar, .cell-meter, .cell-spark { display: inline-flex; letter-spacing: -0.02em; }
+.cell-bar-track { color: var(--text-dim); opacity: 0.4; }
+.cell-spark { font-size: 1.05em; line-height: 1; }
+
+.cell-accent .cell-bar-fill, .cell-accent { color: var(--accent); }
+.cell-good .cell-bar-fill, .cell-good { color: var(--good); }
+.cell-caution .cell-bar-fill, .cell-caution { color: var(--caution-text); }
+.cell-bad .cell-bar-fill, .cell-bad { color: var(--bad); }
+.cell-info .cell-bar-fill, .cell-info { color: var(--info); }
+.cell-muted .cell-bar-fill, .cell-muted { color: var(--text-muted); }
+
+/* The tree rail is chrome. It is never read, so it never competes. */
+.tree-branch { color: var(--text-dim); opacity: 0.55; }
+
+.glyph { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 1ch; }
+
+/*
+ * The planner's thinking indicator. The donor prints "●" * ((t*2 % 3) + 1) at
+ * 2 Hz; three steps over 1.5 s is the same cycle, drawn by the compositor
+ * instead of a React render.
+ */
+.cell-dots { display: inline-block; min-width: 3ch; color: var(--caution-text); }
+.cell-dots::before { content: "\25CF\25CF\25CF"; animation: dots-cycle 1500ms steps(3, end) infinite; }
+
+@keyframes dots-cycle {
+  0%   { clip-path: inset(0 66.6% 0 0); }
+  33%  { clip-path: inset(0 33.3% 0 0); }
+  66%  { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(0 66.6% 0 0); }
+}
+
+.ascii-spinner { display: inline-block; min-width: 1ch; color: var(--accent); text-align: center; }
+
+.caret {
+  display: inline-block;
+  width: 0.6ch;
+  height: 1.05em;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: caret-blink var(--duration-blink) var(--ease-step) infinite;
+}
+
+/*
+ * First paint reads the way a shell session opens: the chrome arrives, then the
+ * page beneath it, in two steps rather than a fade. It runs once — `.booting`
+ * is set on the shell for one session, never on navigation — because a boot
+ * sequence that replays on every route change stops being a boot sequence and
+ * becomes a stutter between pages.
+ */
+.booting > .topbar { animation: boot-line 120ms steps(1, end) both; }
+.booting > .shell-body > .sidebar-region { animation: boot-line 120ms steps(1, end) 80ms both; }
+.booting > .shell-body > .page { animation: boot-line 120ms steps(1, end) 160ms both; }
+
+@keyframes boot-line {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* --- Responsive and motion ---------------------------------------------- */
 
 /* Below this the sidebar costs more width than it returns, so it becomes a
@@ -988,9 +1182,28 @@ html[data-presentation="on"] .rail { grid-template-columns: repeat(2, minmax(0, 
   .api-health { display: none; }
 }
 
+/*
+ * Reduced motion. The previous block missed four things that still moved: the
+ * pulse on a generating tile, the sidebar hover transition, and — because they
+ * are driven from JavaScript rather than CSS — the landing's video crossfade
+ * and the 8 fps flipbook. The two JS sources are gated in their own modules;
+ * everything declarative is gated here.
+ *
+ * The caret and the boot sequence stop outright rather than slowing down: a
+ * blinking cursor is exactly the kind of repeating motion this query exists to
+ * silence, and it carries no information the input beside it does not.
+ */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .rollout-tile-lit { animation: none; }
-  .spin { animation: none; }
-  .tab, .chip, .rail-card { transition: none; }
+  .rollout-tile-lit,
+  .rollout-tile[data-status="generating"] .tile-media,
+  .spin,
+  .caret,
+  .cell-dots::before,
+  .brand::after,
+  .booting > .topbar,
+  .booting > .shell-body > .sidebar-region,
+  .booting > .shell-body > .page { animation: none; }
+  .caret { opacity: 1; }
+  .tab, .chip, .rail-card, .button, .sidebar-link { transition: none; }
 }

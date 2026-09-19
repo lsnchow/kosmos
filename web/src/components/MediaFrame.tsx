@@ -1,4 +1,4 @@
-import { Activity } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { ReactNode } from "react";
 import { useFlipbook } from "../hooks/useFlipbook";
 import { cn } from "../lib/utils";
@@ -22,7 +22,7 @@ export function isVideoSource(src: string | undefined): boolean {
 function MediaEmpty({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div className={cn("media-empty", className)}>
-      <Activity aria-hidden="true" className="size-5" />
+      <Glyph name="activity" />
       <span>{children}</span>
     </div>
   );

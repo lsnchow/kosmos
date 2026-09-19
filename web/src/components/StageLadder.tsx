@@ -1,4 +1,4 @@
-import { Link2 } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { Episode } from "../lib/api";
 import { STAGE_ORDER, stageLadder, type StageState } from "../lib/stages";
 import type { WallState } from "../lib/wall";
@@ -50,7 +50,7 @@ export function StageLadder({
       action={<SourceChip>{runId ? `run ${runId}` : "no run selected"}</SourceChip>}
     >
       <p className="ladder-summary" role="status">
-        <Link2 aria-hidden="true" className="size-3.5 shrink-0" />
+        <Glyph name="link" className="shrink-0" />
         <span>
           <b>{reported}</b> of {STAGE_ORDER.length} stages have reported for this run
         </span>

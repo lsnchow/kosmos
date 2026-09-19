@@ -1,4 +1,4 @@
-import { Play, Square } from "lucide-react";
+import { Glyph } from "./Terminal";
 import type { Run, Telemetry } from "../lib/api";
 import { formatCount, formatUsd, isTerminalStatus, pickNumber, formatCountPair} from "../lib/format";
 import { DataValue, Note, Panel, SourceChip, StatusPill } from "./Primitives";
@@ -75,12 +75,12 @@ export function BurstPanel({
           aria-describedby={disabledReason ? "burst-disabled-reason" : undefined}
           onClick={onLaunch}
         >
-          <Play aria-hidden="true" className="size-5" />
+          <Glyph name="play" />
           {submitting ? "Submitting…" : `Run ${formatCount(plannedEpisodes, "the full matrix of")} episodes`}
         </button>
         {active && (
           <button type="button" className="button button-danger" onClick={onCancel}>
-            <Square aria-hidden="true" className="size-4" />
+            <Glyph name="stop" />
             Cancel run
           </button>
         )}
