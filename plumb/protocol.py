@@ -481,6 +481,9 @@ class AssetRecord:
     revision: Optional[str] = None
     file_path: Optional[str] = None
     byte_length: Optional[int] = None
+    #: A size quoted in a spec table or model card. A discovery aid, never
+    #: evidence: ``byte_length`` means bytes we actually retrieved and verified.
+    historical_size_estimate: Optional[int] = None
     sha256: Optional[str] = None
     source_url: Optional[str] = None
     retrieved_at: Optional[str] = None
@@ -524,6 +527,7 @@ class AssetRecord:
             "revision": self.revision,
             "file_path": self.file_path,
             "byte_length": self.byte_length,
+            "historical_size_estimate": self.historical_size_estimate,
             "sha256": self.sha256,
             "source_url": self.source_url,
             "retrieved_at": self.retrieved_at,
@@ -548,6 +552,7 @@ class AssetRecord:
             revision=payload.get("revision"),
             file_path=payload.get("file_path"),
             byte_length=payload.get("byte_length"),
+            historical_size_estimate=payload.get("historical_size_estimate"),
             sha256=payload.get("sha256"),
             source_url=payload.get("source_url"),
             retrieved_at=payload.get("retrieved_at"),
@@ -654,7 +659,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="openvla/openvla-7b",
             repo_type="model",
             revision="47a0ec7fc4ec123775a391911046cf33cf9ed83f",
-            byte_length=15_085_000_000,
+            historical_size_estimate=15_085_000_000,
             role="policy",
             notices=("reviewed trust_remote_code opt-in is mandatory",),
         ),
@@ -663,7 +668,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="rail-berkeley/octo-small",
             repo_type="model",
             file_path="270000/default/checkpoint",
-            byte_length=547_000_000,
+            historical_size_estimate=547_000_000,
             role="policy",
             notices=(
                 "checkpoint is NOT at repo root; resolve/main/checkpoint returns 404",
@@ -675,7 +680,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="rail-berkeley/octo-base",
             repo_type="model",
             file_path="300000/default/checkpoint",
-            byte_length=811_000_000,
+            historical_size_estimate=811_000_000,
             role="diagnostic_policy",
             notices=("separate diagnostic, not a seventh benchmark policy",),
         ),
@@ -684,7 +689,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="Stanford-ILIAD/minivla-vq-bridge-prismatic",
             repo_type="model",
             file_path="checkpoints/step-362500-epoch-21-loss%3D0.2259.pt",
-            byte_length=5_550_000_000,
+            historical_size_estimate=5_550_000_000,
             role="policy",
             notices=("filename contains '='; URL-encode as %3D", "skip the 76 MB training-log .jsonl"),
         ),
@@ -695,7 +700,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             file_path=(
                 "pretrain_modvq+mx-bridge_dataset+fach-7+ng-7+nemb-256+nlatent-512/checkpoints/model.pt"
             ),
-            byte_length=9_500_000,
+            historical_size_estimate=9_500_000,
             license=None,
             redistribution="prohibited_pending_resolution",
             role="policy_component",
@@ -709,7 +714,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="allenzren/open-pi-zero",
             repo_type="model",
             file_path="bridge_beta_step19296_2024-12-26_22-30_42.pt",
-            byte_length=11_773_000_000,
+            historical_size_estimate=11_773_000_000,
             role="policy",
             notices=("verify full state-dict coverage in the pinned loader",),
         ),
@@ -717,7 +722,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             asset_id="policy.paligemma_support",
             repo_id="google/paligemma-3b-pt-224",
             repo_type="model",
-            byte_length=21_900_000,
+            historical_size_estimate=21_900_000,
             access_status="unresolved",
             role="policy_component",
             notices=(
@@ -730,7 +735,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             asset_id="policy.susie_subgoal",
             repo_id="kvablack/susie",
             repo_type="model",
-            byte_length=3_438_000_000,
+            historical_size_estimate=3_438_000_000,
             role="policy_component",
             notices=("needs a pinned JAX/Flax Stable Diffusion stack",),
         ),
@@ -739,7 +744,7 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="patreya/gcbc-bridge",
             repo_type="model",
             file_path="checkpoint_75000",
-            byte_length=258_718_956,
+            historical_size_estimate=258_718_956,
             license="MIT (advertised)",
             role="policy_component",
             notices=("advertised MIT; confirm against repo contents before relying on it",),
@@ -749,14 +754,14 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
             repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
             repo_type="model",
             revision="cc594898137f460bfe9f0759e9844b3ce807cfb5",
-            byte_length=16_600_000_000,
+            historical_size_estimate=16_600_000_000,
             role="judge",
         ),
         record(
             asset_id="judge.vjepa2_features",
             repo_id="facebook/vjepa2-vitl-fpc64-256",
             repo_type="model",
-            byte_length=1_303_947_864,
+            historical_size_estimate=1_303_947_864,
             role="feature_diagnostic",
             notices=(
                 "encoder, not a text-following rubric judge",
@@ -809,19 +814,142 @@ def asset_plan_records() -> Tuple[AssetRecord, ...]:
     )
 
 
-def build_asset_lock(existing: Optional[AssetLock] = None) -> AssetLock:
-    """Merge the discovery plan with any already-retrieved rows.
+def _plan_record_from_cluster_entry(entry: Mapping[str, Any]) -> AssetRecord:
+    """Adapt one ``cluster.asset_plan`` entry into an ``AssetRecord``.
 
-    Retrieved rows win: a plan row never overwrites a real hash.
+    The cluster plan is the richer, authoritative source: it carries pinned
+    revisions, per-file selections, license *status* (not just a license string)
+    and redistribution terms.  Two of its distinctions are preserved carefully
+    here rather than flattened:
+
+    ``license_status``
+        ``advertised_unverified`` means a repo *claims* a license that nobody has
+        checked.  That is not a resolved license, so ``access_status`` stays
+        unresolved and the row cannot report ``verified``.
+    ``historical_total_estimate_bytes``
+        A size from a spec table is a discovery aid, not a measurement.  It is
+        deliberately **not** mapped onto ``byte_length``, which means "bytes we
+        actually retrieved".
+    """
+
+    files = entry.get("files") or []
+    file_path = None
+    if isinstance(files, (list, tuple)) and files:
+        first = files[0]
+        file_path = str(first.get("path")) if isinstance(first, Mapping) else str(first)
+        if len(files) > 1:
+            file_path = "%s (+%d more)" % (file_path, len(files) - 1)
+
+    license_status = str(entry.get("license_status") or "unresolved")
+    access = str(entry.get("access") or "unknown")
+    # Only a checked license on a publicly reachable asset counts as resolved.
+    access_status = "resolved" if (license_status == "verified" and access == "public") else "unresolved"
+
+    notices = []
+    for key in ("notes", "notices", "traps"):
+        value = entry.get(key)
+        if isinstance(value, str):
+            notices.append(value)
+        elif isinstance(value, (list, tuple)):
+            notices.extend(str(item) for item in value)
+    if license_status == "advertised_unverified":
+        notices.append("license is advertised by the repo but has not been verified")
+    if not entry.get("revision_immutable", False):
+        notices.append("revision is not pinned to an immutable commit")
+
+    return AssetRecord(
+        asset_id=str(entry.get("name") or entry.get("repo_id")),
+        repo_id=str(entry.get("repo_id")),
+        repo_type=str(entry.get("repo_type") or "model"),
+        revision=entry.get("revision") if entry.get("revision_immutable") else None,
+        file_path=file_path,
+        # Never a historical estimate: byte_length means bytes actually retrieved.
+        byte_length=None,
+        historical_size_estimate=entry.get("historical_total_estimate_bytes"),
+        sha256=None,
+        source_url=entry.get("source_url"),
+        retrieved_at=None,
+        license=entry.get("license") if license_status == "verified" else None,
+        access_status=access_status,
+        redistribution=str(entry.get("redistribution") or "unresolved"),
+        notices=tuple(dict.fromkeys(notices)),
+        loader_revision=entry.get("loader_revision"),
+        container_digest=entry.get("container_digest"),
+        compatibility_profile_id=entry.get("compatibility_profile_id"),
+        role="primary_matrix" if entry.get("required_for_primary_matrix") else "supporting",
+    )
+
+
+def cluster_plan_records() -> Tuple[AssetRecord, ...]:
+    """The cluster acquisition plan, adapted into lock rows.
+
+    ``cluster`` is a top-level package in the repository root, which is not on
+    ``sys.path`` when PLUMB runs from its installed console script.  The root is
+    therefore added explicitly rather than letting the import fail silently and
+    quietly produce a thinner lock than the operator expects.
+    """
+
+    import sys
+
+    root = str(Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from cluster.asset_plan import asset_plan_entries
+
+    records: List[AssetRecord] = []
+    problems: List[str] = []
+    for index, entry in enumerate(asset_plan_entries()):
+        if not isinstance(entry, Mapping):
+            problems.append("entry %d is not a mapping" % index)
+            continue
+        try:
+            records.append(_plan_record_from_cluster_entry(entry))
+        except Exception as exc:  # noqa: BLE001
+            # Never silently drop a planned asset: a missing row would make the
+            # lock look more complete than it is.
+            problems.append("%s: %s" % (entry.get("name", index), exc))
+    if problems:
+        raise ProtocolError(
+            "%d acquisition-plan entries could not be adapted: %s"
+            % (len(problems), "; ".join(problems[:5]))
+        )
+    return tuple(records)
+
+
+def build_asset_lock(existing: Optional[AssetLock] = None) -> AssetLock:
+    """Merge the acquisition plan with any already-retrieved rows.
+
+    Retrieved rows win: a plan row never overwrites a real hash, because the
+    plan describes what we intend to fetch and the retrieved row describes what
+    we actually got.
     """
 
     lock = AssetLock()
+    # Two plans describe the same assets under different names (this module's
+    # discovery list and the richer cluster acquisition plan). Key on the actual
+    # artifact -- repo plus file -- so one asset produces one row, and let the
+    # cluster entry win because it carries pinned revisions and license status.
+    by_artifact: Dict[Tuple[str, str], AssetRecord] = {}
+
+    def _key(record: AssetRecord) -> Tuple[str, str]:
+        return (record.repo_id.strip().lower(), (record.file_path or "").strip().lower())
+
     for record in asset_plan_records():
+        by_artifact[_key(record)] = record
+    for record in cluster_plan_records():
+        by_artifact[_key(record)] = record
+    for record in by_artifact.values():
         lock.add(record)
+
     if existing is not None:
-        for asset_id, record in existing.assets.items():
-            if record.verified or record.sha256:
-                lock.add(record)
+        # A retrieved row always wins: the plan says what we meant to fetch, the
+        # retrieved row says what we actually got.
+        retrieved = {_key(r): r for r in existing.assets.values() if r.verified or r.sha256}
+        for key, record in retrieved.items():
+            for asset_id, planned in list(lock.assets.items()):
+                if _key(planned) == key:
+                    lock.assets.pop(asset_id)
+            lock.add(record)
     return lock
 
 
@@ -1289,6 +1417,7 @@ __all__ = [
     "build_asset_lock",
     "canonical_bytes",
     "canonical_sha256",
+    "cluster_plan_records",
     "default_cost_selection_rule",
     "default_exclusion_policy",
     "default_protocol",

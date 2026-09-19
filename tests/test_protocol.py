@@ -156,37 +156,78 @@ def test_a_malformed_digest_does_not_count_as_verified():
     assert "sha256_malformed" in record.unresolved_fields()
 
 
-def test_the_discovery_plan_covers_every_spec_asset_and_starts_unresolved():
+def test_the_acquisition_plan_covers_every_spec_asset_and_starts_unresolved():
+    """Assert on the artifact (repo id), not on an internal row key.
+
+    Two plans contribute rows under different names, so keying the assertion on
+    ``repo_id`` is what actually states the requirement: every asset spec section 1
+    names must be planned for.
+    """
+
     lock = build_asset_lock()
-    ids = set(lock.assets)
-    # Every benchmark policy plus both world models, the judge, the feature
-    # diagnostic and both datasets must have a row.
+    repos = {record.repo_id.lower() for record in lock.assets.values()}
     for expected in (
-        "policy.openvla",
-        "policy.octo_small",
-        "policy.minivla",
-        "policy.minivla_vq",
-        "policy.open_pi_zero",
-        "policy.susie_subgoal",
-        "policy.susie_lowlevel",
-        "world.cosmos3_nano",
-        "world.irasim_bridge",
-        "judge.qwen2_5_vl_7b",
-        "judge.vjepa2_features",
-        "data.auto_eval",
-        "data.bridge_orig_lerobot",
+        "openvla/openvla-7b",
+        "rail-berkeley/octo-small",
+        "stanford-iliad/minivla-vq-bridge-prismatic",
+        "stanford-iliad/pretrain_vq",
+        "allenzren/open-pi-zero",
+        "kvablack/susie",
+        "patreya/gcbc-bridge",
+        "nvidia/cosmos3-nano",
+        "qwen/qwen2.5-vl-7b-instruct",
+        "facebook/vjepa2-vitl-fpc64-256",
+        "zhouzypaul/auto_eval",
+        "ipec-community/bridge_orig_lerobot",
     ):
-        assert expected in ids, expected
-    assert lock.verified_asset_ids == (), "a discovery plan proves nothing is downloaded"
+        assert expected in repos, expected
+    assert lock.verified_asset_ids == (), "a plan proves nothing is downloaded"
     assert lock.to_mapping()["summary"]["status"] == "incomplete"
 
 
-def test_the_unlicensed_vq_asset_is_flagged_as_non_redistributable():
+def test_one_artifact_produces_exactly_one_lock_row():
+    """The two plans overlap; a duplicated row would inflate the lock."""
+
     lock = build_asset_lock()
-    record = lock.assets["policy.minivla_vq"]
-    assert record.license is None
-    assert record.redistribution == "prohibited_pending_resolution"
-    assert any("no license" in notice for notice in record.notices)
+    seen = [(r.repo_id.lower(), (r.file_path or "").lower()) for r in lock.assets.values()]
+    assert len(seen) == len(set(seen)), "an artifact appears under two keys"
+
+
+def test_the_unlicensed_vq_asset_is_flagged_as_non_redistributable():
+    """`Stanford-ILIAD/pretrain_vq` declares no license (spec section 1)."""
+
+    lock = build_asset_lock()
+    matches = [r for r in lock.assets.values() if r.repo_id.lower() == "stanford-iliad/pretrain_vq"]
+    assert matches, "the VQ asset must be planned for; MiniVLA needs it"
+    record = matches[0]
+    assert record.license is None, "a license that was never verified must not be recorded"
+    assert "prohibited" in record.redistribution
+    assert record.verified is False
+
+
+def test_an_advertised_but_unverified_license_never_counts_as_resolved():
+    """A repo claiming a license is not the same as having checked it."""
+
+    lock = build_asset_lock()
+    advertised = [
+        r
+        for r in lock.assets.values()
+        if any("advertised" in notice for notice in r.notices)
+    ]
+    assert advertised, "the plan records advertised-but-unverified licenses"
+    for record in advertised:
+        assert record.license is None
+        assert record.access_status != "resolved"
+        assert record.verified is False
+
+
+def test_a_historical_size_estimate_is_never_recorded_as_a_measured_byte_length():
+    lock = build_asset_lock()
+    for record in lock.assets.values():
+        if not record.verified:
+            assert record.byte_length is None or record.sha256 is not None, (
+                "byte_length means bytes actually retrieved, not a spec-table estimate"
+            )
 
 
 def test_a_retrieved_row_is_not_overwritten_by_the_plan():
