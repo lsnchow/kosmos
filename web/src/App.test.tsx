@@ -232,7 +232,7 @@ async function renderAt(route: string, heading: RegExp) {
   return { ...view, ...routes };
 }
 
-const overview = () => renderAt("/", /Measure the ruler before trusting the ranking/i);
+const overview = () => renderAt("/console", /Measure the ruler before trusting the ranking/i);
 const live = async () => {
   const view = await renderAt("/live", /^Live run$/i);
   // Wait on something the *episodes* produce, not on protocol data. The wall's
@@ -365,7 +365,8 @@ describe("Nightshift pages render their beats", () => {
 
   it("never uses a phrase from the never-say list", async () => {
     for (const [route, title] of [
-      ["/", /Measure the ruler/i],
+      ["/", /Evaluate a robot policy/i],
+      ["/console", /Measure the ruler/i],
       ["/live", /^Live run$/i],
       ["/results", /^Results$/i],
       ["/evidence", /^Evidence$/i],
@@ -390,7 +391,8 @@ describe("Nightshift pages render their beats", () => {
 
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
-      ["/", /Measure the ruler/i],
+      ["/", /Evaluate a robot policy/i],
+      ["/console", /Measure the ruler/i],
       ["/live", /^Live run$/i],
       ["/results", /^Results$/i],
       ["/evidence", /^Evidence$/i],
@@ -473,15 +475,41 @@ describe("Nightshift live page interactions", () => {
     ).toBeInTheDocument();
   });
 
-  it("scopes the viewport from a task chip without dropping a slot", async () => {
-    await live();
+  it("launches a benchmark task from a preset and claims a tile for it", async () => {
+    const { calls } = await live();
+    // The preset fills the input; submitting starts the rollout.
     fireEvent.click(screen.getByRole("button", { name: "Close the drawer" }));
-    expect(screen.getByText(/the rest dimmed rather than dropped/i)).toBeInTheDocument();
-    expect(screen.getByText(/Scoped to “Close the drawer”/)).toBeInTheDocument();
-    expect(document.querySelectorAll(".rollout-tile")).toHaveLength(12);
-    expect(
-      screen.getByLabelText(/Viewport slot #02: OpenVLA on open_drawer, outside the selected task scope/i),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
+    const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
+    // A benchmark task goes through as a registry task id, not as free text.
+    expect(body.tasks).toEqual(["close_drawer"]);
+    expect(body.prompts ?? []).toEqual([]);
+  });
+
+  it("sends a typed task as a free-text prompt, not as a registry task", async () => {
+    const { calls } = await live();
+    fireEvent.change(screen.getByLabelText(/Task instruction/i), {
+      target: { value: "Put the spoon in the drawer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Run$/i }));
+    await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
+    const body = JSON.parse(calls.filter((call) => call.method === "POST").at(-1)?.body ?? "{}");
+    expect(body.prompts).toEqual(["Put the spoon in the drawer"]);
+    expect(body.tasks).toEqual([]);
+  });
+
+  it("says before submitting whether a task has a human score to compare against", async () => {
+    await live();
+    const input = screen.getByLabelText(/Task instruction/i);
+
+    fireEvent.change(input, { target: { value: "Close the drawer" } });
+    expect(screen.getByText(/Benchmark task\./)).toBeInTheDocument();
+
+    // A near-miss is not the benchmark task: the reference cell was measured
+    // against the exact string.
+    fireEvent.change(input, { target: { value: "close the drawer" } });
+    expect(screen.getByText(/Off-benchmark\./)).toBeInTheDocument();
   });
 
   it("blows a wall tile up to full screen and gives the focus back on close", async () => {
@@ -567,7 +595,7 @@ describe("Nightshift against the current backend responses", () => {
   });
 
   it("recovers the called shot from protocol.reference and marks it pending", async () => {
-    await renderTodayAt("/", /Measure the ruler/i);
+    await renderTodayAt("/console", /Measure the ruler/i);
     expect(await screen.findByText("92%")).toBeInTheDocument();
     expect(screen.getByText("4%")).toBeInTheDocument();
     expect(screen.getByText("pending")).toBeInTheDocument();

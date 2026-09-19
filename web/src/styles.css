@@ -541,6 +541,30 @@ h1 { max-width: 20ch; margin: 0; color: var(--text-strong); font-size: var(--fs-
 .compact-more a { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--accent); text-decoration: none; }
 .compact-more a:hover { color: var(--accent-bright); text-decoration: underline; }
 
+/* Task entry. First thing on the live page, because it is the system's primary
+   input and because its latency has to hide behind the wall beneath it. */
+.task-prompt { display: grid; gap: var(--space-3); border: var(--border-width) solid var(--line-2); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-4); }
+.task-prompt-bar { display: flex; gap: var(--space-2); }
+.task-prompt-input { flex: 1; min-width: 0; border: var(--border-width) solid var(--line-3); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3) var(--space-3-5); color: var(--text-strong); font-family: var(--font-sans); font-size: var(--fs-2xs); }
+.task-prompt-input::placeholder { color: var(--text-dim); }
+.task-prompt-input:focus-visible { border-color: var(--accent-bright); outline: none; }
+.task-prompt-verdict { margin: 0; color: var(--text-muted); font-size: var(--fs-3xs); }
+.task-prompt-verdict b { color: var(--accent); }
+.task-prompt-verdict-off b { color: var(--caution-text); }
+.task-prompt-lists { display: grid; gap: var(--space-3); }
+.task-prompt-legend { display: flex; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-2); color: var(--text-dim); font-size: var(--fs-3xs); }
+.chip-quiet { border-style: dashed; color: var(--text-dim); }
+
+/* Whether a rollout has a human score to be checked against. */
+.truth-badge { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-1-5) 0 0; padding: 0 var(--space-2); font-size: var(--fs-3xs); overflow-wrap: anywhere; }
+.truth-badge-benchmark { color: var(--accent); }
+.truth-badge-off { color: var(--caution-text); }
+
+/* A tile that has been requested but has not persisted anything yet. */
+.rollout-tile[data-status="generating"] { border-color: var(--accent); }
+.rollout-tile[data-status="generating"] .tile-media { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.85; } }
+
 .sidebar-divider { margin-top: var(--space-3); border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }
 
 

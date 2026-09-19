@@ -1,4 +1,4 @@
-import { Expand, Gamepad2, Layers, Target } from "lucide-react";
+import { BadgeCheck, CircleSlash, Expand, Gamepad2, Layers, Target } from "lucide-react";
 import { MetaList } from "./MetaList";
 import { formatCount, formatFrameCaption} from "../lib/format";
 import { cn } from "../lib/utils";
@@ -53,6 +53,29 @@ function frameCountLabel(slot: TileSlot): string {
     : formatCount(slot.certifiedFrameCount);
 }
 
+/**
+ * Whether this rollout has a human score to be checked against.
+ *
+ * Required, not decorative. The project's claim is that it is explicit about
+ * where it can and cannot be verified, and a tile from a typed prompt looks
+ * exactly like a benchmark tile unless it says otherwise. `undefined` prints
+ * nothing: a record that never reported the flag is not evidence either way.
+ */
+export function GroundTruthBadge({ benchmark }: { benchmark?: boolean }) {
+  if (benchmark === undefined) return null;
+  return benchmark ? (
+    <p className="truth-badge truth-badge-benchmark">
+      <BadgeCheck aria-hidden="true" className="size-3.5 shrink-0" />
+      ground truth available
+    </p>
+  ) : (
+    <p className="truth-badge truth-badge-off">
+      <CircleSlash aria-hidden="true" className="size-3.5 shrink-0" />
+      off-benchmark — no human score to compare against
+    </p>
+  );
+}
+
 function RolloutTile({
   slot,
   index,
@@ -93,6 +116,10 @@ function RolloutTile({
   return (
     <article
       className={cn("rollout-tile", igniting && "rollout-tile-lit", outOfScope && "rollout-tile-unscoped")}
+      // A tile claimed by a request that has not persisted a frame yet. It says
+      // "generating" rather than showing an empty slot, because the rollout was
+      // genuinely asked for -- the absence is latency, not a missing record.
+      data-status={slot.frames.length === 0 && slot.status === "generating" ? "generating" : undefined}
       style={{ animationDelay: `${ignitionDelayMs(index)}ms` }}
       aria-label={`Viewport slot ${label}: ${slot.policy} on ${slot.task}${
         outOfScope ? ", outside the selected task scope" : ""
@@ -103,7 +130,11 @@ function RolloutTile({
         alt={`Accumulated generated frames for ${slot.policy} on ${slot.task}`}
         className="tile-media"
         offset={index}
-        emptyReason="No persisted segment event yet"
+        emptyReason={
+          slot.status === "generating"
+            ? "Generating — the first chunk lands in about two seconds"
+            : "No persisted segment event yet"
+        }
       />
       <div className="tile-topline">
         <span>{label}</span>
@@ -133,8 +164,11 @@ function RolloutTile({
       </div>
       <div className="tile-caption">
         <div>{slot.policy}</div>
-        <span>{slot.task}</span>
+        {/* What was asked for, in the words it was asked in. A free-text task
+            has no registry entry, so the task id would say nothing. */}
+        <span>{slot.instruction ?? slot.task}</span>
       </div>
+      <GroundTruthBadge benchmark={slot.benchmark} />
       <MetaList
         className="tile-meta"
         items={[

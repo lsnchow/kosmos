@@ -12,7 +12,7 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { CircleAlert, Expand, ExternalLink, Menu, Presentation, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAppData } from "./AppData";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FreeplayDialog } from "./components/FreeplayDialog";
@@ -67,10 +67,10 @@ export function AppShell() {
           <Menu aria-hidden="true" className="size-4" />
           Sections
         </button>
-        <a className="brand" href="/" aria-label="Nightshift home">
+        <Link className="brand" to="/console" aria-label="Nightshift console home">
           <span className="brand-mark">N</span>
           <span>Nightshift</span>
-        </a>
+        </Link>
         <div className="topbar-right">
           <span className="api-health">
             <span className={cn("health-dot", health ? "health-known" : "health-pending")} />

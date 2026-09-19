@@ -47,6 +47,11 @@ EPISODE_RECORD_COLUMNS = (
     ("segments_json", "TEXT NOT NULL DEFAULT '[]'"),
     ("presentation_track", "TEXT"),
     ("resolution", "INTEGER"),
+    ("task_instruction", "TEXT"),
+    # 1 when the task is one of the five frozen benchmark tasks, 0 when it came
+    # from a typed prompt. Stored rather than derived, so a record read years
+    # later still knows whether a human score existed to compare against.
+    ("benchmark_task", "INTEGER"),
 )
 
 #: Identity fields supplied when a run is planned.  ``feedback_mode`` and
@@ -60,6 +65,11 @@ _PLANNED_IDENTITY_FIELDS = (
     ("policy_variant", None),
     ("feedback_mode", "unqualified"),
     ("parity_status", "unqualified"),
+    # Written at plan time, not on the terminal record: what was asked for is
+    # known before anything runs, and a rollout that never completes should
+    # still say which instruction it was given.
+    ("task_instruction", None),
+    ("benchmark_task", None),
 )
 
 #: Fields a terminal result may set.  Measurement/cost values stay ``None``
@@ -78,7 +88,16 @@ _RESULT_MEASUREMENT_FIELDS = (
     "exclusion_reason",
     "presentation_track",
     "resolution",
+    "task_instruction",
+    "benchmark_task",
 )
+
+
+
+def _optional_bool(value: Any) -> Optional[bool]:
+    """SQLite has no boolean. `None` stays `None`: unknown is not False."""
+
+    return None if value is None else bool(value)
 
 
 class LeaseActiveError(RuntimeError):
@@ -467,6 +486,8 @@ class Ledger:
                 "exclusion_reason": self._column(row, "exclusion_reason"),
                 "presentation_track": self._column(row, "presentation_track"),
                 "resolution": self._column(row, "resolution"),
+                "task_instruction": self._column(row, "task_instruction"),
+                "benchmark_task": _optional_bool(self._column(row, "benchmark_task")),
             }
         )
         # Flatten the persisted segments into the shape the console's wall reads.

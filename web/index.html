@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <title>Nightshift — Measurement Console</title>
+    <meta
+      name="description"
+      content="Roll a robot policy out inside a generative world model, score it with a validated judge, and get four numbers saying how far to trust the ranking."
+    />
     <!--
       Self-hosted fonts, preloaded. Never a CDN: this console runs on stage and
       has to render identically with no network at all.
@@ -12,6 +16,10 @@
     <link rel="preload" href="/fonts/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/BitcountGridDouble-vf.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- The landing page is what `/` serves, so its display serif is a
+         first-screen font rather than a later one. -->
+    <link rel="preload" href="/fonts/InstrumentSerif-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/InstrumentSerif-Italic.woff2" as="font" type="font/woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

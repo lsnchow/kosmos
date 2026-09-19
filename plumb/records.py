@@ -89,6 +89,13 @@ GATED_BACKEND_REQUIRED_GATES: Tuple[str, ...] = ("A", "B", "C")
 #: this is the closed set of names it may see.
 COHORTS: Tuple[str, ...] = (
     "primary",
+    # Free-text task prompts. `plumb.policies.tasks` already states the rule this
+    # implements: "Any free-text experiment belongs to explicit diagnostic mode
+    # and is never Gate-D-eligible." Giving those runs their own cohort is what
+    # keeps that true mechanically -- `validate_source_lineage_leakage` refuses
+    # to let an exploration lineage appear in a primary cell, so a typed prompt
+    # cannot reach a scored comparison however the run is later published.
+    "exploration",
     "development",
     "calibration",
     "cost_confirmation",

@@ -30,7 +30,7 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Overview", icon: LayoutDashboard },
+  { to: "/console", label: "Overview", icon: LayoutDashboard },
   { to: "/live", label: "Live run", icon: Activity },
   { to: "/results", label: "Results", icon: Table2 },
   { to: "/evidence", label: "Evidence", icon: ShieldCheck, startsSecondary: true },
@@ -48,7 +48,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <li key={item.to} className={item.startsSecondary ? "sidebar-divider" : undefined}>
               <NavLink
                 to={item.to}
-                end={item.to === "/"}
+                end={item.to === "/console"}
                 onClick={onNavigate}
                 // `aria-current="page"` is what a screen reader announces; the
                 // lime rail is only its visual echo, so the state is never

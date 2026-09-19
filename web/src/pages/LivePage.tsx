@@ -13,7 +13,7 @@ import { RolloutWall } from "../components/RolloutWall";
 import { Scoreboard } from "../components/Scoreboard";
 import { StageLadder } from "../components/StageLadder";
 import { SweepPanel } from "../components/SweepPanel";
-import { TaskScope } from "../components/TaskScope";
+import { TaskPrompt } from "../components/TaskPrompt";
 import { TelemetryStrip } from "../components/TelemetryStrip";
 import { taskInstruction } from "../lib/tasks";
 import { PageHeader } from "./PageHeader";
@@ -26,7 +26,8 @@ export function LivePage() {
     runIsTerminal,
     scopedTask,
     setViewerSlot,
-    setScopedTask,
+    launchPrompt,
+    promptBusy,
     openFreeplay,
     telemetry,
     stream,
@@ -50,7 +51,7 @@ export function LivePage() {
         title="Live run"
       />
 
-      <TaskScope scopedTask={scopedTask} onScopeTask={setScopedTask} />
+      <TaskPrompt onSubmit={(text) => void launchPrompt(text)} busy={promptBusy} />
 
       <ErrorBoundary region="Rollout viewport">
         <RolloutWall

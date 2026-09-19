@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -101,6 +102,32 @@ class RunConfig(BaseModel):
     seed: int = Field(default=20260919, ge=0, le=2**31 - 1)
     idempotency_key: Optional[str] = Field(default=None, max_length=200)
     operating_point_id: Optional[str] = Field(default=None, max_length=200)
+    #: Free-text task strings. Every policy here is language-conditioned, so a
+    #: task string is already the system's primary input -- this exposes it
+    #: rather than adding a capability. A run carrying these is forced into the
+    #: `exploration` cohort, which the lineage validator keeps disjoint from
+    #: every scored cohort, so a typed prompt can never land in a primary cell.
+    prompts: List[str] = Field(default_factory=list, max_length=8)
+
+
+#: Actions per chunk, and chunks per free-prompt rollout. Five chunks of sixteen
+#: is eighty actions: long enough to show an intent developing, short enough that
+#: the tile finishes while the presenter is still talking over the wall.
+PROMPT_CHUNK_ACTIONS = 16
+PROMPT_CHUNKS = 5
+
+
+def custom_task_id(prompt: str) -> str:
+    """A stable task id for a free-text prompt.
+
+    Derived from the prompt so the same words resolve to the same task, which is
+    what lets the ledger's idempotency and the wall's slot keying behave exactly
+    as they do for a benchmark task. The `custom:` prefix is load-bearing: every
+    consumer that needs to know whether a cell has human ground truth tests it.
+    """
+
+    digest = hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()[:10]
+    return "custom:%s" % digest
 
 
 class FreeplayInput(BaseModel):
@@ -669,14 +696,29 @@ def create_app(data_dir: Optional[Path] = None) -> FastAPI:
                     "gates": gates(),
                 },
             )
-        if not config.policies or not config.tasks:
+        # A free-text prompt becomes a task whose id encodes the prompt, so the
+        # rest of the pipeline treats it exactly like a benchmark task. There is
+        # no second code path: same planner, same backend, same ledger.
+        prompt_text = {custom_task_id(text): text.strip() for text in config.prompts if text.strip()}
+        tasks = list(config.tasks) + [task for task in prompt_text if task not in config.tasks]
+
+        if not config.policies or not tasks:
             raise HTTPException(422, "At least one policy and task is required")
-        if len(set(config.policies)) != len(config.policies) or len(set(config.tasks)) != len(config.tasks):
+        if len(set(config.policies)) != len(config.policies) or len(set(tasks)) != len(tasks):
             raise HTTPException(422, "Duplicate policies/tasks are not allowed")
-        if set(config.policies) - set(POLICIES) or set(config.tasks) - set(TASKS):
+        if set(config.policies) - set(POLICIES) or set(tasks) - set(TASKS) - set(prompt_text):
             raise HTTPException(422, "Unknown policy or task")
 
         payload = config.model_dump(exclude_none=True)
+        payload.pop("prompts", None)
+        if prompt_text:
+            payload["tasks"] = tasks
+            payload["task_prompts"] = prompt_text
+            # Forced, not defaulted. The caller does not get to put a typed
+            # prompt in a scored cohort, and the ledger records which cohort it
+            # actually ran in rather than which one was asked for.
+            payload["cohort"] = "exploration"
+            payload["horizons"] = {task: PROMPT_CHUNK_ACTIONS * PROMPT_CHUNKS for task in prompt_text}
         if document is not None and document.frozen:
             payload.setdefault("protocol_hash", document.sha256)
             if document.scenario_manifest_hash:

@@ -33,7 +33,8 @@ import {
 } from "./lib/api";
 import { burstIdempotencyKey, burstIdentity, burstRequestBody, type BurstIdentity } from "./lib/burst";
 import { isTerminalStatus, pickNumber, pickString, toDate } from "./lib/format";
-import { applyEpisodes, applySegment, createWall, type TileSlot, type WallState } from "./lib/wall";
+import { BENCHMARK_TASKS, customTaskId } from "./lib/tasks";
+import { applyEpisodes, applySegment, adoptTaskId, createWall, reserveSlot, type TileSlot, type WallState } from "./lib/wall";
 
 export const BASE_REFRESH_MS = 10_000;
 export const STARTS_PER_TASK = 50;
@@ -50,6 +51,12 @@ export function asOptions(value: unknown): ProtocolOption[] {
     const name = pickString(item.display_name, item.label, item.name, item.id) ?? id;
     return id && name ? [{ id, name }] : [];
   });
+}
+
+/** A run started from the prompt bar, which the console shows but never adopts. */
+export function isExplorationRun(run: Run): boolean {
+  const config = run.config;
+  return isRecord(config) && config.cohort === "exploration";
 }
 
 export type AppDataValue = {
@@ -101,6 +108,9 @@ export type AppDataValue = {
   refresh: () => Promise<void>;
   loadRun: (run: Run) => Promise<void>;
   launchBurst: () => Promise<void>;
+  /** Launch one rollout for a task string. Additive: never resets the wall. */
+  launchPrompt: (instruction: string) => Promise<void>;
+  promptBusy: boolean;
   cancelRun: () => Promise<void>;
   setSixClip: (next: SixClipResponse) => void;
 };
@@ -132,6 +142,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [actionError, setActionError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
   const [burstAttempt, setBurstAttempt] = useState(0);
+  const [promptBusy, setPromptBusy] = useState(false);
+  /** Runs started from the prompt bar, merged into the wall alongside the main run. */
+  const [promptRuns, setPromptRuns] = useState<string[]>([]);
   const [freeplayOpen, setFreeplayOpen] = useState(false);
   const [freeplaySubject, setFreeplaySubject] = useState<string>();
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -210,8 +223,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const autoSelected = useRef(false);
   useEffect(() => {
     if (autoSelected.current || activeRun?.id || runs.length === 0) return;
+    // Skip exploration runs. A typed prompt is one episode and is meant to
+    // appear *beside* the study on the wall, not to become the run the console
+    // is about -- selecting it would reset the wall to a single tile and drop
+    // the twelve the presenter is talking over.
+    const study = runs.find((run) => !isExplorationRun(run)) ?? runs[0];
     autoSelected.current = true;
-    void loadRun(runs[0]);
+    void loadRun(study);
   }, [activeRun?.id, loadRun, runs]);
 
   const runIsTerminal = isTerminalStatus(activeRun?.status);
@@ -302,6 +320,81 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [identity, loadRun, nextAttempt, submitting]);
 
+  const launchPrompt = useCallback(
+    async (instruction: string) => {
+      const text = instruction.trim();
+      if (!text || promptBusy) return;
+      setPromptBusy(true);
+      setActionError(undefined);
+      // The tile is claimed before the request is sent, so it is on screen for
+      // the whole round trip. A five-chunk rollout takes seconds; a stage beat
+      // cannot open with an empty grid waiting for a POST to return.
+      const policy = policies[0]?.id ?? "OpenVLA";
+      const benchmark = BENCHMARK_TASKS.some((task) => task.instruction === text);
+      const taskId = benchmark
+        ? (BENCHMARK_TASKS.find((task) => task.instruction === text)?.id ?? text)
+        : customTaskId(text);
+      setWall((prior) => reserveSlot(prior, { policy, task: taskId, instruction: text, benchmark }));
+      try {
+        const run = await api.createRun({
+          mode: "synthetic",
+          backend: "synthetic",
+          policies: [policy],
+          tasks: benchmark ? [taskId] : [],
+          prompts: benchmark ? [] : [text],
+          starts_per_task: 1,
+          seed: RUN_SEED,
+          // Same principle as the burst key: stable within one submission so a
+          // double-fire collapses, distinct across submissions so running the
+          // same task twice on purpose is two runs.
+          idempotency_key: `prompt-${customTaskId(text).slice(7)}-${promptRuns.length}`,
+        });
+        setRuns((prior) => [run, ...prior.filter((item) => item.id !== run.id)]);
+        // The server assigned the real task id; move the reserved tile onto it
+        // so the episodes that follow merge into this slot rather than claiming
+        // another one.
+        const assigned = isRecord(run.config) && Array.isArray(run.config.tasks) ? run.config.tasks : [];
+        const serverTask = assigned.find((value): value is string => typeof value === "string");
+        if (serverTask) setWall((prior) => adoptTaskId(prior, policy, taskId, serverTask));
+        // Registered, not selected. Selecting it would call loadRun, which
+        // resets the wall -- destroying the twelve tiles this rollout is meant
+        // to appear beside.
+        if (run.id) setPromptRuns((prior) => (prior.includes(run.id!) ? prior : [...prior, run.id!]));
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : "Could not start that task.");
+      } finally {
+        setPromptBusy(false);
+      }
+    },
+    [policies, promptBusy, promptRuns.length],
+  );
+
+  // Prompt rollouts are merged into the existing wall on the same cadence the
+  // rest of the console polls at, through the same `applyEpisodes` reducer the
+  // main run uses. No second rendering path, and no new endpoint.
+  useEffect(() => {
+    if (promptRuns.length === 0) return;
+    let cancelled = false;
+    const merge = async () => {
+      for (const id of promptRuns) {
+        try {
+          const response = await api.episodes(id);
+          const rows = response.episodes ?? [];
+          if (!cancelled && rows.length > 0) setWall((prior) => applyEpisodes(prior, rows));
+        } catch {
+          // A prompt rollout that cannot be read is not a console-wide failure;
+          // its tile keeps saying "generating" rather than claiming a result.
+        }
+      }
+    };
+    void merge();
+    const timer = setInterval(() => void merge(), 2_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [promptRuns]);
+
   const cancelRun = useCallback(async () => {
     if (!activeRun?.id) return;
     setActionError(undefined);
@@ -368,6 +461,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     refresh,
     loadRun,
     launchBurst,
+    launchPrompt,
+    promptBusy,
     cancelRun,
     setSixClip,
   };

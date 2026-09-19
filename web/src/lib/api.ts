@@ -43,6 +43,10 @@ export type ArtifactRef = {
 };
 
 export type Episode = JsonRecord & {
+  /** The instruction the rollout was given; free-text tasks have no registry entry. */
+  task_instruction?: string | null;
+  /** True for the five frozen benchmark tasks. Absent when the record did not say. */
+  benchmark_task?: boolean | null;
   id?: string;
   episode_id?: string;
   run_id?: string;
@@ -425,6 +429,8 @@ export type CreateRunBody = {
   starts_per_task: number;
   seed: number;
   idempotency_key: string;
+  /** Free-text task strings. The server forces these into the exploration cohort. */
+  prompts?: string[];
 };
 
 export const api = {

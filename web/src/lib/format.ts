@@ -25,6 +25,16 @@ export function pickNumber(...values: unknown[]): number | undefined {
 
 
 /** Integer counts. Never returns "0" for a missing value. */
+/**
+ * A boolean that may legitimately be absent.
+ *
+ * `undefined` is not `false`. A record that never reported whether its task was
+ * a benchmark task must not render as "off-benchmark", which is a claim.
+ */
+export function pickBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 export function formatCount(value: unknown, fallback = ABSENT): string {
   const numeric = pickNumber(value);
   return numeric === undefined ? fallback : new Intl.NumberFormat("en-US").format(numeric);
