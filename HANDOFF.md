@@ -1,5 +1,26 @@
 # PLUMB execution handoff — implementation in progress
 
+**For the new context named num2:** also read [CLUSTER-OPERATIONS.md](CLUSTER-OPERATIONS.md)
+in full. It contains the verified local/remote tmux layout, exact SSH/Slurm
+commands, latest five-cluster capacity check and submission/recovery procedures.
+[NUM2-START-HERE.md](NUM2-START-HERE.md) is the paste-ready continuation prompt.
+
+Latest update: all five SSH connections work. ONE H100 is enough for next
+experiments; no GPU experiment is currently running. Do not wait for eight H100s.
+Single-H100 and single-H200 Trillium scheduler dry-runs estimated immediate
+starts at04:11 EDT; recheck before submitting. Old job937277 remains pending
+Priority, unchanged. The user now says to use whatever resources are available.
+
+GitHub is private at https://github.com/lsnchow/htn26, main; baseline commit88c1b0d.
+kevinvalenciaa's write access is ACTIVE, not merely an invitation.
+The exact Queen's environment is venv-qwen-tf517, not the older shorthand below.
+No automatic switch into another chat has been performed.
+
+Final access caveat: a later direct Trillium SSH check returned a broken
+multiplex pipe/permission denied. The earlier all-five success is a timestamped
+snapshot, not a guarantee. See CLUSTER-OPERATIONS.md for recovery; do not infer
+that remote jobs or saved evidence were lost.
+
 Updated 2026-09-19, approximately 03:58 EDT. Preserve the full specification.
 User authorized Terra xhigh coding agents, cluster execution through drac/drac2/
 drac3/drac4/cac, and cluster-side downloads. Warn before any further large download.
