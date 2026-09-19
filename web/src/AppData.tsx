@@ -131,6 +131,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [loadError, setLoadError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+  const [burstAttempt, setBurstAttempt] = useState(0);
   const [freeplayOpen, setFreeplayOpen] = useState(false);
   const [freeplaySubject, setFreeplaySubject] = useState<string>();
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -273,15 +274,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }),
     [policies, tasks],
   );
-  const idempotencyKey = useMemo(() => burstIdempotencyKey(identity), [identity]);
+  // The attempt the *next* press will use. While a run is alive it is the
+  // current one, so a duplicate submission collapses into that run. Once the run
+  // is terminal the next press is a deliberate new run and gets its own key --
+  // without this the stage burst would return the pre-roll run finished before
+  // the pitch began.
+  const nextAttempt = activeRun && runIsTerminal ? burstAttempt + 1 : burstAttempt;
+  const idempotencyKey = useMemo(
+    () => burstIdempotencyKey(identity, nextAttempt),
+    [identity, nextAttempt],
+  );
   const resolvedCalledShot = calledShot ?? calledShotFromProtocol(protocol);
 
   const launchBurst = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
     setActionError(undefined);
+    setBurstAttempt(nextAttempt);
     try {
-      const run = await api.createRun(burstRequestBody(identity));
+      const run = await api.createRun(burstRequestBody(identity, nextAttempt));
       setRuns((prior) => [run, ...prior.filter((item) => item.id !== run.id)]);
       await loadRun(run);
     } catch (error) {
@@ -289,7 +300,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setSubmitting(false);
     }
-  }, [identity, loadRun, submitting]);
+  }, [identity, loadRun, nextAttempt, submitting]);
 
   const cancelRun = useCallback(async () => {
     if (!activeRun?.id) return;
