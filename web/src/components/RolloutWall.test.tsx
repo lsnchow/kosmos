@@ -1,6 +1,8 @@
-import { act, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { beforeEach, describe, expect, it } from "vitest";
 import { advanceDisplayClock } from "../lib/clock";
+import { mockFetch } from "../test/harness";
 import { applySegment, createWall, type WallState } from "../lib/wall";
 import { RolloutWall } from "./RolloutWall";
 
@@ -10,12 +12,33 @@ function wallWith(
   return segments.reduce((state, event) => applySegment(state, event), createWall());
 }
 
+function renderRunFrames(view: ReactElement) {
+  const rendered = render(view);
+  fireEvent.click(screen.getByRole("tab", { name: "Run frames" }));
+  return rendered;
+}
+
+beforeEach(() => {
+  mockFetch({ "/api/world-videos": { videos: [], total: 0, qualified: false } });
+});
+
 describe("<RolloutWall />", () => {
+  it("defaults to recorded world-model videos while retaining Run frames as a separate tab", () => {
+    render(<RolloutWall wall={createWall()} />);
+    expect(screen.getByRole("tab", { name: "World-model videos" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Run frames" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByText("recorded outputs")).toBeInTheDocument();
+    expect(document.getElementById("world-model-videos")).toHaveClass("scroll-mt-24");
+    fireEvent.click(screen.getByRole("tab", { name: "Run frames" }));
+    expect(screen.getByRole("tab", { name: "Run frames" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/No episode events have arrived for this run/i)).toBeInTheDocument();
+  });
+
   it("renders twelve viewport slots once any identity is assigned", () => {
     const wall = wallWith([
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png"], certified_frame_count: 16, provenance: "live" },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     expect(screen.getAllByRole("article")).toHaveLength(12);
     expect(screen.getAllByText(/No episode has claimed this slot/i)).toHaveLength(11);
     expect(
@@ -24,7 +47,7 @@ describe("<RolloutWall />", () => {
   });
 
   it("explains why the wall is empty instead of showing placeholder frames", () => {
-    render(<RolloutWall wall={createWall()} />);
+    renderRunFrames(<RolloutWall wall={createWall()} />);
     expect(screen.queryAllByRole("article")).toHaveLength(0);
     expect(
       screen.getByText(/No episode events have arrived for this run, so no slot has an identity yet/i),
@@ -39,7 +62,7 @@ describe("<RolloutWall />", () => {
       { episode_id: "c", policy: "MiniVLA", task: "to_sink", segment_index: 0, frame_urls: ["h/0.png"], certified_frame_count: 16, provenance: "replayed" },
       { episode_id: "d", policy: "SuSIE", task: "fold_cloth", segment_index: 0, frame_urls: ["i/0.png"], certified_frame_count: 16, provenance: "qualitative" },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     expect(screen.getByText("live")).toBeInTheDocument();
     expect(screen.getByText("cached")).toBeInTheDocument();
     expect(screen.getByText("replayed")).toBeInTheDocument();
@@ -50,7 +73,7 @@ describe("<RolloutWall />", () => {
     const wall = wallWith([
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png"] },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     expect(screen.getByText("no provenance")).toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
   });
@@ -60,7 +83,7 @@ describe("<RolloutWall />", () => {
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png", "f/1.png"], certified_frame_count: 14, provenance: "live" },
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 1, frame_urls: ["f/2.png"], certified_frame_count: 9, provenance: "live" },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     expect(screen.getByText("23")).toBeInTheDocument();
     expect(screen.queryByText(/16 certified/)).not.toBeInTheDocument();
   });
@@ -69,7 +92,7 @@ describe("<RolloutWall />", () => {
     const wall = wallWith([
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png", "f/1.png"] },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     expect(screen.getByText("2 · uncertified")).toBeInTheDocument();
   });
 
@@ -77,7 +100,7 @@ describe("<RolloutWall />", () => {
     const wall = wallWith([
       { episode_id: "ep-77", run_id: "run-5", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png"], certified_frame_count: 16, provenance: "live" },
     ]);
-    render(<RolloutWall wall={wall} runId="run-5" />);
+    renderRunFrames(<RolloutWall wall={wall} runId="run-5" />);
     const tile = screen.getByLabelText(/Viewport slot #01: OpenVLA on close_drawer/i);
     expect(within(tile).getByText("OpenVLA")).toBeInTheDocument();
     expect(within(tile).getByText("close_drawer")).toBeInTheDocument();
@@ -92,7 +115,7 @@ describe("<RolloutWall />", () => {
     const wall = wallWith([
       { episode_id: "a", policy: "OpenVLA", task: "close_drawer", segment_index: 0, frame_urls: ["f/0.png", "f/1.png"], certified_frame_count: 2, provenance: "live" },
     ]);
-    render(<RolloutWall wall={wall} />);
+    renderRunFrames(<RolloutWall wall={wall} />);
     const image = screen.getByAltText(/Accumulated generated frames for OpenVLA on close_drawer/i);
     const first = image.getAttribute("src");
     act(() => advanceDisplayClock(1));
@@ -112,7 +135,7 @@ describe("<RolloutWall />", () => {
       certified_frame_count: 16,
       provenance: "live" as const,
     }));
-    render(<RolloutWall wall={wallWith(segments)} />);
+    renderRunFrames(<RolloutWall wall={wallWith(segments)} />);
     expect(
       screen.getByText(/2 further policy\/task identities are running outside this viewport/i),
     ).toBeInTheDocument();

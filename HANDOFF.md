@@ -1,5 +1,19 @@
 # PLUMB execution handoff — implementation in progress
 
+## World-model videos delivered to Downloads and rollout viewport
+
+The unchanged Cosmos3 MP4 is in Downloads as
+`Kosmos-Cosmos3-generated-937575.mp4` with a provenance sidecar. It is a real
+previously generated3.4s/640×480 clip, not a new render or a synthetic fixture.
+All37 existing generated MP4s now appear in the default World-model videos tab
+of `/live#world-model-videos`; Play all is a63.8s playback queue. The previous
+synthetic/episode grid is retained under Run frames, not relabelled or deleted.
+Catalog `/api/world-videos` verifies output hashes and excludes source footage.
+All37 fully decoded and played through in a real browser;70 media/report range
+reads passed, zero JS errors/POSTs, mobile390px no overflow. No GPU job launched.
+Tests:1360 Python passed/6skipped;261 frontend passed/build passed.
+See docs/WORLD-VIDEO-PLAYBACK.md. Model generation/scoring gates remain unchanged.
+
 ## Baseten diagnostic MVP verified — localhost E2E is live
 
 Open http://127.0.0.1:8787/live#cloud-diagnostic and use **Run cloud model**.

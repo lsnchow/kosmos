@@ -174,6 +174,7 @@ function installRoutes() {
       fixture: {},
     },
     "/api/cloud-diagnostics": { requests: [] },
+    "/api/world-videos": { videos: [], total: 0, qualified: false },
     "/api/protocol": PROTOCOL,
     "/api/gates": GATES,
     "/api/runs/run-1/episodes": EPISODES,
@@ -244,6 +245,9 @@ async function renderAt(route: string, heading: RegExp) {
 const overview = () => renderAt("/console", /Measure the ruler before trusting the ranking/i);
 const live = async () => {
   const view = await renderAt("/live", /^Live run$/i);
+  // Recorded world-model videos are the default viewport content. Tests that
+  // inspect the distinct persisted run-frame wall explicitly choose its tab.
+  fireEvent.click(screen.getByRole("tab", { name: "Run frames" }));
   // Wait on something the *episodes* produce, not on protocol data. The wall's
   // tiles only exist once /api/runs/run-1/episodes has landed; waiting on a
   // protocol field instead let the test proceed with an empty wall whenever the
@@ -590,6 +594,7 @@ describe("Nightshift against the current backend responses", () => {
         fixture: {},
       },
       "/api/cloud-diagnostics": { requests: [] },
+      "/api/world-videos": { videos: [], total: 0, qualified: false },
       "/api/protocol": {
         policies: PROTOCOL.policies,
         tasks: PROTOCOL.tasks,

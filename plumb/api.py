@@ -817,6 +817,12 @@ def create_app(
     def experiments() -> dict:
         return experiments_payload(root)
 
+    @app.get("/api/world-videos")
+    def world_videos() -> dict:
+        """Existing, hash-bound model outputs; never enqueue inference jobs."""
+        from plumb.world_videos import world_videos_payload
+        return world_videos_payload(root)
+
     @app.get("/api/artifact-inventory")
     def artifact_inventory() -> dict:
         """Which spec section 8 artifacts exist.  Used by the e2e smoke test."""

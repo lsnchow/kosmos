@@ -36,6 +36,11 @@ See [Baseten MVP operation and evidence](docs/BASETEN-MVP.md) for the deployed
 identity and startup command. It does not turn synthetic runs into real rollouts
 or enable uncalibrated judge scoring.
 
+Previously generated world-model MP4s can also be watched in the
+[rollout viewport's playback queue](http://127.0.0.1:8787/live#world-model-videos).
+See [video playback and provenance](docs/WORLD-VIDEO-PLAYBACK.md). Playback is
+separate from submitting new generation jobs.
+
 ```bash
 .venv/bin/plumb run --starts 50 --data-dir data
 .venv/bin/plumb reference

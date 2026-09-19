@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Glyph } from "./Terminal";
 import { MetaList } from "./MetaList";
 import { formatCount, formatFrameCaption} from "../lib/format";
@@ -12,6 +13,8 @@ import {
 } from "../lib/wall";
 import { FramePlayer } from "./MediaFrame";
 import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
+import { TabSelector } from "./TabSelector";
+import { WorldVideoQueue } from "./WorldVideoQueue";
 
 /**
  * Per-tile provenance. Without it a replayed clip and a live one are the same
@@ -230,6 +233,7 @@ export function RolloutWall({
   /** The verbatim instruction for `scopedTask`, for the disclosure line. */
   scopedInstruction?: string;
 }) {
+  const [view, setView] = useState<"recordings" | "frames">("recordings");
   const assigned = wall.slots.filter((slot): slot is TileSlot => slot !== undefined);
   const withFrames = assigned.filter((slot) => slot.frames.length > 0);
   const totalFrames = assigned.reduce((sum, slot) => sum + slot.frames.length, 0);
@@ -238,9 +242,22 @@ export function RolloutWall({
   return (
     <Panel
       title="Rollout viewport"
-      className="rollouts-panel"
-      action={<SourceChip>{runId ? `run ${runId}` : "no run selected"}</SourceChip>}
+      className="rollouts-panel scroll-mt-24"
+      id="world-model-videos"
+      action={<SourceChip>{view === "recordings" ? "recorded outputs" : runId ? `run ${runId}` : "no run selected"}</SourceChip>}
     >
+      <TabSelector
+        tabs={[
+          { id: "recordings", label: "World-model videos" },
+          { id: "frames", label: "Run frames" },
+        ]}
+        value={view}
+        onChange={setView}
+        label="Rollout viewport content"
+        idPrefix="rollout-viewport"
+      />
+      <div id={`rollout-viewport-panel-${view}`} role="tabpanel" aria-labelledby={`rollout-viewport-tab-${view}`} className="mt-3 min-w-0">
+        {view === "recordings" ? <WorldVideoQueue /> : <>
       <div className="wall-summary" role="status">
         <span>
           <b className="tabular-nums">{formatCount(withFrames.length)}</b> of {wall.slots.length} slots have
@@ -292,6 +309,8 @@ export function RolloutWall({
         timing only. Playback speed is a display choice and is not the control timing of the rollout. Cached,
         replayed and qualitative media keep their own badge.
       </Note>
+        </>}
+      </div>
     </Panel>
   );
 }
