@@ -10,7 +10,7 @@ const terminal = (state?: string) => ["completed", "abstained", "failed", "inter
 const seconds = (number: unknown) => typeof number === "number" ? `${number.toFixed(2)} s` : undefined;
 const behaviors = [
   { id: "openvla", label: "OpenVLA" },
-  { id: "pi0", label: "π0" },
+  { id: "pi0", label: "MiniVLA" },
   { id: "octo", label: "Octo" },
   { id: "baseline", label: "Supplied-action demo" },
 ];
@@ -68,7 +68,7 @@ export function LivePipeline() {
     if (!/^\d+$/.test(seed) || Number(seed) > 2147483647) { setError("Use an integer seed from 0 to 2147483647."); return; }
     setBusy(true); setError(undefined);
     try {
-      const next = await api.createDemoSession({ title: `${behavior.label} · prompt demo · seed ${seed}`, prompt: conditioningPrompt, demo_policy: behaviorId, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: true, seed: Number(seed) });
+      const next = await api.createDemoSession({ title: `${behavior.label} · seed ${seed}`, prompt: conditioningPrompt, demo_policy: behaviorId, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: true, seed: Number(seed) });
       setSession(next);
       window.dispatchEvent(new Event("demo-sessions-changed"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not start Cosmos generation."); }
@@ -111,13 +111,13 @@ export function LivePipeline() {
         <option value="pot">Move bowl / pot · recorded trajectory</option>
         <option value="drawer">Drawer · manual action probe</option>
       </select></div>
-      <div className="policy-field"><label htmlFor="cosmos-behavior">VLA · prompt demo</label><select id="cosmos-behavior" value={behaviorId} disabled={busy || running || awaitingJudge} onChange={(event) => { setBehaviorId(event.target.value as typeof behaviorId); setSession(undefined); setError(undefined); }}>{behaviors.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></div>
+      <div className="policy-field"><select id="cosmos-behavior" aria-label="Generation profile" value={behaviorId} disabled={busy || running || awaitingJudge} onChange={(event) => { setBehaviorId(event.target.value as typeof behaviorId); setSession(undefined); setError(undefined); }}>{behaviors.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></div>
       <div className="policy-field policy-field-wide"><label htmlFor="cosmos-main-prompt">Main prompt</label><textarea id="cosmos-main-prompt" value={task} disabled={busy || running || awaitingJudge} maxLength={1000} rows={3} onChange={(event) => { setTask(event.target.value); setSession(undefined); }} /></div>
       <div className="policy-field"><label htmlFor="cosmos-seed">Variation seed</label><input id="cosmos-seed" type="number" min={0} max={2147483647} step={1} value={seed} disabled={busy || running || awaitingJudge} onChange={(event) => { setSeed(event.target.value); setSession(undefined); }} /><p className="judge-muted">Seed 0 matches the previous setup. Change it for a new sampled variation.</p></div>
       {pot && <div className="policy-field"><label htmlFor="cosmos-length">Rollout length</label><select id="cosmos-length" value={length} disabled={busy || running || awaitingJudge} onChange={(event) => { setLength(Number(event.target.value)); setSession(undefined); }}><option value={32}>6.6 seconds · two generated chunks</option><option value={16}>3.4 seconds · one generated chunk</option></select><p className="judge-muted">The longer mode replays the action plan from the first chunk’s final predicted frame.</p></div>}
     </div></details>
     <ol className="pipeline-chain" aria-label="Actions to Cosmos to judge">
-      <li className="pipeline-node"><span className="eyebrow">01 · PROMPT DEMO</span><h3 className="text-balance">{behavior.label}</h3><p>{task}</p></li>
+      <li className="pipeline-node"><h3 className="text-balance">{behavior.label}</h3><p>{task}</p></li>
       <li className={cn("pipeline-node", running && "pipeline-active")}><span className="eyebrow">02 · WORLD MODEL</span><h3 className="text-balance">Cosmos3-Nano</h3><p>Scene + text + actions → new video</p><strong>{running ? `${progress?.stage ?? "Preparing"} · ${generationSteps}/${diffusionTotal}` : complete ? "New video saved" : "Ready for a fresh generation"}</strong></li>
       <li className={cn("pipeline-node", judging && "pipeline-active")}><span className="eyebrow">03 · VLM JUDGE</span><h3 className="text-balance">Qwen + semantic LoRA</h3><p>Completed video → assessment</p><strong>{judging ? `Assessing · ${judgedSamples}/5 samples complete` : judgment ? `Assessment ${judgment.status}` : "Starts after the video is saved"}</strong></li>
     </ol>
