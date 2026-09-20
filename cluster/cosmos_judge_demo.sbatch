@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=24
-#SBATCH --time=01:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=/scratch/lchow432/plumb/logs/cosmos-judge-%j.log
 set -euo pipefail
 module load StdEnv/2023 python/3.11 cuda/12.6 cudnn/9.5.1.17
