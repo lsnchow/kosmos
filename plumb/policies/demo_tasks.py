@@ -26,5 +26,5 @@ def custom_task_rubric(instruction: str) -> str:
         "5: the requested final state is visibly achieved at the end. "
         "A pickup followed by returning the object to its initial position does not satisfy a request "
         "to move it elsewhere. Judge the specified object and destination, not mere motion. "
-        "Use unknown completion and null progress if the goal or final state cannot be determined."
+        "Use completion_evidence=uncertain and null progress if the goal or final state cannot be determined."
     )
