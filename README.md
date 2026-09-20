@@ -24,6 +24,11 @@ Go to [Video gallery](http://127.0.0.1:8787/console) to watch saved model output
 **Saved runs** contains run history and measurements. The remaining pages are
 grouped under **Tools & validation**, each with a plain-language description.
 The gallery is experimental footage, not a completed six-policy comparison.
+**New evaluation** now runs real OpenVLA/IRASim steps or opens manual steering.
+Gallery **New interactive branch** starts a fresh prediction from a clip's last
+image. See the [working live-demo flow and operating window](docs/LIVE-DEMO.md).
+This is experimental image feedback, not exact hidden-state restoration or a
+qualified success score.
 Read the [architecture breakdown](docs/ARCHITECTURE.md) for the page map, model
 roles, current execution paths, storage boundaries, and remaining product work.
 

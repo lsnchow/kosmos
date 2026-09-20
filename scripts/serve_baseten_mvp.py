@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,9 +21,21 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data" / "live-integrated")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--timeout-seconds", type=int, default=300)
+    parser.add_argument("--live-demo-url", help="Loopback URL of the authenticated GPU worker tunnel.")
+    parser.add_argument("--live-demo-token-file", type=Path, help="Private worker token file; never sent to the browser.")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535 or not 1 <= args.timeout_seconds <= 600:
         parser.error("port or timeout is outside its supported range")
+    if bool(args.live_demo_url) != bool(args.live_demo_token_file):
+        parser.error("live-demo URL and token file must be supplied together")
+    if args.live_demo_url:
+        endpoint = urlparse(args.live_demo_url)
+        if endpoint.scheme != "http" or endpoint.hostname not in {"127.0.0.1", "localhost", "::1"} or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment:
+            parser.error("live-demo URL must be a plain HTTP loopback tunnel URL")
+        if not args.live_demo_token_file.is_file() or args.live_demo_token_file.is_symlink():
+            parser.error("live-demo token must be an existing regular private file")
+        os.environ["PLUMB_LIVE_DEMO_URL"] = args.live_demo_url.rstrip("/")
+        os.environ["PLUMB_LIVE_DEMO_TOKEN_FILE"] = str(args.live_demo_token_file.resolve())
     os.environ.update({
         "PLUMB_DATA_DIR": str(args.data_dir.resolve()),
         "PLUMB_CLOUD_DIAGNOSTIC_MODEL_ID": args.model_id,

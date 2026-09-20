@@ -1150,6 +1150,12 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
 .freeplay-unavailable-note { color: var(--text-dim) !important; }
 
 .freeplay-controls { overflow-y: auto; border: 1px solid var(--line-2); border-radius: var(--radius); background: transparent; padding: var(--space-4); }
+.recording-readiness { margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-2); font-size: var(--fs-2xs); max-height: 30dvh; overflow-y: auto; }
+.recording-readiness p { margin-block: var(--space-2); color: var(--text-muted); }
+.recording-source-preview { min-height: 0; overflow-y: auto; width: 100%; }
+.recording-source-preview video { display: block; width: 100%; max-height: 48dvh; object-fit: contain; background: black; }
+.recording-source-preview > p { padding: var(--space-3); font-size: var(--fs-2xs); }
+.dpad button:disabled { opacity: 0.5; cursor: not-allowed; }
 .control-note { margin: 0 0 var(--space-4); color: var(--text-muted); font-size: var(--fs-2xs); line-height: 1.6; }
 .dpad { display: grid; width: 11rem; grid-template-columns: repeat(3, 1fr); gap: var(--space-1-5); margin: 0 auto var(--space-4); }
 .dpad button { display: grid; aspect-ratio: 1; place-items: center; border: 1px solid var(--line-interactive); border-radius: 0; background: transparent; color: var(--text); font-size: var(--fs-2xs); }
@@ -1166,6 +1172,12 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
 .state-readout div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); border-top: 1px solid var(--line-2); padding: var(--space-1-5) 0; }
 .state-readout dt { flex: none; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-2xs); }
 .state-readout dd { margin: 0; color: var(--text-strong); font-size: var(--fs-2xs); font-weight: 500; text-align: right; }
+.live-demo-dialog .state-readout dd { min-width: 0; overflow-wrap: anywhere; }
+.comparison-control-dialog .state-readout dd,
+#matched-control-wall .state-readout dd { min-width: 0; overflow-wrap: anywhere; }
+.comparison-control-dialog { padding-bottom: max(var(--space-5), env(safe-area-inset-bottom)); }
+.comparison-control-dialog .generating-overlay { background: var(--surface-1); }
+.live-demo-dialog .freeplay-controls { min-width: 0; }
 .request-state { margin: var(--space-3) 0 0; color: var(--caution-text); font-size: var(--fs-2xs); line-height: 1.5; }
 .inline-error { margin: var(--space-3) 0 0; color: var(--bad); font-size: var(--fs-2xs); line-height: 1.5; }
 .alert-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); }
@@ -1355,6 +1367,20 @@ td span { display: block; margin-top: 0; color: var(--text-dim); font-size: var(
   .freeplay-dialog { inset: 0; border-radius: 0; padding: var(--space-4); }
   .freeplay-layout { grid-template-columns: 1fr; overflow-y: auto; }
   .freeplay-stage { min-height: 15rem; }
+  .recording-control-dialog .freeplay-layout { display: flex; flex-direction: column; }
+  .recording-control-dialog .freeplay-stage, .recording-control-dialog .freeplay-controls { flex: none; overflow: visible; }
+  .recording-control-dialog .freeplay-stage { display: block; }
+  .recording-control-dialog .recording-source-preview { overflow: visible; }
+  .live-demo-dialog { display: block; overflow-y: auto; }
+  .live-demo-dialog .freeplay-layout { display: flex; flex-direction: column; overflow: visible; }
+  .live-demo-dialog .freeplay-stage, .live-demo-dialog .freeplay-controls { flex: none; overflow: visible; }
+  .live-demo-dialog .freeplay-stage { display: block; }
+  .live-demo-dialog .freeplay-media { display: block; width: 100%; height: auto; }
+  .comparison-control-dialog { overflow-y: auto; padding-bottom: max(var(--space-4), env(safe-area-inset-bottom)); }
+  .comparison-control-dialog .freeplay-layout { display: flex; flex-direction: column; overflow: visible; }
+  .comparison-control-dialog .freeplay-stage, .comparison-control-dialog .freeplay-controls { flex: none; overflow: visible; }
+  .comparison-control-dialog .freeplay-stage { display: block; }
+  .comparison-control-dialog .freeplay-media { display: block; width: 100%; height: auto; }
   .smoke-list { grid-template-columns: 1fr; }
   .footer-note { flex-direction: column; }
   .tab { padding: 0.75em 1em; }

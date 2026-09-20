@@ -1,0 +1,12 @@
+# KOSMOS demo controller — CPU only
+#
+# This image streams newline-delimited JSON and compiles Bridge actions.  It
+# intentionally has no Torch/JAX/Diffusers, database client, object-store SDK,
+# Cloudflare package, or callback client.  Localhost owns artifact persistence.
+#
+# The recorded +computecanada environment and cluster-runtime-evidence.json
+# DOES NOT TRANSFER to this Baseten CPU image; controller timing must be
+# measured after deployment.
+pydantic==2.11.7
+numpy==1.26.4
+pillow==11.1.0

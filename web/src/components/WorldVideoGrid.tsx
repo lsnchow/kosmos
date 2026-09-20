@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { artifactUrl } from "../lib/api";
 import { formatSeconds } from "../lib/format";
 import type { WorldVideo } from "./WorldVideoQueue";
+import { NewEvaluationDialog } from "./LiveDemo";
 
 function mediaUrl(value: unknown) {
   return typeof value === "string" && value.startsWith("/api/artifacts/")
@@ -29,7 +30,15 @@ export function gallerySelection(videos: WorldVideo[]) {
     .slice(0, 6);
 }
 
-function VideoCard({ video, paused }: { video: WorldVideo; paused: boolean }) {
+function VideoCard({
+  video,
+  paused,
+  onNewBranch,
+}: {
+  video: WorldVideo;
+  paused: boolean;
+  onNewBranch: (video: WorldVideo, trigger: HTMLButtonElement) => void;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   const src = mediaUrl(video.video_url);
@@ -96,6 +105,14 @@ function VideoCard({ video, paused }: { video: WorldVideo; paused: boolean }) {
             This clip could not play. Download it or choose another recording.
           </p>
         )}
+        <button
+          type="button"
+          className="button button-secondary"
+          aria-label={`Start a new interactive branch from ${video.title}`}
+          onClick={(event) => onNewBranch(video, event.currentTarget)}
+        >
+          New interactive branch →
+        </button>
         <details>
           <summary>Clip details & download</summary>
           <p className="text-pretty">
@@ -128,6 +145,10 @@ export function WorldVideoGrid() {
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [branch, setBranch] = useState<{
+    video: WorldVideo;
+    trigger: HTMLButtonElement;
+  }>();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -204,7 +225,12 @@ export function WorldVideoGrid() {
       ) : selected.length ? (
         <div className="gallery-grid">
           {selected.map((video) => (
-            <VideoCard key={video.id} video={video} paused={paused} />
+            <VideoCard
+              key={video.id}
+              video={video}
+              paused={paused || Boolean(branch)}
+              onNewBranch={(video, trigger) => setBranch({ video, trigger })}
+            />
           ))}
         </div>
       ) : (
@@ -214,10 +240,23 @@ export function WorldVideoGrid() {
         </p>
       )}
       <p className="gallery-footnote text-pretty">
-        Playback only—no generation or scoring. Loops replay the saved clip;
-        they do not extend the robot’s trajectory. Short probes and repeats
-        remain in the archive.
+        Watching a clip never starts generation or scoring. A new interactive
+        branch starts from this clip’s last verified image and uses experimental
+        IRASim prediction; it is not an exact checkpoint resume. Loops replay
+        the saved clip; they do not extend the robot’s trajectory. Short probes
+        and repeats remain in the archive.
       </p>
+      {branch && (
+        <NewEvaluationDialog
+          key={branch.video.id}
+          open
+          onOpenChange={(open) => {
+            if (!open) setBranch(undefined);
+          }}
+          sourceVideo={branch.video}
+          returnFocusTo={branch.trigger}
+        />
+      )}
     </section>
   );
 }

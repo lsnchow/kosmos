@@ -74,13 +74,19 @@ def _regular_under(path: Path, root: Path) -> bool:
 
 
 def _local_video(report_path: Path, ref: dict, root: Path):
+    return _local_artifact(report_path, ref, root, suffix=".mp4")
+
+
+def _local_artifact(report_path: Path, ref: dict, root: Path, *, suffix: str = ""):
+    """Resolve one hash-bound report artifact without following a symlink."""
+
     remote = ref.get("path")
     digest = ref.get("sha256")
     if not isinstance(remote, str) or "\\" in remote or not isinstance(digest, str):
         return None
     expected = digest.removeprefix("sha256:")
     parts = Path(remote).parts
-    if not parts or ".." in parts or not remote.endswith(".mp4"):
+    if not parts or ".." in parts or (suffix and not remote.endswith(suffix)):
         return None
     if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
         return None
@@ -98,6 +104,54 @@ def _local_video(report_path: Path, ref: dict, root: Path):
         if hashlib.sha256(path.read_bytes()).hexdigest() == expected:
             return path, expected
     return None
+
+
+def _source_branch_binding(
+    report: dict,
+    report_path: Path,
+    video_ref: dict,
+    video_digest: str,
+    root: Path,
+):
+    """Return only a verified, exact-source checkpoint manifest.
+
+    A generated MP4 has pixels and container metadata, but not the opaque world
+    state required to resume it.  Reports may opt in to a future source-branch
+    adapter only by carrying this explicit, hash-bound manifest.  Absent or
+    malformed manifests are intentionally indistinguishable from no support.
+    """
+
+    manifest = _mapping(report.get("source_branch"))
+    if manifest.get("schema") != "plumb-source-branch-v1":
+        return None
+    source_digest = manifest.get("source_video_sha256")
+    if not isinstance(source_digest, str) or source_digest.removeprefix("sha256:") != video_digest:
+        return None
+    # The source report must itself bind the same output reference, not merely
+    # a digest copied from a similarly named file.
+    if str(video_ref.get("sha256", "")).removeprefix("sha256:") != video_digest:
+        return None
+    adapter = manifest.get("adapter")
+    if (
+        not isinstance(adapter, str)
+        or not adapter
+        or len(adapter) > 200
+        or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-" for character in adapter)
+    ):
+        return None
+    checkpoint = _local_artifact(report_path, _mapping(manifest.get("checkpoint")), root)
+    if checkpoint is None:
+        return None
+    checkpoint_path, checkpoint_digest = checkpoint
+    return {
+        "schema": "plumb-source-branch-v1",
+        "adapter": adapter,
+        "checkpoint": {
+            "sha256": "sha256:" + checkpoint_digest,
+            "artifact_url": _url(checkpoint_path, root),
+            "size_bytes": checkpoint_path.stat().st_size,
+        },
+    }
 
 
 def _positive(value: Any):
@@ -169,11 +223,16 @@ def world_videos_payload(root: Path) -> Dict[str, Any]:
                     seen.add(identity)
                     measured = _probe(str(path), digest)
                     frame_count = measured.get("frame_count") or _positive(ref.get("frame_count"))
-                    clip_id = "world-video-" + hashlib.sha256(relative.encode()).hexdigest()[:16]
+                    # IDs must distinguish two evidence roots that happen to
+                    # use the same relative artifact path.  The old path-only
+                    # identity made a source-bound request ambiguous.
+                    identity_material = evidence.relative_to(root).as_posix() + "\0" + relative + "\0" + digest
+                    clip_id = "world-video-" + hashlib.sha256(identity_material.encode()).hexdigest()[:16]
                     stem = path.stem.replace("_", " ")
                     title = "%s · %s" % (model, stem)
                     if label != "output":
                         title += " · " + label
+                    source_branch = _source_branch_binding(report, report_path, ref, digest, root)
                     videos.append({
                         "id": clip_id, "title": title, "model": model, "kind": kind,
                         "video_url": _url(path, root), "report_url": _url(report_path, root),
@@ -188,6 +247,10 @@ def world_videos_payload(root: Path) -> Dict[str, Any]:
                         "qualified": False, "provenance": "recorded_model_output",
                         "notes": ["Previously generated recording; playback does not start a GPU job.", caveat,
                                   "Experimental footage; no task-success or physics-fidelity score is asserted."],
+                        # Not present for the existing MP4-only recordings.
+                        # A source-branch adapter must additionally declare it
+                        # can restore this exact manifest before controls enable.
+                        "source_branch": source_branch,
                         "_sort": (rank, relative),
                     })
             except (OSError, ValueError, TypeError):

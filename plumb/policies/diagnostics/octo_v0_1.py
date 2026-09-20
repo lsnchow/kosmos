@@ -717,6 +717,80 @@ class _OctoV1PolicyAdapter:
         self._task_instruction = None
         self.last_report = None
 
+    def restore_source_state(self, payload: Mapping[str, Any]) -> None:
+        """Restore only source task/history state into a fresh wrapper.
+
+        The experimental wall creates a new wrapper at every feedback
+        boundary.  Model weights may be owned by a deployment cache, but the
+        language task, two-observation history, and temporal proposal history
+        must come from the cell's prior persisted state—not from another
+        replica request.  This method deliberately accepts no raw reset seed,
+        guessed proprioception, or pre-computed executed action.
+
+        ``payload`` is produced by :mod:`plumb.policies.experimental`.  Its
+        RGB frames have already been decoded by that layer; preserving them as
+        opaque values here keeps this source adapter free of storage/encoding
+        policy.
+        """
+
+        if self._observation_history or self._action_history or self._task is not None or self._task_instruction is not None:
+            raise PolicyContractError("Octo source state may only be restored into a fresh wrapper.")
+        if not isinstance(payload, Mapping) or payload.get("schema") != "plumb-octo-v0.1-source-state-v1":
+            raise PolicyContractError("Octo source state has an unrecognised schema.")
+        instruction = payload.get("task_instruction")
+        if not isinstance(instruction, str) or not instruction.strip():
+            raise PolicyContractError("Octo source state must retain its exact nonempty task instruction.")
+        observation_count = payload.get("observation_count")
+        if not isinstance(observation_count, int) or observation_count < 1:
+            raise PolicyContractError("Octo source state observation_count must be a positive integer.")
+        observations = payload.get("observation_history")
+        proposals = payload.get("proposal_history")
+        if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
+            raise PolicyContractError("Octo source state must carry its real observation history.")
+        if not isinstance(proposals, Sequence) or isinstance(proposals, (str, bytes)):
+            raise PolicyContractError("Octo source state must carry its raw proposal history.")
+        if not 1 <= len(observations) <= OCTO_OBSERVATION_HORIZON:
+            raise PolicyContractError("Octo source state must retain one or two real observations.")
+        if len(proposals) > OCTO_ACTION_HORIZON:
+            raise PolicyContractError("Octo source state retains more proposal chunks than source temporal ensembling allows.")
+        if observation_count < len(observations) or len(proposals) > observation_count:
+            raise PolicyContractError("Octo source state observation/proposal counts are inconsistent.")
+
+        restored_observations = []
+        for entry in observations:
+            if not isinstance(entry, Mapping):
+                raise PolicyContractError("Octo source observation history contains a malformed entry.")
+            image = entry.get("decoded_rgb")
+            proprio = entry.get("proprio")
+            if image is None:
+                raise PolicyContractError("Octo source history cannot restore an absent RGB observation.")
+            if isinstance(proprio, (str, bytes)) or not isinstance(proprio, Sequence):
+                raise PolicyContractError("Octo source history cannot restore absent or malformed proprioception.")
+            try:
+                source_proprio = tuple(float(component) for component in proprio)
+            except (TypeError, ValueError) as error:
+                raise PolicyContractError("Octo source history proprioception must be numeric.") from error
+            if len(source_proprio) not in (7, 8) or not all(math.isfinite(component) for component in source_proprio):
+                raise PolicyContractError("Octo source history proprioception must be finite 7-D or 8-D state.")
+            if not any(component != 0.0 for component in source_proprio):
+                raise PolicyContractError("Octo source history refuses an all-zero invented proprioception.")
+            restored_observations.append({"image_primary": image, "proprio": source_proprio})
+
+        runtime = self._load_runtime()
+        restored_proposals = []
+        for index, proposal in enumerate(proposals):
+            rows = self._proposal_rows(runtime.numpy.asarray(proposal), runtime.numpy)
+            restored_proposals.append(runtime.numpy.asarray(rows))
+        self._observation_history.extend(restored_observations)
+        self._action_history.extend(restored_proposals)
+        self._observation_count = observation_count
+        # ``create_tasks`` remains lazy. Its runtime-specific pytree is never
+        # serialised; the exact instruction is recreated before the next
+        # sample call by _task_for_instruction().
+        self._task = None
+        self._task_instruction = instruction
+        self.last_report = None
+
     def predict_with_report(self, observation: PolicyObservation) -> OctoActionReport:
         """Make one local native Octo proposal and return its selected 7-D action."""
 

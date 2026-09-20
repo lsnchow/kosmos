@@ -364,7 +364,91 @@ export type CalledShot = {
 
 export type FreeplayDirection = "up" | "down" | "left" | "right" | "stop";
 
+/**
+ * The interactive demo is deliberately separate from the historical free-play
+ * developer tool. A demo session has persisted media and an explicit
+ * experimental state mode; it is not a benchmark result or checkpoint resume.
+ */
+export type DemoMode = "policy" | "manual";
+export type DemoDirection =
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "forward"
+  | "back";
+export type DemoState =
+  | "queued"
+  | "initializing"
+  | "ready"
+  | "running"
+  | "completed"
+  | "blocked"
+  | "error";
+
+export type DemoFrame = {
+  index?: number;
+  url?: string;
+  sha256?: string;
+  role?: "source" | "fixture" | "predicted" | string;
+  input_sha256?: string;
+  conditioning_sha256?: string;
+  action7?: number[];
+  timings_ms?: Record<string, number | null>;
+  model?: string | JsonRecord;
+  revision?: string | JsonRecord;
+  provenance?: string;
+};
+
+export type DemoSession = {
+  id: string;
+  title?: string;
+  prompt?: string;
+  mode: DemoMode;
+  steps?: number;
+  requested_steps?: number;
+  completed_steps?: number;
+  max_steps?: number;
+  remaining_steps?: number;
+  current_frame_index?: number;
+  policy_label?: "OpenVLA" | "Manual directional action" | string;
+  state: DemoState;
+  frames?: DemoFrame[];
+  frame_urls?: string[];
+  latest_video_url?: string;
+  error?: string;
+  warnings?: string[];
+  state_mode?: "experimental_reencoded_rgb_stateless" | string;
+  qualified?: false;
+  source?: {
+    video_id?: string;
+    sha256?: string;
+    mode?: "fresh_image_reconditioned_not_exact_checkpoint_restore" | string;
+  };
+};
+
+export type DemoStatus = {
+  available: boolean;
+  configured: boolean;
+  health: "ready" | "available" | "unavailable" | "error" | "not_configured" | string;
+  reason?: string;
+  state_mode?: "experimental_reencoded_rgb_stateless" | string;
+  manual_directions?: DemoDirection[];
+  qualified?: false;
+};
+
+export type CreateDemoSessionBody = {
+  title?: string;
+  prompt?: string;
+  mode: DemoMode;
+  steps?: number;
+  source_video_id?: string;
+};
+
 export type FreeplayResponse = {
+  mode?: string;
+  source?: { video_id?: string; sha256?: string };
+  binding?: { exact_branch_supported?: boolean };
   session_id?: string;
   frame_urls?: string[];
   frame_count?: number;
@@ -449,8 +533,25 @@ export const api = {
     request<Run>("/api/runs", { method: "POST", body: JSON.stringify(body) }),
   cancelRun: (runId: string) =>
     request<Run>(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" }),
-  freeplayStep: (body: { session_id?: string; direction: FreeplayDirection }) =>
+  freeplayStep: (body: { session_id?: string; direction: FreeplayDirection; video_id?: string; source_sha256?: string }) =>
     request<FreeplayResponse>("/api/freeplay/step", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  demoStatus: () => request<DemoStatus>("/api/demo/status"),
+  demoSessions: () => request<{ sessions?: DemoSession[] }>("/api/demo/sessions"),
+  demoSession: (sessionId: string) =>
+    request<DemoSession>(`/api/demo/sessions/${encodeURIComponent(sessionId)}`),
+  createDemoSession: (body: CreateDemoSessionBody) =>
+    request<DemoSession>("/api/demo/sessions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  demoCommand: (
+    sessionId: string,
+    body: { direction: DemoDirection; steps?: number; request_id?: string },
+  ) =>
+    request<DemoSession>(`/api/demo/sessions/${encodeURIComponent(sessionId)}/commands`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

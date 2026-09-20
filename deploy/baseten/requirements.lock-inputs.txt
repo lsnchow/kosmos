@@ -13,6 +13,8 @@
 #   requirements/judge-qwen.txt          JudgeWorker       BasetenImage.PY311
 #   requirements/validity.txt            ValidityWorker    BasetenImage.PY311 (CPU)
 #   requirements/controller.txt          RolloutController BasetenImage.PY311 (CPU)
+#   requirements/demo-controller.txt     KOSMOS demo CPU stream controller
+#   requirements/demo-world-irasim.txt   KOSMOS selected original-IRASim worker
 #
 # Each is referenced by exactly one Chainlet through
 # DockerImage(pip_requirements_file=...) in chain.py, and each carries a header

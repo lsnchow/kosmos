@@ -1,5 +1,17 @@
 # PLUMB continuation — current entrypoint
 
+## Latest: real live demo working (2026-09-19 evening)
+
+Read the top of HANDOFF.md and docs/LIVE-DEMO.md before acting on older notes.
+Console now has New evaluation (real OpenVLA + IRASim) and manual steering,
+including fresh image-conditioned branches from saved gallery clips. Actual
+browser GPU E2E passed. Slurm job941263 ontrig0001 is a bounded one-H100 worker
+ending21:40:51 Toronto time today; LOCAL tmux plumb-live-gpu holds its SSH
+tunnel, plumb-live serves the API. Recheck before renewal/restart; do not kill
+the shared SSH master. Existing Baseten policy diagnostic remains separate.
+1,379 Python tests passed/6skipped;272 frontend/build passed. No scoring/gate
+qualification or exact old hidden-state restoration is claimed.
+
 ## Current: Baseten diagnostic E2E verified
 
 Use http://127.0.0.1:8787/live#cloud-diagnostic. Baseten model3mzlenow,

@@ -175,6 +175,8 @@ function installRoutes() {
     },
     "/api/cloud-diagnostics": { requests: [] },
     "/api/world-videos": { videos: [], total: 0, qualified: false },
+    "/api/demo/status": { available: false, configured: false, health: "not_configured", reason: "No live runtime is configured.", qualified: false },
+    "/api/demo/sessions": { sessions: [] },
     "/api/protocol": PROTOCOL,
     "/api/gates": GATES,
     "/api/runs/run-1/episodes": EPISODES,
@@ -242,7 +244,7 @@ async function renderAt(route: string, heading: RegExp) {
   return { ...view, ...routes };
 }
 
-const overview = () => renderAt("/console", /^Video gallery$/i);
+const overview = () => renderAt("/console", /^Evaluate or watch$/i);
 const live = async () => {
   const view = await renderAt("/live", /^Developer tools$/i);
   // Recorded world-model videos are the default viewport content. Tests that
@@ -357,6 +359,7 @@ describe("Kosmos pages render their beats", () => {
 
   it("puts the scoreboard and the run ledger on results", async () => {
     await renderAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     expect(await screen.findByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Run history/i })).toBeInTheDocument();
   });
@@ -381,6 +384,7 @@ describe("Kosmos pages render their beats", () => {
 
   it("selects the hero episode from its explicit flag, not array position", async () => {
     await renderAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     // ep-1 is episodes[0]; the hero is ep-hero, chosen by presentation_track.
     expect(await screen.findByText("ep-hero")).toBeInTheDocument();
     expect(screen.getByText("480x480")).toBeInTheDocument();
@@ -389,7 +393,7 @@ describe("Kosmos pages render their beats", () => {
   it("never uses a phrase from the never-say list", async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /^Video gallery$/i],
+      ["/console", /^Evaluate or watch$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
       ["/evidence", /^Validation$/i],
@@ -423,7 +427,7 @@ describe("Kosmos pages render their beats", () => {
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /^Video gallery$/i],
+      ["/console", /^Evaluate or watch$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
       ["/evidence", /^Validation$/i],
@@ -641,6 +645,7 @@ describe("Kosmos against the current backend responses", () => {
     // The clip and called-shot routes 404 here; the core control plane did not
     // fail, so the console must not display a load error over the whole page.
     await renderTodayAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     await waitFor(() => expect(screen.getByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument());
     expect(document.querySelector(".error-banner")).toBeNull();
   });

@@ -1,0 +1,33 @@
+# KOSMOS selected-world worker — original IRASim Bridge experimental path.
+#
+# This is a dedicated image; do not merge it with the Cosmos image.  The source
+# profile stays original 256x320 / 16 structural frames / 15x7-D actions.  The
+# checkpoint is a verified externally mounted *safetensors* asset and is never
+# downloaded or unpickled during image build/runtime.
+#
+# The recorded +computecanada IRASim environment in cluster-runtime-evidence.json
+# DOES NOT TRANSFER to this public-wheel Baseten image. GPU shape, timing and
+# action response must be re-measured before any claim.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+torchvision==0.21.0
+diffusers==0.24.0
+huggingface-hub==0.25.2
+transformers==4.40.1
+accelerate==0.24.1
+timm==0.9.10
+omegaconf==2.3.0
+einops==0.8.1
+einops-exts==0.0.4
+rotary-embedding-torch==0.8.9
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+scikit-image==0.24.0
+safetensors==0.4.5
+sentencepiece==0.2.0
+numpy==1.26.4
+pillow==11.1.0
+pydantic==2.11.7
+
+# Deliberately absent: xformers, flash-attn, remote checkpoint URLs, R2/S3
+# clients, and any unsafe legacy checkpoint loader.

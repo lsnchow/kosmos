@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import axe from "axe-core";
 import { http, mockFetch } from "../test/harness";
@@ -36,6 +37,37 @@ const mount = () =>
   );
 
 describe("saved video gallery", () => {
+  it("opens a new image-reconditioned branch without inference, pauses the gallery, and restores focus on close", async () => {
+    const { calls } = mockFetch({
+      "/api/world-videos": { videos: [video] },
+      "/api/demo/status": {
+        available: true,
+        configured: true,
+        health: "ready",
+      },
+    });
+    mount();
+    const trigger = await screen.findByRole("button", {
+      name: "Start a new interactive branch from Cosmos saved fixture",
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog", { name: "New evaluation" });
+    expect(within(dialog).getByText(/not an exact checkpoint resume/i)).toBeInTheDocument();
+    expect(within(dialog).getByDisplayValue("Put the pot to the left of the purple item.")).toBeInTheDocument();
+    expect(calls.every((call) => call.method === "GET")).toBe(true);
+    expect(
+      calls.some(
+        (call) => call.url === "/api/demo/status",
+      ),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("excludes tiny probes, unsafe paths and duplicate bytes, and caps visible decoders at six", () => {
     expect(
       gallerySelection([
@@ -159,6 +191,37 @@ describe("saved video gallery", () => {
     expect(
       await screen.findByRole("link", { name: /Check the recording archive/ }),
     ).toHaveAttribute("href", "/clips");
+  });
+
+  it("keeps the image-branch dialog accessible when the runtime is unavailable", async () => {
+    mockFetch({
+      "/api/world-videos": { videos: [video] },
+      "/api/demo/status": {
+        available: false,
+        configured: false,
+        health: "not_configured",
+        reason: "The interactive runtime is not configured.",
+      },
+    });
+    mount();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Start a new interactive branch from Cosmos saved fixture",
+      }),
+    );
+    await screen.findByText("The interactive runtime is not configured.");
+    expect(screen.getByRole("button", { name: "Start manual image branch" })).toBeDisabled();
+    let result!: axe.AxeResults;
+    await act(async () => {
+      result = await axe.run(document.body, {
+        preload: false,
+        rules: {
+          "color-contrast": { enabled: false },
+          "video-caption": { enabled: false },
+        },
+      });
+    });
+    expect(result.violations).toEqual([]);
   });
 
   it("passes semantic accessibility checks with real gallery cards", async () => {

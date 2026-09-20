@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { ComparisonWall } from "../components/ComparisonWall";
+import { LiveDemoPanel } from "../components/LiveDemo";
 import { WorldVideoGrid } from "../components/WorldVideoGrid";
 import { PageHeader } from "./PageHeader";
 
@@ -7,15 +9,25 @@ export function OverviewPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="Watch first · no GPU request"
-        title="Video gallery"
-        lede="Watch saved robot world-model videos. A world model predicts what the camera would see after a robot moves."
+        eyebrow="Interactive demo and saved media"
+        title="Evaluate or watch"
+        lede="Start a bounded OpenVLA or manual experimental evaluation, then inspect its persisted frames alongside the saved recording archive."
         actions={
           <Link className="button button-secondary" to="/clips">
             Browse all recordings →
           </Link>
         }
       />
+      <ComparisonWall />
+      <section aria-labelledby="legacy-demo-heading">
+        <h2 id="legacy-demo-heading" className="text-balance">
+          Legacy experimental controls
+        </h2>
+        <p className="text-pretty text-sm text-fg-muted">
+          This earlier bounded demo remains available for engineering checks. It is not a cell in the controlled wall and is not a policy comparison.
+        </p>
+        <LiveDemoPanel />
+      </section>
       <WorldVideoGrid />
       <details className="gallery-guide">
         <summary>What are policies, and what will we compare?</summary>
@@ -25,13 +37,12 @@ export function OverviewPage() {
           next view; a separate judge can assess the result.
         </p>
         <p className="text-pretty">
-          The planned comparison gives OpenVLA, OpenPiZero, Octo-Small, MiniVLA,
-          SuSIE, and SuSIE_LL the same task and starting scene. SuSIE_LL is the
-          low-level, goal-image-conditioned controller.
+          The controlled preview fixes OpenVLA, MiniVLA, and Octo-Small across
+          four matched world seeds from one Close the drawer starting bundle.
         </p>
         <p className="text-pretty">
-          That matched six-policy set is not ready. The recordings above are
-          saved experiments, not a policy ranking. No success score is claimed.
+          The wall remains unscored: it reports operational progress and
+          persisted media, never a success score, rank, or policy winner.
         </p>
         <Link to="/evidence">See what has been verified →</Link>
       </details>

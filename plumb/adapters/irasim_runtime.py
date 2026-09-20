@@ -56,6 +56,23 @@ class IRASimOneStepResult:
     condition_preprocessing: dict
 
 
+@dataclass(frozen=True)
+class IRASimManualChunkResult:
+    """One original-architecture IRASim manual segment.
+
+    This is intentionally distinct from :class:`IRASimOneStepResult`.  A
+    manual segment is one native 15-action request to the released 16-frame
+    pipeline; looping the one-step helper 15 times would change the temporal
+    operation and must not be described as an original manual segment.
+    """
+
+    frames: Tuple[Any, ...]
+    timing: ServerTiming
+    native_actions_scaled: Tuple[Tuple[float, ...], ...]
+    capability: CapabilityResult
+    condition_preprocessing: dict
+
+
 class IRASimOneStepAdapter:
     """Use a 16-frame original model with a 1-action/2-frame inference horizon.
 
@@ -193,3 +210,74 @@ class IRASimOneStepAdapter:
         preprocessing["latent_sampling_generator"] = "same_generator_as_denoising"
         peak = torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None
         return IRASimOneStepResult(frames, ServerTiming(1, elapsed, cold_start, gpu_peak_memory_bytes=peak, model_load_seconds=load_seconds), scaled, self.capability(), preprocessing)
+
+    def generate_manual_chunk(
+        self, image: Any, actions: Sequence[Sequence[float]], seed: int = 0
+    ) -> IRASimManualChunkResult:
+        """Run the unchanged 16-frame model on exactly 15 native 7-D rows.
+
+        ``frame_ada.yaml`` remains 16 frames / extras 3 / one condition mask.
+        The action tensor is therefore ``[1, 15, 7]`` and ``video_length=16``.
+        There is no padding, per-step reconditioning, model-architecture
+        change, or synthetic structural frame.
+        """
+
+        if len(actions) != 15:
+            raise ValueError("Original IRASim manual segment requires exactly 15 native 7-D actions.")
+        native_actions = []
+        for index, action in enumerate(actions):
+            if len(action) != 7 or any(not math.isfinite(float(value)) for value in action):
+                raise ValueError("IRASim manual action %d must be finite 7-D." % index)
+            native_actions.append(tuple(float(value) for value in action))
+        cold_start = self._pipeline is None
+        load_started = time.perf_counter()
+        torch, pipeline = self._load()
+        device = torch.device(self.profile.device)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        load_seconds = time.perf_counter() - load_started
+        started = time.perf_counter()
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
+        scaled_actions = tuple(
+            tuple(value * IRASIM_ACTION_SCALE[channel] for channel, value in enumerate(action))
+            for action in native_actions
+        )
+        condition, preprocessing = self._condition(torch, image)
+        vae = pipeline.vae
+        with torch.no_grad():
+            generator = torch.Generator(device=self.profile.device).manual_seed(int(seed))
+            latent = vae.encode(condition.unsqueeze(0)).latent_dist.sample(generator=generator).mul_(vae.config.scaling_factor)
+            mask_x = latent.unsqueeze(1)
+            native = torch.tensor(scaled_actions, device=self.profile.device, dtype=torch.float32).view(1, 15, 7)
+            videos, _ = pipeline(
+                native,
+                mask_x=mask_x,
+                video_length=16,
+                height=self.profile.input_height,
+                width=self.profile.input_width,
+                num_inference_steps=self.profile.inference_steps,
+                guidance_scale=self.profile.guidance_scale,
+                generator=generator,
+                output_type="both",
+                return_dict=False,
+                device=device,
+            )
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            elapsed = time.perf_counter() - started
+        self._calls += 1
+        frames = tuple(videos[0])
+        if len(frames) != 16:
+            raise IRASimRuntimeError("Original IRASim manual call returned %d frames; expected exactly 16." % len(frames))
+        preprocessing["seed"] = int(seed)
+        preprocessing["latent_sampling_generator"] = "same_generator_as_denoising"
+        preprocessing["manual_contract"] = "15 native 7-D actions -> 16 structural frames"
+        peak = torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None
+        return IRASimManualChunkResult(
+            frames,
+            ServerTiming(1, elapsed, cold_start, gpu_peak_memory_bytes=peak, model_load_seconds=load_seconds),
+            scaled_actions,
+            self.capability(),
+            preprocessing,
+        )

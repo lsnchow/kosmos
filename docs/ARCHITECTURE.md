@@ -28,18 +28,18 @@ policy are three different operations.
 
 ## 2. What works today versus what remains
 
-| Capability                                   | Current boundary                                                                    |
-| -------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Local console and API                        | Working; frontend build served by the localhost API                                 |
-| Video gallery                                | Working; up to six existing multi-frame recordings, clearly labelled experiments    |
-| Recording archive                            | Working; full hash-checked catalog, including small probes and replays              |
-| Baseten policy diagnostic                    | Previously verified real SuSIE_LL inference; one action, not a video                |
-| Synthetic run engine                         | Working engineering path for persistence, events, cancellation and analysis         |
-| Real policy/world adapters                   | Implemented to different readiness levels; contracts can explicitly block execution |
-| Matched six-policy video comparison          | Not complete; the gallery must not imply it exists                                  |
-| Live world-video generation from the gallery | Not implemented by this UI change                                                   |
-| Calibrated automatic success scores          | Not established; rejected judge adapters stay disabled                              |
-| Qualified study and ranking                  | Not established; qualification gates are unchanged                                  |
+| Capability                          | Current boundary                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Local console and API               | Working; frontend build served by the localhost API                                                       |
+| Video gallery                       | Working; up to six existing multi-frame recordings, clearly labelled experiments                          |
+| Recording archive                   | Working; full hash-checked catalog, including small probes and replays                                    |
+| Baseten policy diagnostic           | Previously verified real SuSIE_LL inference; one action, not a video                                      |
+| Synthetic run engine                | Working engineering path for persistence, events, cancellation and analysis                               |
+| Real policy/world adapters          | Implemented to different readiness levels; contracts can explicitly block execution                       |
+| Matched six-policy video comparison | Not complete; the gallery must not imply it exists                                                        |
+| Live evaluation and manual steering | Working OpenVLA/IRASim GPU path; new image-conditioned gallery branches, not exact checkpoint restoration |
+| Calibrated automatic success scores | Not established; rejected judge adapters stay disabled                                                    |
+| Qualified study and ranking         | Not established; qualification gates are unchanged                                                        |
 
 The existing saved clips are genuine world-model outputs, but include supplied
 action fixtures and replay interventions. They are not six different policy
@@ -107,11 +107,30 @@ while native per-video controls remain usable. At most six grid players mount.
 Loading, catalog failure/retry, missing media and decode failure have explicit
 states. Playback never invokes a model.
 
+The console now also exposes **New evaluation** and a saved-live-session list.
+Choose the existing OpenVLA controller for 1–8 actual policy/world steps or
+manual mode for explicit directional commands. **Saved runs** shows these live
+sessions first; older synthetic engineering results are collapsed separately.
+
+Gallery **New interactive branch** verifies the selected recording, decodes its
+last actual image and starts a fresh manual IRASim session. It preserves the
+source video. This is image reconditioning, not restoration of a hidden state
+from an old Cosmos/IRASim recording. The retained exact-checkpoint
+`/api/freeplay/status` contract is a separate path and remains unsupported for
+MP4-only files; the working demo uses `/api/demo/...` instead.
+
+[LiveDemo.tsx](../web/src/components/LiveDemo.tsx) owns the creation form, bounded
+commands, persisted progress polling and session inspection. The view always
+displays the newest PNG; MP4 downloads are separate and never counted as frames.
+The task instruction reaches OpenVLA in policy mode. In manual mode the text is
+only a note; the user's directional action controls the prediction.
+See [LIVE-DEMO.md](LIVE-DEMO.md) for actual browser proof and runtime lifetime.
+
 There is no new generated-poster pipeline or interpolated derivative in this
 change. The browser displays decoded video frames. The startup animation was
 removed so it no longer briefly hides the console contents.
 
-## 5. Local API and the three currently separate execution paths
+## 5. Local API and the four separate execution paths
 
 [plumb/api.py](../plumb/api.py) creates the FastAPI application, API routes,
 artifact-serving boundary and static SPA fallback. A built `web/dist` is served
@@ -169,6 +188,30 @@ cloud health or billing check in this UI task. Runtime/deployment details live i
 The current prompt and burst engineering controls use synthetic fixtures.
 Their images and labels are not learned-model results. They are useful tests of
 the control plane, but cannot become real evaluations by changing their labels.
+
+### D. Live experimental evaluation and steering
+
+[plumb/live_demo.py](../plumb/live_demo.py) implements `/api/demo/status`,
+`/api/demo/sessions`, session detail and bounded command endpoints. A separate
+SQLite journal under the data root's `live-demo/` stores sessions, jobs, command
+idempotency, frame pointers and metadata. One background worker serializes
+calls to the loopback authenticated GPU tunnel. Interrupted/ambiguous jobs are
+not automatically replayed.
+
+[cluster/live_demo_server.py](../cluster/live_demo_server.py) runs real pinned
+OpenVLA and original IRASim on one allocated H100. It warms both models once and
+provides authenticated read-only health/fixture endpoints plus one-step
+generation. The local API feeds each persisted result into the following call
+and verifies conditioning pixels, action shape, model metadata and timing.
+Images, predictions, source bindings and frame hashes are saved locally, with a
+separate normalized MP4 playback derivative.
+
+This path deliberately declares `experimental_reencoded_rgb_stateless`. It
+does not wait for scientific-study qualification and does not manufacture a
+qualification pass: it is an explicitly unscored visual experiment. It never
+substitutes its outputs for the six-policy benchmark matrix. The active demo
+worker is on Trillium, not the separate Baseten SuSIE_LL action deployment.
+Its bounded allocation and renewal instructions are in [LIVE-DEMO.md](LIVE-DEMO.md).
 
 ## 6. The real ML pipeline and why integration is hard
 
