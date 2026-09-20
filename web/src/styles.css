@@ -478,7 +478,8 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .policy-field { display: grid; align-content: start; gap: var(--space-2); min-width: 0; }
 .policy-field-wide { grid-column: 1 / -1; }
 .header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
-.policy-field input, .policy-field select { width: 100%; min-width: 0; border: 1px solid var(--line-interactive); border-radius: var(--radius); background: var(--surface-2); color: var(--text); padding: var(--space-2); }
+.policy-field input, .policy-field select, .policy-field textarea { width: 100%; min-width: 0; border: 1px solid var(--line-interactive); border-radius: var(--radius); background: var(--surface-2); color: var(--text); padding: var(--space-2); }
+.policy-field textarea { resize: vertical; font: inherit; }
 .policy-field input[aria-invalid="true"] { border-color: var(--danger-line); }
 .policy-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-block: var(--space-4) var(--space-2); }
 .policy-pipeline { margin-top: var(--space-5); }
