@@ -16,25 +16,6 @@ function clipLabel(video: WorldVideo) {
   return video.title.startsWith(prefix) ? video.title.slice(prefix.length) : video.title;
 }
 
-function clipExplanation(video: WorldVideo) {
-  switch (video.kind) {
-    case "cosmos3_nano_diffusers_smoke":
-      return "Cosmos is the world model: it predicts future frames from a starting scene and supplied actions. It does not choose those actions.";
-    case "kosmos_baseten_world_probe":
-      return "This is a Cosmos world-model probe with one manually supplied action. No policy chose the action.";
-    case "plumb_irasim_openvla_closed_loop_diagnostic":
-      return "OpenVLA chose each action from the current image; IRASim predicted the next image after each action.";
-    case "plumb_irasim_native_open_loop_reference_diagnostic":
-      return "IRASim generated this full horizon from supplied actions in one call. No policy was queried while it ran.";
-    case "plumb_irasim_causal_history_replay_diagnostic":
-      return "History replay means IRASim reused a saved sequence of actions from an earlier recording. It did not ask a policy for new actions.";
-    case "plumb_irasim_state_representation_replay_intervention":
-      return "This compares how IRASim carries state between predictions. Image reencode feeds the generated RGB image back in at every step; it is not a fresh policy rollout.";
-    default:
-      return video.notes?.[1] ?? "Saved world-model experiment.";
-  }
-}
-
 /** A small playback selection, never interpreted as matched policy results. */
 export function gallerySelection(videos: WorldVideo[]) {
   const seen = new Set<string>();
@@ -117,7 +98,6 @@ function VideoCard({
       <div className="gallery-card-body">
         <h3 className="text-balance">{video.model}</h3>
         <p className="gallery-caption text-pretty">{clipLabel(video)}</p>
-        <p className="gallery-caption text-pretty">{clipExplanation(video)}</p>
         <p className="gallery-caption tabular-nums">
           {formatSeconds(video.duration_seconds)} · {video.fps ?? "Unknown"} FPS
           ·{" "}
