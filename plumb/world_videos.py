@@ -16,6 +16,7 @@ from urllib.parse import quote
 # Only output fields of these known diagnostics are eligible. In particular,
 # source/conditioning videos in provenance are never treated as model output.
 KINDS = {
+    "kosmos_baseten_world_probe": (-1, "Baseten · Cosmos3-Nano", "Real manual-action world-model probe; no policy or judge was called. Scene fidelity and action response are experimental."),
     "cosmos3_nano_diffusers_smoke": (0, "Cosmos3-Nano", "Action-conditioned fixture; initial conditioning frame is included."),
     "plumb_irasim_openvla_closed_loop_diagnostic": (1, "OpenVLA → IRASim", "Recorded closed-loop diagnostic; visible distortion and physical fidelity remain unqualified."),
     "plumb_irasim_native_open_loop_reference_diagnostic": (2, "IRASim", "Open-loop reference using supplied actions; not live policy feedback."),
@@ -38,7 +39,10 @@ def _at(value: dict, *keys: str) -> dict:
 
 
 def _output_refs(report: dict, kind: str):
-    if kind in {"cosmos3_nano_diffusers_smoke", "cosmos3_action_probe"}:
+    if kind == "kosmos_baseten_world_probe":
+        if report.get("status") == "completed_unqualified":
+            yield str(report.get("direction", "manual")), _at(report, "video")
+    elif kind in {"cosmos3_nano_diffusers_smoke", "cosmos3_action_probe"}:
         yield "output", _at(report, "result", "output_artifacts", "video")
     elif kind == "irasim_original_one_step_smoke":
         yield "output", _at(report, "artifacts", "video")
@@ -233,9 +237,11 @@ def world_videos_payload(root: Path) -> Dict[str, Any]:
                     if label != "output":
                         title += " · " + label
                     source_branch = _source_branch_binding(report, report_path, ref, digest, root)
+                    poster = _local_artifact(report_path, _at(report, "poster"), root, suffix=".png")
                     videos.append({
                         "id": clip_id, "title": title, "model": model, "kind": kind,
                         "video_url": _url(path, root), "report_url": _url(report_path, root),
+                        "poster_url": _url(poster[0], root) if poster is not None else None,
                         "sha256": "sha256:" + digest,
                         "report_sha256": "sha256:" + hashlib.sha256(report_path.read_bytes()).hexdigest(),
                         "download_name": "Kosmos-" + path.name,

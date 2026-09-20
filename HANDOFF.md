@@ -1,5 +1,26 @@
 # PLUMB execution handoff — implementation in progress
 
+## Cloudflare-free comparison implementation — 2026-09-20
+
+Read `docs/CLOUDFREE-COMPARISON-IMPLEMENTATION.md` first. User committed/pushed
+the first implementation as `b9a9f4b`; subsequent integration fixes are local.
+CPU streaming and real Baseten Cosmos PNG/MP4 delivery now work. The first
+delivered images failed visual QA; a concrete NumPy/PIL intensity boundary bug
+was corrected and its new deployment is being tested. No full matrix, scored
+ranking, or qualified dynamics gate is claimed. All failed evidence is retained.
+
+The new localhost wall/service are implemented and remain honestly blocked
+without a verified source/policy/quality/pricing manifest. Latest full tests:
+1,431 Python passed / 6 skipped; 282 frontend passed. Real blocked-state browser
+QA passed desktop/mobile with zero inference POSTs. Positive matched-wall GPU
+and browser steering acceptance are still pending. The old Trillium allocation
+941263 has expired; saved media survives but its controls are not currently live.
+
+New Baseten Chain IDs: CPU `5qekn2qo`; world probe `yqv10xq8`. Current PIL-fix
+probe deployment `03yd07l3`, team33/q8grpdw, profileplumb-api. Recheck status.
+Use $100 incremental total cap; reserve $20 for external deployment/probe work
+and limit comparison journal to $80. Do not assume credits or modify quotas.
+
 ## REAL live steering and New evaluation verified — 2026-09-19 evening
 
 The earlier disabled-controls state is superseded for the main demo. Open

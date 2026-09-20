@@ -6,9 +6,12 @@ import json
 import subprocess
 import sys
 import time
+import io
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from plumb.api import create_app
 from plumb.comparisons import (
@@ -17,6 +20,8 @@ from plumb.comparisons import (
     STREAM_SCHEMA,
     BasetenCliStreamTransport,
     ComparisonService,
+    ComparisonConflict,
+    ComparisonNotReady,
 )
 from plumb.records import canonical_json
 
@@ -24,9 +29,9 @@ from plumb.records import canonical_json
 # A valid small PNG is enough here: the service checks receipt/file binding, not
 # visual quality.  No fixture ever reaches the production HTTP surface because
 # the only feed seam is test_mode-gated.
-PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9JYHcAAAAASUVORK5CYII="
-)
+_PNG_BUFFER = io.BytesIO()
+Image.new("RGB", (4, 3), (32, 64, 96)).save(_PNG_BUFFER, format="PNG")
+PNG = _PNG_BUFFER.getvalue()
 
 
 def digest(value):
@@ -34,7 +39,7 @@ def digest(value):
 
 
 def state(payload=None):
-    payload = payload or {"joint": [0.0] * 7, "gripper": "open"}
+    payload = payload or {"values": [0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 0.0, 0.4]}
     raw = canonical_json(payload).encode("utf-8")
     return {
         "payload": payload,
@@ -94,6 +99,15 @@ def write_manifest(root: Path) -> None:
             "gripper_semantics_sha256": digest(b"bridge-gripper"),
             "seed_convention_sha256": digest(b"world-seed-convention"),
             "native_action_dim": 7,
+            "runtime_profile": {
+                "backend": "cosmos", "profile_id": "cosmos-test-480",
+                "domain": "bridge_orig_lerobot", "model_id": "nvidia/Cosmos3-Nano",
+                "model_revision": "e59a53c25979a090fa8706c9acc0c254a6e89b92",
+                "resolution_tier": 480, "inference_steps": 30, "asset_manifest_id": "test-assets",
+            },
+            "bridge_control_profile_id": "bridge-test",
+            "held_gripper_action": 0.4,
+            "manual_seed": 104,
             "manual": {"backend": "cosmos", "action_rows": 16, "structural_frames": 17},
             "readiness": {"status": "ready", "evidence_sha256": evidence},
             "rights": {"status": "approved", "evidence_sha256": evidence},
@@ -156,7 +170,7 @@ class StreamFixture:
                 "frame_index": index,
                 "png_base64": base64.b64encode(PNG).decode("ascii"),
                 "png_sha256": digest(PNG),
-                "state": state({"joint": [float(index)] * 7, "gripper": "open"}),
+                "state": state({"values": [float(index)] * 7}),
             }
             if manual:
                 record["command_id"] = dispatch["command_id"]
@@ -223,6 +237,9 @@ def test_full_fixed_wall_persists_committed_frames_and_manual_branch(tmp_path):
             time.sleep(0.02)
         assert manual["commands"][0]["frame_count"] == 16
         assert len(manual["commands"][0]["frames"]) == 16
+        assert all(row[-1] == 0.4 for row in fixture.requests[-1]["request"]["actions"])
+        with pytest.raises(ComparisonConflict, match="another direction"):
+            service.create_manual_command(source["id"], "left", "right-1")
         first_final = manual["commands"][0]["frames"][-1]
         second, _ = service.create_manual_command(source["id"], "up", "up-1")
         assert second["status"] == "running"
@@ -240,6 +257,11 @@ def test_full_fixed_wall_persists_committed_frames_and_manual_branch(tmp_path):
         assert presentation["presentation"]["id"] == created["id"]
         assert presentation["presentation"]["origin"] == "precomputed"
         assert all(cell["origin"] == "precomputed" and cell["execution_origin"] == "fresh" for cell in presentation["presentation"]["cells"])
+        budget = service.readiness().payload()["budget"]
+        assert budget["reserved_usd"] > quote["reservation_usd"]
+        service.budget_cap_usd = budget["reserved_usd"]
+        with pytest.raises(ComparisonNotReady, match="remaining reserved budget"):
+            service.create_manual_command(source["id"], "right", "beyond-cap")
     finally:
         service.shutdown()
 
@@ -278,6 +300,63 @@ def test_api_is_read_only_without_a_verified_source_manifest(tmp_path):
 
 def fixture_requests(service):
     return len(getattr(service.transport, "requests", []))
+
+
+def test_real_service_payload_runs_controller_and_returns_to_durable_receiver(tmp_path):
+    """Full CPU boundary test; only policy/world inference are explicit fakes.
+
+    This must not be mistaken for Cosmos supporting native one-action turns.
+    It verifies the actual local payload/Chain translator/stream/SQLite path.
+    """
+    import asyncio
+    from test_demo_chain import demo, _Policy, _World
+
+    class ControllerTransport:
+        def __init__(self):
+            self.world = _World()
+            self.policies = {name: _Policy() for name in ("OpenVLA", "MiniVLA", "Octo-Small")}
+            self.core = demo.DemoControllerCore(self.policies, self.world)
+            self.requests = []
+
+        def stream(self, *, payload, **kwargs):
+            self.requests.append(payload)
+            typed = demo.service_dispatch_to_stream_request(payload["request"])
+
+            async def collect():
+                iterator = self.core.rollout_events(typed.rollout) if typed.rollout else self.core.manual_events(typed.manual)
+                return [record.encode() async for record in iterator]
+
+            yield from asyncio.run(collect())
+
+    root = tmp_path / "data"
+    write_manifest(root)
+    transport = ControllerTransport()
+    service = ComparisonService(root, transport=transport, test_mode=True)
+    try:
+        quote = service.create_quote()
+        created, _ = service.create_comparison(quote["id"], "controller-integration")
+        detail = wait_for(service, created["id"])
+        assert detail["status"] == "completed", detail["cells"][0]
+        assert len(transport.world.calls) == 12 * 70
+        assert all(len(worker.calls) == 4 * 70 for worker in transport.policies.values())
+        assert all(cell["frame_count"] == cell["action_count"] == 70 for cell in detail["cells"])
+        assert all(cell["terminal_received"] for cell in detail["cells"])
+        branch = service.create_manual_session(created["id"], detail["cells"][0]["id"])
+        command, _ = service.create_manual_command(branch["id"], "right", "native-manual")
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            result = service.get_manual_session(branch["id"])
+            if result["commands"][0]["status"] not in {"queued", "running"}:
+                break
+            time.sleep(0.01)
+        assert result["commands"][0]["status"] == "completed", result["commands"][0]
+        assert result["commands"][0]["frame_count"] == 16
+        assert len(transport.world.calls) == 12 * 70 + 1
+        assert all(len(worker.calls) == 4 * 70 for worker in transport.policies.values())
+        assert result["source"]["event_id"] == result["commands"][0]["frames"][-1]["event_id"]
+        service.promote(created["id"])
+    finally:
+        service.shutdown()
 
 
 def test_cli_transport_yields_small_receipt_before_process_closes(monkeypatch):

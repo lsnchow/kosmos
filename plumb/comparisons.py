@@ -663,7 +663,7 @@ def _pricing_quote(value: Any, cap_usd: float) -> Dict[str, Any]:
     return {"cap_usd": cap_usd, "reserved_usd": total, "available_usd": cap_usd - total, "breakdown": breakdown}
 
 
-def _constant_chunk(direction: str) -> List[List[float]]:
+def _constant_chunk(direction: str, held_gripper_action: float) -> List[List[float]]:
     """The only public manual control mapping: 16 constant native 7-D rows."""
     vectors = {
         "up": (0.0, 0.0, 0.0025),
@@ -675,7 +675,9 @@ def _constant_chunk(direction: str) -> List[List[float]]:
     }
     if direction not in vectors:
         raise ComparisonConflict("unknown manual direction")
-    row = list(vectors[direction]) + [0.0, 0.0, 0.0, 0.0]
+    if not math.isfinite(held_gripper_action) or not 0 <= held_gripper_action <= 1:
+        raise ComparisonConflict("manual gripper action lacks a valid source binding")
+    row = list(vectors[direction]) + [0.0, 0.0, 0.0, held_gripper_action]
     return [list(row) for _ in range(16)]
 
 
@@ -881,6 +883,9 @@ class ComparisonService:
                 existing_columns = {row["name"] for row in connection.execute("PRAGMA table_info(%s)" % table).fetchall()}
                 if column not in existing_columns:
                     connection.execute("ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT 'fresh'" % (table, column))
+            command_columns = {row["name"] for row in connection.execute("PRAGMA table_info(manual_commands)").fetchall()}
+            if "reservation_usd" not in command_columns:
+                connection.execute("ALTER TABLE manual_commands ADD COLUMN reservation_usd REAL NOT NULL DEFAULT 0")
             # A local restart cannot prove whether a stream advanced remotely.
             # Preserve already received artifacts but force a fresh explicit
             # attempt rather than silently continuing/retrying anything.
@@ -932,7 +937,8 @@ class ComparisonService:
     def _active_reservations(self) -> float:
         with self._connect() as connection:
             row = connection.execute("SELECT COALESCE(SUM(reservation_usd), 0) AS total FROM comparisons").fetchone()
-        return float(row["total"] if row is not None else 0.0)
+            manual = connection.execute("SELECT COALESCE(SUM(reservation_usd), 0) AS total FROM manual_commands").fetchone()
+        return float(row["total"] if row is not None else 0.0) + float(manual["total"] if manual is not None else 0.0)
 
     def create_quote(self) -> Dict[str, Any]:
         readiness = self.readiness()
@@ -1546,8 +1552,10 @@ class ComparisonService:
             session = connection.execute("SELECT * FROM manual_sessions WHERE id = ?", (session_id,)).fetchone()
             if session is None:
                 raise KeyError(session_id)
-            existing = connection.execute("SELECT id FROM manual_commands WHERE session_id = ? AND idempotency_key = ?", (session_id, idempotency_key)).fetchone()
+            existing = connection.execute("SELECT id, direction FROM manual_commands WHERE session_id = ? AND idempotency_key = ?", (session_id, idempotency_key)).fetchone()
             if existing is not None:
+                if existing["direction"] != direction:
+                    raise ComparisonConflict("manual idempotency key is already bound to another direction")
                 return self._manual_command_in_connection(connection, str(existing["id"])), True
             if session["status"] != "ready" or session["active_command_id"] is not None:
                 raise ComparisonConflict("manual session already has a generation in flight or is ambiguous")
@@ -1557,9 +1565,15 @@ class ComparisonService:
             if comparison is None:
                 raise ComparisonConflict("manual session comparison no longer exists")
             config = json.loads(str(comparison["config_json"]))
+            # Until a smaller measured manual bound is frozen, reserve the
+            # full controller+world residency bound per command. Conservative,
+            # never a made-up per-action cost or an unbounded interactive loop.
+            manual_reservation = sum(float(item["reserved_usd"]) for item in config["pricing"]["breakdown"] if item["worker"] in {"controller", "world"})
+            if manual_reservation <= 0 or self._active_reservations() + manual_reservation > self.budget_cap_usd + 1e-9:
+                raise ComparisonNotReady("manual command exceeds the remaining reserved budget")
             command_id = uuid.uuid4().hex
             attempt_id = uuid.uuid4().hex
-            actions = _constant_chunk(direction)
+            actions = _constant_chunk(direction, float(config["world"]["held_gripper_action"]))
             identities = self._cell_identities(config, str(connection.execute("SELECT policy FROM comparison_cells WHERE comparison_id = ? AND cell_id = ?", (session["comparison_id"], session["cell_id"])).fetchone()["policy"]))
             source_path = (self.root / str(session["source_artifact_path"])).resolve()
             if self.root not in source_path.parents or not source_path.is_file():
@@ -1573,6 +1587,7 @@ class ComparisonService:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute("INSERT INTO comparison_attempts(id, comparison_id, cell_id, kind, status, request_json, request_sha256, expected_identities_json, created_at, started_at) VALUES (?, ?, ?, 'manual', 'running', ?, ?, ?, ?, ?)", (attempt_id, session["comparison_id"], session["cell_id"], canonical_json(payload), _sha256_json(payload), canonical_json(identities), now, now))
             connection.execute("INSERT INTO manual_commands(id, session_id, idempotency_key, direction, action_json, attempt_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)", (command_id, session_id, idempotency_key, direction, canonical_json(actions), attempt_id, now, now))
+            connection.execute("UPDATE manual_commands SET reservation_usd = ? WHERE id = ?", (manual_reservation, command_id))
             connection.execute("UPDATE manual_sessions SET status = 'running', active_command_id = ?, updated_at = ? WHERE id = ?", (command_id, now, session_id))
             self._append_event(connection, session["comparison_id"], session["cell_id"], attempt_id, "manual-command-started", "manual_command_started", {"session_id": session_id, "command_id": command_id, "direction": direction, "action_rows": 16, "structural_frames": 17, "post_conditioning_frames": 16})
             connection.commit()

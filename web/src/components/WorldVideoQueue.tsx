@@ -10,6 +10,7 @@ export type WorldVideo = {
   model: string;
   kind: string;
   video_url: string;
+  poster_url?: string | null;
   report_url?: string;
   sha256?: string;
   report_sha256?: string;

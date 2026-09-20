@@ -244,7 +244,7 @@ async function renderAt(route: string, heading: RegExp) {
   return { ...view, ...routes };
 }
 
-const overview = () => renderAt("/console", /^Evaluate or watch$/i);
+const overview = () => renderAt("/console", /^Watch robot futures$/i);
 const live = async () => {
   const view = await renderAt("/live", /^Developer tools$/i);
   // Recorded world-model videos are the default viewport content. Tests that
@@ -325,7 +325,7 @@ describe("Kosmos pages render their beats", () => {
     expect(screen.getByRole("heading", { name: "Saved experiments" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /The called shot/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Qualification gates/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Real model outputs, not yet a matched six-policy comparison/)).toBeInTheDocument();
+    expect(screen.getByText(/Real model outputs, not yet a matched three-policy comparison/)).toBeInTheDocument();
   });
 
   it("keeps the live page in the script's beat order", async () => {
@@ -393,7 +393,7 @@ describe("Kosmos pages render their beats", () => {
   it("never uses a phrase from the never-say list", async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /^Evaluate or watch$/i],
+      ["/console", /^Watch robot futures$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
       ["/evidence", /^Validation$/i],
@@ -427,7 +427,7 @@ describe("Kosmos pages render their beats", () => {
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /^Evaluate or watch$/i],
+      ["/console", /^Watch robot futures$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
       ["/evidence", /^Validation$/i],

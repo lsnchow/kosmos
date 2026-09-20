@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 def main() -> int:
@@ -46,7 +46,7 @@ def main() -> int:
             report["readiness"] = readiness.json()
             page.goto(args.base_url + "/console", wait_until="networkidle")
             wall = page.locator("#matched-control-wall")
-            wall.wait_for()
+            wall.wait_for(state="attached")
             page.get_by_text("Loading the promoted comparison record…").wait_for(state="hidden")
             table = wall.get_by_role("table", name="Three policies across four matched world seeds")
             if table.count():
@@ -74,15 +74,18 @@ def main() -> int:
                 control.click()
                 dialog = page.get_by_role("dialog")
                 dialog.wait_for()
+                expect(dialog.get_by_role("button", name="Move right", exact=True)).to_be_enabled(timeout=30000)
                 surface = dialog.locator("[tabindex='0']").first
                 surface.focus()
                 before = len([url for url in posts if url.endswith("/commands")])
                 started = time.monotonic()
-                page.keyboard.down("ArrowRight")
-                page.keyboard.down("ArrowRight")
-                page.keyboard.up("ArrowRight")
+                with page.expect_response(lambda response: response.request.method == "POST" and response.url.endswith("/commands"), timeout=30000) as accepted:
+                    page.keyboard.down("ArrowRight")
+                    page.keyboard.down("ArrowRight")
+                    page.keyboard.up("ArrowRight")
+                assert accepted.value.status == 202, "Manual command was not admitted"
                 # Repeated keydown is deliberately one command. No automatic retry.
-                page.wait_for_function("() => !document.querySelector('[aria-label=\"Manual branch frame\"][aria-busy=\"true\"]')", timeout=600000)
+                expect(dialog.get_by_text("16 committed post-conditioning frames", exact=True)).to_be_visible(timeout=600000)
                 after = len([url for url in posts if url.endswith("/commands")])
                 assert after - before == 1, "One held key must produce exactly one command"
                 assert dialog.get_by_text("16 committed post-conditioning frames", exact=True).count() == 1

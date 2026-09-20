@@ -80,3 +80,20 @@ def test_api_uses_actual_data_root_and_leaves_run_ledger_untouched(tmp_path, mon
         clip = response.json()["videos"][0]
         assert client.get(clip["video_url"]).content == b"video"
         assert client.get("/api/runs").json() == before
+
+
+def test_baseten_probe_keeps_actual_output_and_hash_bound_poster_unscored(tmp_path, monkeypatch):
+    monkeypatch.setattr(world_videos, "_probe", lambda *_: {"frame_count": 16})
+    folder = tmp_path / "cluster-evidence" / "cloud-probe"
+    write_report(folder / "report.json", {
+        "kind": "kosmos_baseten_world_probe", "status": "completed_unqualified", "direction": "right",
+        "video": ref("probe.mp4", b"generated"), "poster": ref("poster.png", b"poster"),
+    })
+    (folder / "probe.mp4").write_bytes(b"generated")
+    (folder / "poster.png").write_bytes(b"poster")
+    clip = world_videos.world_videos_payload(tmp_path)["videos"][0]
+    assert clip["poster_url"].endswith("poster.png")
+    assert clip["model"] == "Baseten · Cosmos3-Nano"
+    assert clip["qualified"] is False
+    (folder / "poster.png").write_bytes(b"tampered")
+    assert world_videos.world_videos_payload(tmp_path)["videos"][0]["poster_url"] is None

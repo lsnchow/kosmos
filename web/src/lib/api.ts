@@ -437,6 +437,66 @@ export type DemoStatus = {
   qualified?: false;
 };
 
+export type DemoJudgeClip = {
+  id: string;
+  title?: string;
+  video_url?: string;
+  poster_url?: string;
+  report_url?: string;
+  video_sha256?: string;
+  task_id?: string;
+  task_label?: string;
+  action_source?: string;
+  controller_identity?: string;
+  scene_reference_role?: string;
+};
+
+export type DemoJudgeReadiness = {
+  profile?: string;
+  configured?: boolean;
+  available?: boolean;
+  reason?: string;
+  loaded_adapter_verified?: boolean;
+  base_model?: { id?: string; revision?: string };
+  adapter?: { id?: string; tree_sha256?: string; recorded_path?: string };
+  default_clip?: DemoJudgeClip | null;
+};
+
+export type DemoJudgeAssessment = {
+  status?: "evaluable" | "unable_to_assess" | string;
+  label?: string;
+  progress?: number | null;
+  visual_integrity?: string;
+  collision?: string;
+  completion?: string;
+  explanation?: string | null;
+  evidence_frame_indices?: number[];
+  quorum?: number;
+};
+
+export type DemoJudgment = {
+  id: string;
+  status: "queued" | "warming" | "assessing" | "completed" | "abstained" | "failed" | "interrupted" | string;
+  clip_id?: string;
+  profile?: string;
+  created_at?: string;
+  updated_at?: string;
+  finished_at?: string | null;
+  input?: JsonRecord & { frame_indexes?: number[]; video_sha256?: string; clip?: DemoJudgeClip };
+  result?: JsonRecord & {
+    assessment?: DemoJudgeAssessment;
+    adapter_receipt?: JsonRecord;
+    timing?: JsonRecord;
+    report?: JsonRecord;
+  };
+  error?: { kind?: string; message?: string; automatic_retry_allowed?: boolean } | null;
+  result_url?: string | null;
+  raw_response_url?: string | null;
+  failure_url?: string | null;
+  experimental?: true;
+  qualified?: false;
+};
+
 export type CreateDemoSessionBody = {
   title?: string;
   prompt?: string;
@@ -555,6 +615,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  demoJudgeReadiness: () => request<DemoJudgeReadiness>("/api/demo/judge/readiness"),
+  demoJudgments: (clipId?: string) =>
+    request<{ judgments?: DemoJudgment[] }>(
+      `/api/demo/judgments${clipId ? `?clip_id=${encodeURIComponent(clipId)}` : ""}`,
+    ),
+  demoJudgment: (judgmentId: string) =>
+    request<DemoJudgment>(`/api/demo/judgments/${encodeURIComponent(judgmentId)}`),
+  createDemoJudgment: (body: { clip_id: string; profile: "semantic_pilot_epoch_02"; idempotency_key: string }) =>
+    request<DemoJudgment>("/api/demo/judgments", { method: "POST", body: JSON.stringify(body) }),
   sixClip: () => request<SixClipResponse>("/api/clips/sixclip"),
   revealSixClip: () =>
     request<SixClipResponse>("/api/clips/sixclip/reveal", { method: "POST" }),

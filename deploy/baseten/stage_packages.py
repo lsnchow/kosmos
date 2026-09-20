@@ -33,7 +33,7 @@ from typing import Iterable, List, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STAGING_DIR = REPO_ROOT / "deploy" / "_chain_packages"
-STAGED_PACKAGES: Tuple[str, ...] = ("plumb",)
+STAGED_PACKAGES: Tuple[str, ...] = ("plumb", "cluster")
 
 # Everything the images must never receive.  Model weights and datasets reach a
 # Chainlet through ``chains.Assets(cached=[...])`` at an immutable revision, never

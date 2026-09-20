@@ -22,11 +22,15 @@ import json
 import math
 from pathlib import Path
 import shutil
+import sys
 from typing import Any, Mapping, Sequence
 from urllib.request import Request, urlopen
 
 import numpy as np
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plumb.policies.provenance import image_pixel_hash
 
 
 DATASET = "IPEC-COMMUNITY/bridge_orig_lerobot"
@@ -176,12 +180,17 @@ def _verify_rgb_frame(path: Path, reference: Mapping[str, Any]) -> tuple[bytes, 
         raise StartPreparationError("source frame PNG hash disagrees with frozen candidate input")
     try:
         with Image.open(BytesIO(raw)) as image:
-            rgb = np.asarray(image.convert("RGB"))
+            if image.mode != "RGB":
+                raise StartPreparationError("candidate must already be RGB; no implicit conversion")
+            rgb = np.asarray(image)
+    except StartPreparationError:
+        raise
     except (OSError, ValueError) as error:
         raise StartPreparationError("candidate frame is not decodable RGB PNG") from error
     if rgb.dtype != np.uint8 or rgb.shape != (256, 256, 3):
         raise StartPreparationError("candidate frame must be exactly RGB uint8 256x256")
-    pixel_sha = "sha256:" + _sha256_bytes(rgb.tobytes(order="C"))
+    # The frozen pilot binds dtype + shape + pixels, not raw pixels alone.
+    pixel_sha = image_pixel_hash(rgb)["sha256"]
     if pixel_sha != reference.get("pixel_sha256"):
         raise StartPreparationError("source frame pixel hash disagrees with frozen candidate input")
     return raw, _sha256_bytes(raw), pixel_sha

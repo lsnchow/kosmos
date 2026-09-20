@@ -1,5 +1,15 @@
 # PLUMB continuation — current entrypoint
 
+## Latest: Cloudflare-free Baseten Chain implementation — 2026-09-20
+
+Read the newest HANDOFF section and `docs/CLOUDFREE-COMPARISON-IMPLEMENTATION.md`.
+The user pushed `b9a9f4b`; later integration fixes remain local. Actual Cosmos
+frames now return through a Baseten Chain, but delivered v2 media failed visual
+QA. A NumPy/PIL input-range fix is deployed as world Chainyqv10xq8 /03yd07l3 and
+must be verified. Do not claim the full 12-cell wall or live browser steering
+is complete. Old Trillium941263 is expired. Preserve its media and all failed
+cloud-probe evidence. No Cloudflare needed; no judge/gate pass manufactured.
+
 ## Latest: real live demo working (2026-09-19 evening)
 
 Read the top of HANDOFF.md and docs/LIVE-DEMO.md before acting on older notes.

@@ -1,0 +1,5 @@
+# Created by stage_demo_judge.py from the private semantic adapter. Never commit
+# the adapter, its copied runtime source, or any generated manifest.
+model/adapter/
+model/plumb/
+model/adapter-manifest.json

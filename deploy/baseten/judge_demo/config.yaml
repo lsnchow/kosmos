@@ -1,0 +1,10 @@
+model_name: plumb-qwen-semantic-judge-demo
+python_version: py311
+requirements_file: requirements.txt
+resources:
+  accelerator: H100
+  use_gpu: true
+  cpu: "4"
+  memory: 48Gi
+runtime:
+  predict_concurrency: 1

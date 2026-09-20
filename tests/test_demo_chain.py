@@ -230,6 +230,73 @@ def test_manual_direction_has_frozen_small_translation_and_source_bound_gripper_
     assert demo._manual_action("up", 0.0025, 0.4) == [0.0, 0.0, 0.0025, 0.0, 0.0, 0.0, 0.4]
 
 
+def test_cold_rpc_emits_heartbeats_without_retrying_the_model_call():
+    calls = []
+
+    async def delayed():
+        calls.append(1)
+        await asyncio.sleep(0.04)
+        return "real-result"
+
+    values = _collect(demo._await_progress(delayed(), interval=0.01))
+    assert values[-1] == "real-result"
+    assert None in values[:-1]
+    assert calls == [1]
+
+
+def test_raw_source_gripper_state_does_not_modify_held_world_gripper_action():
+    first = [0.28, -0.006, 0.11, -0.01, -0.14, 0.002, 0.0, 1.000153]
+    second = first[:-1] + [0.039]
+    actions = [demo._manual_action("right", 0.0025, 1.0)] * 16
+    raw, _, _ = demo._forecast_compile(_world(), "development", first, actions)
+    alternate, _, _ = demo._forecast_compile(_world(), "development", second, actions)
+    assert raw == alternate
+    assert all(row[-1] == 1.0 for row in raw)
+
+
+def test_cosmos_uint8_boundary_preserves_pixels_through_pil_not_unscaled_numpy():
+    from PIL import Image
+    from plumb.adapters.contracts import WorldResult, ServerTiming
+
+    pixels = np.full((3, 4, 3), 128, dtype=np.uint8)
+
+    class CapturingAdapter:
+        def generate(self, request):
+            assert isinstance(request.conditioning_image, Image.Image)
+            assert request.conditioning_image.mode == "RGB"
+            np.testing.assert_array_equal(np.asarray(request.conditioning_image), pixels)
+            return WorldResult(backend="test-only", profile_id=request.compatibility_profile_id,
+                               frames=tuple(pixels.copy() for _ in range(17)),
+                               nominal_frame_timestamps=tuple(i / 5 for i in range(17)),
+                               conditioning_frame_included=True, timing=ServerTiming(1, 0.0, False))
+
+    runtime = demo.DemoWorldRuntime("cosmos")
+    runtime._adapter = CapturingAdapter()
+    request = demo.WorldTurnRequest(attempt_id="pixel-test", operation="manual_segment", world=_world(),
+        condition=demo.PngFrame.from_array(pixels), native_actions=[[0.0] * 7] * 16,
+        compiled_actions=[[0.0] * 10] * 16, nominal_control_timestamps=[i / 5 for i in range(16)],
+        world_seed=101, state_before=[0.0] * 8, request_id="pixel-test")
+    result = runtime._generate_cosmos(request, pixels, 0.0)
+    assert result.status == "completed", result.reasons
+    assert len(result.frames) == 16 and result.conditioning_frame_removed
+
+
+def test_pinned_assets_are_hashed_once_per_worker_not_once_per_keypress(monkeypatch):
+    calls = []
+
+    def verify(asset_id):
+        calls.append(asset_id)
+        return {"path": "/immutable/test-cache", "verified": True}
+
+    monkeypatch.setattr(demo, "_load_asset_manifest", verify)
+    first = demo.DemoWorldRuntime("cosmos")
+    assert first.readiness()["status"] == "ready_unqualified"
+    assert first.readiness()["status"] == "ready_unqualified"
+    assert len(calls) == 1
+    assert demo.DemoWorldRuntime("cosmos").readiness()["status"] == "ready_unqualified"
+    assert len(calls) == 2
+
+
 def test_flat_service_dispatch_translates_only_when_full_execution_identity_is_present():
     source = _frame()
     state_payload = {"bridge_state": [0.1, 0.2, 0.3, 0, 0, 0, 0, 0.4]}

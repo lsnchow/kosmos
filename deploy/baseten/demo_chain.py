@@ -713,6 +713,25 @@ async def _await_maybe(value: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
+async def _await_progress(awaitable: Any, interval: float = 10.0) -> AsyncIterator[Any]:
+    """Keep an outer streaming response alive during a cold internal RPC.
+
+    None is a heartbeat, not an inference receipt. Cancellation never retries
+    the underlying remote operation; its result remains ambiguous locally.
+    """
+    pending = asyncio.ensure_future(awaitable)
+    try:
+        while not pending.done():
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield None
+        yield await pending
+    finally:
+        if not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+
+
 def _forecast_compile(
     world: WorldProfile,
     bridge_control_profile_id: str,
@@ -872,7 +891,11 @@ class DemoControllerCore:
                     proprio_lineage_id=request.proprio_lineage_id if action_index == 0 else "%s:forecast:%d" % (request.proprio_lineage_id, action_index),
                     proprio_converter_revision=request.proprio_converter_revision,
                 )
-                policy = await self._policy_call(request.policy_id, policy_request)
+                async for progress in _await_progress(self._policy_call(request.policy_id, policy_request)):
+                    if progress is None:
+                        yield emit("heartbeat", {"stage": "policy", "action_index": action_index, "unix_time": time.time()})
+                    else:
+                        policy = progress
                 yield emit(
                     "stage",
                     {
@@ -923,7 +946,11 @@ class DemoControllerCore:
                     request_id="%s:%s:%d" % (request.attempt_id, request.cell_id, action_index),
                 )
                 yield emit("stage", {"operation": operation, "action_index": action_index, "stage": "world", "status": "started"})
-                world = await self._world_call(world_request)
+                async for progress in _await_progress(self._world_call(world_request)):
+                    if progress is None:
+                        yield emit("heartbeat", {"stage": "world", "action_index": action_index, "unix_time": time.time()})
+                    else:
+                        world = progress
                 yield emit(
                     "stage",
                     {
@@ -979,6 +1006,7 @@ class DemoControllerCore:
 
         operation = "manual_segment"
         event_context = {
+            "command_id": request.command_id,
             "attempt_id": request.attempt_id,
             "comparison_id": request.comparison_id,
             "cell_id": request.cell_id,
@@ -1043,7 +1071,11 @@ class DemoControllerCore:
                 request_id="%s:%s" % (request.attempt_id, request.command_id),
             )
             yield emit("stage", {"operation": operation, "stage": "world", "status": "started"})
-            world = await self._world_call(world_request)
+            async for progress in _await_progress(self._world_call(world_request)):
+                if progress is None:
+                    yield emit("heartbeat", {"stage": "world", "unix_time": time.time()})
+                else:
+                    world = progress
             yield emit("stage", {"operation": operation, "stage": "world", "status": world.status, "identifiers": world.identifiers, "timing": world.timing, "reasons": world.reasons})
             if world.status != "completed":
                 yield emit("terminal", _terminal_payload(request.attempt_id, operation, world.status, 0, action_count, world.reasons, start))
@@ -1052,8 +1084,14 @@ class DemoControllerCore:
                 yield emit("terminal", _terminal_payload(request.attempt_id, operation, "failed", 0, action_count, ["manual world result violated its post-conditioning frame contract"], start))
                 return
             for sequence, frame in enumerate(world.frames):
+                # Bind each frame to its own nominal action boundary, not the
+                # end-of-segment state copied onto all sixteen observations.
+                _, frame_state, _ = _forecast_compile(
+                    request.world, request.bridge_control_profile_id,
+                    request.state_snapshot, actions[: sequence + 1],
+                )
                 state_record = _state_evidence(
-                    state_after,
+                    frame_state,
                     origin="forecast_integrated",
                     conventions={"bridge_control_profile_id": request.bridge_control_profile_id, **compiler_detail},
                 )
@@ -1222,6 +1260,9 @@ def _verify_asset_tree(asset: Mapping[str, Any]) -> None:
     records = lock.get("file_records")
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)) or not records:
         raise DemoRuntimeBlocked("packaged asset content lock has no file_records")
+    single_file = root.is_file()
+    if single_file and (len(records) != 1 or not isinstance(records[0], Mapping) or records[0].get("path") != root.name):
+        raise DemoRuntimeBlocked("a file asset must have exactly one basename-bound content-lock record")
     for index, record in enumerate(records):
         if not isinstance(record, Mapping):
             raise DemoRuntimeBlocked("content-lock file record %d is invalid" % index)
@@ -1232,7 +1273,7 @@ def _verify_asset_tree(asset: Mapping[str, Any]) -> None:
             raise DemoRuntimeBlocked("content-lock file record %d has an unsafe path" % index)
         if expected is None or not isinstance(byte_count, int) or byte_count < 0:
             raise DemoRuntimeBlocked("content-lock file record %d lacks exact digest/size" % index)
-        candidate = root.joinpath(*pathlib.PurePosixPath(relative).parts)
+        candidate = root if single_file else root.joinpath(*pathlib.PurePosixPath(relative).parts)
         try:
             candidate.resolve().relative_to(root.resolve())
         except ValueError as error:
@@ -1307,27 +1348,42 @@ class DemoWorldRuntime:
         self.backend = backend
         self._adapter: Any = None
         self._profile: Any = None
+        self._verified_assets: Dict[str, Mapping[str, Any]] = {}
+
+    def _asset(self, asset_id: str) -> Mapping[str, Any]:
+        # A deployment's pinned cache is immutable for this worker lifetime.
+        # Verify before first model use, not 35 GB again on every keypress.
+        # A new worker/deployment always performs verification from scratch.
+        if asset_id not in self._verified_assets:
+            self._verified_assets[asset_id] = _load_asset_manifest(asset_id)
+        return self._verified_assets[asset_id]
 
     def readiness(self) -> Dict[str, Any]:
         try:
             if self.backend == "cosmos":
-                asset = _load_asset_manifest("cosmos3-nano")
+                asset = self._asset("cosmos3-nano")
                 return {"status": "ready_unqualified", "asset_id": "cosmos3-nano", "path": asset.get("path"), "backend": self.backend}
-            asset = _load_asset_manifest("world.irasim_bridge")
+            asset = self._asset("world.irasim_bridge")
             for name in ("irasim-bridge-safetensors", "irasim-vae", "irasim-scheduler"):
-                _load_asset_manifest(name)
+                self._asset(name)
             return {"status": "ready_unqualified", "asset_id": "world.irasim_bridge", "path": asset.get("path"), "backend": self.backend}
         except DemoRuntimeBlocked as error:
             return {"status": "blocked", "backend": self.backend, "reasons": [str(error)]}
 
     def _cosmos(self, request: WorldTurnRequest) -> Any:
         if self._adapter is not None:
+            if self._profile is not None and (
+                self._profile.profile_id != request.world.profile_id
+                or self._profile.resolution_tier != request.world.resolution_tier
+                or self._profile.num_inference_steps != request.world.inference_steps
+            ):
+                raise DemoContractError("Cosmos worker is already loaded under a different immutable operating profile")
             return self._adapter
         try:
             from plumb.adapters.worlds import Cosmos3NanoDiffusersAdapter, Cosmos3NanoDiffusersProfile
         except ImportError as error:  # pragma: no cover
             raise DemoRuntimeBlocked("Cosmos adapter package is not staged") from error
-        asset = _load_asset_manifest("cosmos3-nano")
+        asset = self._asset("cosmos3-nano")
         self._profile = Cosmos3NanoDiffusersProfile(
             profile_id=request.world.profile_id,
             local_model_path=str(asset["path"]),
@@ -1347,10 +1403,10 @@ class DemoWorldRuntime:
             from plumb.adapters.irasim_runtime import IRASimOneStepAdapter, IRASimOneStepProfile
         except ImportError as error:  # pragma: no cover
             raise DemoRuntimeBlocked("IRASim adapter package is not staged") from error
-        runtime = _load_asset_manifest("world.irasim_bridge")
-        weights = _load_asset_manifest("irasim-bridge-safetensors")
-        vae = _load_asset_manifest("irasim-vae")
-        scheduler = _load_asset_manifest("irasim-scheduler")
+        runtime = self._asset("world.irasim_bridge")
+        weights = self._asset("irasim-bridge-safetensors")
+        vae = self._asset("irasim-vae")
+        scheduler = self._asset("irasim-scheduler")
         checkpoint = pathlib.Path(str(weights["path"]))
         if checkpoint.suffix != ".safetensors":
             raise DemoRuntimeBlocked("IRASim demo accepts only an isolated safe-converted .safetensors checkpoint")
@@ -1385,11 +1441,17 @@ class DemoWorldRuntime:
 
     def _generate_cosmos(self, request: WorldTurnRequest, condition: Any, started: float) -> WorldTurnResult:
         from plumb.adapters.contracts import FeedbackMode, WorldRequest
+        from PIL import Image
 
         adapter = self._cosmos(request)
+        # Diffusers treats NumPy image inputs as [0,1] floats; decoded source
+        # arrays here are RGB uint8 [0,255]. PIL makes its /255 conversion
+        # explicit, matching the existing pinned smoke loader. Passing this
+        # uint8 array directly saturates conditioning and destroys the scene.
+        conditioning_image = Image.fromarray(condition)
         result = adapter.generate(
             WorldRequest(
-                conditioning_image=condition,
+                conditioning_image=conditioning_image,
                 prompt=request.task,
                 domain=request.world.domain,
                 compiled_actions=tuple(tuple(float(item) for item in row) for row in request.compiled_actions),

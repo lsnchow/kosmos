@@ -61,6 +61,7 @@ from plumb.reference import reference_payload
 from plumb.ledger import CallbackConflictError
 from plumb.live_demo import LiveDemoService, register_live_demo_routes
 from plumb.comparisons import ComparisonService, register_comparison_routes
+from plumb.demo_judge import DemoJudgeService, register_demo_judge_routes
 from plumb.outbox import BasetenOutbox
 from plumb.platform import BasetenChainClient, BasetenPlatformConfig, CallbackVerificationError, PlatformSchemaError
 
@@ -437,6 +438,7 @@ def create_app(
     development_review_private_root: Optional[Path] = None,
     live_demo_service: Optional[LiveDemoService] = None,
     comparison_service: Optional[ComparisonService] = None,
+    demo_judge_service: Optional[DemoJudgeService] = None,
 ) -> FastAPI:
     root = (data_dir or Path(os.environ.get("PLUMB_DATA_DIR", "data"))).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -464,6 +466,7 @@ def create_app(
     cloud_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plumb-cloud-diagnostic")
     live_demo = live_demo_service or LiveDemoService(root)
     comparisons = comparison_service or ComparisonService(root)
+    demo_judge = demo_judge_service or DemoJudgeService(root)
     submitted: set = set()
     lock = threading.RLock()
     freeplay_sessions: Dict[str, Dict[str, Any]] = {}
@@ -476,6 +479,7 @@ def create_app(
         cloud_pool.shutdown(wait=True)
         live_demo.shutdown()
         comparisons.shutdown()
+        demo_judge.shutdown()
 
     app = FastAPI(title="Kosmos", version="0.2.0", lifespan=lifespan)
     app.state.service = service
@@ -488,8 +492,10 @@ def create_app(
     app.state.cloud_diagnostic_status = cloud_diagnostic_status
     app.state.live_demo = live_demo
     app.state.comparisons = comparisons
+    app.state.demo_judge = demo_judge
     register_live_demo_routes(app, live_demo)
     register_comparison_routes(app, comparisons)
+    register_demo_judge_routes(app, demo_judge)
     # Development review is intentionally isolated from the annotation/Gate D
     # routes. Its SQLite database is private data, never an artifact endpoint.
     from plumb.development_review import DevelopmentReviewStore, register_development_review_routes

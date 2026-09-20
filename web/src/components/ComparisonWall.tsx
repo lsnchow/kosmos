@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { artifactUrl } from "../lib/api";
 import {
   COMPARISON_HORIZON,
@@ -399,7 +399,7 @@ function useComparisonEvents(
   return state;
 }
 
-export function ComparisonWall() {
+export function ComparisonWall({ fallback }: { fallback?: ReactNode } = {}) {
   const [load, setLoad] = useState<ComparisonLoad>("loading");
   const [readiness, setReadiness] = useState<ComparisonReadiness>();
   const [comparison, setComparison] = useState<ComparisonDetail>();
@@ -556,7 +556,7 @@ export function ComparisonWall() {
     : "comparison release blocked";
   const manualUnavailableReason = comparison ? strictManualContractReason(comparison.world) : undefined;
 
-  return (
+  const content = (
     <Panel
       title="Matched control wall"
       id="matched-control-wall"
@@ -676,4 +676,18 @@ export function ComparisonWall() {
       )}
     </Panel>
   );
+
+  // Saved experiments are an explicitly different fallback, never synthetic
+  // cells. Keep diagnostics collapsed so absence of a release is not the
+  // dashboard's main visual. A promoted real wall takes this slot immediately.
+  if (fallback && !comparison && load !== "loading") {
+    return <>
+      {fallback}
+      <details className="gallery-guide">
+        <summary>Matched comparison is not ready — view checks</summary>
+        {content}
+      </details>
+    </>;
+  }
+  return content;
 }
