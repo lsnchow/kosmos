@@ -9,9 +9,9 @@
  */
 import type { ReactNode } from "react";
 import {
+  BUILT_ON,
   FOOTER_COLUMNS,
   FOOTER_DISPLAY,
-  LIMITS,
   PILLARS,
   PRODUCT,
   CONSOLE_PATH,
@@ -93,34 +93,6 @@ export function Pillars() {
  * An evaluation product that hides its own caveats has already lost the
  * argument it is making, so this block is not a footnote and is not collapsed.
  */
-export function LimitsSection() {
-  return (
-    <SectionCard id="limits">
-      <Reveal className="limits-head">
-        <p className="pillar-number font-mono" aria-hidden="true">
-          05
-        </p>
-        <h2 className="pillar-heading">
-          <span className="text-fg-strong">Limits.</span>{" "}
-          <span className="text-fg-muted">Goalposts we cannot move until we cross them.</span>
-        </h2>
-      </Reveal>
-      {/* One `Reveal` around the list rather than one per card: a <div> between
-          <ul> and <li> is invalid markup, and the axe pass reads it as one. */}
-      <Reveal delay={0.1}>
-        <ul className="limits-grid">
-          {LIMITS.map((limit) => (
-            <li key={limit.title} className="limit-card">
-              <h3 className="text-fg">{limit.title}</h3>
-              <p className="text-fg-muted">{limit.body}</p>
-            </li>
-          ))}
-        </ul>
-      </Reveal>
-    </SectionCard>
-  );
-}
-
 export function CtaSection() {
   return (
     <SectionCard className="cta-section">
@@ -132,7 +104,7 @@ export function CtaSection() {
           <span className="text-fg-muted">before we trusted it.</span>
         </h2>
         <p className="pillar-body">{PRODUCT.tagline}</p>
-        <div className="hero-actions">
+        <div className="cta-actions">
           <PillButton href={CONSOLE_PATH} variant="primary">
             Open the console
           </PillButton>
@@ -181,6 +153,18 @@ export function LandingFooter() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* The stack, stated once, at the bottom. It belongs here rather than in
+          the hero: a first-time reader needs the claim before the dependency
+          list, and a reader who wants the list is already looking for it. */}
+      <div className="footer-built-on">
+        <span className="footer-heading font-mono">Built on</span>
+        <ul>
+          {BUILT_ON.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
       </div>
 
       {/* The tagline set large in the dot-matrix face, where its grid reads as

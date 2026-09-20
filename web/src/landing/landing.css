@@ -108,16 +108,75 @@
 
 /* --- Nav ----------------------------------------------------------------- */
 
+/*
+ * Fixed, not sticky, and hidden over the hero.
+ *
+ * Sticky confined it to `.hero`, its old parent, so it scrolled away with the
+ * hero rather than following the reader. Fixed and mounted by `Landing`, it
+ * outlasts every section.
+ *
+ * The hidden state is `visibility: hidden` and not opacity alone. Transparent
+ * is still focusable, and a bar a keyboard user can tab into but nobody can see
+ * is worse than no bar. `visibility` is listed in the transition so it flips at
+ * the end of the fade out and at the start of the fade in, rather than cutting
+ * the animation.
+ */
 .landing-nav {
-  position: sticky;
+  position: fixed;
   top: 0;
+  right: 0;
+  left: 0;
   z-index: var(--z-sticky);
-  /* The field colour at 85%, so the lattice reads through the bar as it scrolls
+  /* The field colour at 85%, so the page reads through the bar as it scrolls
      under. `color-mix` keeps this tied to --surface-0 rather than to a literal
      that would drift the first time the palette moves. */
   background: color-mix(in srgb, var(--surface-0) 85%, transparent);
   border-bottom: 1px solid var(--line-1);
   backdrop-filter: blur(8px);
+
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-100%);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out),
+    visibility 0s linear var(--duration-base);
+}
+
+.landing-nav[data-visible="true"] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out),
+    visibility 0s;
+}
+
+/*
+ * The marker on the hero's bottom edge that the bar keys off.
+ *
+ * It is 1px tall and not 0. A zero-area target never crosses an intersection
+ * threshold, so the observer fires once when it starts watching and then never
+ * again — the bar stayed hidden no matter how far the page scrolled. The
+ * negative margin gives the pixel back, so the layout is what it was.
+ */
+.nav-sentinel {
+  height: 1px;
+  margin-bottom: -1px;
+}
+
+/*
+ * With the bar fixed it covers the top of whatever an anchor jumps to, so every
+ * target reserves its own height back. Applied to the landing's scroll targets
+ * only — the console has its own chrome and its own rules.
+ */
+.kosmos-landing :target {
+  scroll-margin-top: 4rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-nav { transition: none; }
 }
 
 .landing-nav-inner {
@@ -269,14 +328,20 @@
   padding: 4rem var(--page-gutter) 3rem;
 }
 
+/* Typeset as Prime Intellect sets its hero: Geist at weight 400, no tracking,
+   and 1.1 leading (their 36px over 39.6px). The typeface and weight already
+   matched — what differed was -0.03em of tracking and 1.02 leading, both of
+   which read tighter and more condensed than the reference. Size is not copied:
+   their heading sits at 36px in a much smaller hero, and holding that here
+   would shrink the page's one display moment to body scale. */
 .hero-title {
   max-width: 18ch;
   margin: 0;
   font-family: var(--font-sans);
   font-size: clamp(2.75rem, 7vw, 5.25rem);
   font-weight: 400;
-  line-height: 1.02;
-  letter-spacing: -0.03em;
+  line-height: 1.1;
+  letter-spacing: normal;
 }
 
 .hero-promise {
@@ -284,25 +349,10 @@
   margin: 0;
   font-family: var(--font-sans);
   font-size: clamp(1rem, 1.4vw, 1.1875rem);
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
-.hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-
-.hero-built-on { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
-
-.hero-built-on ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
 
 
 /* --- Section cards ------------------------------------------------------- */
@@ -526,6 +576,27 @@
 
 .cta-section { position: relative; overflow: hidden; }
 .cta-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+.cta-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+.footer-built-on {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.25rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line-1);
+}
+.footer-built-on ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
 
 /* --- Footer -------------------------------------------------------------- */
 
