@@ -1757,11 +1757,11 @@ if CHAINS_RUNTIME_AVAILABLE:
             translated = service_dispatch_to_stream_request(request)
             if translated.rollout is not None:
                 async for record in self._core.rollout_events(translated.rollout):
-                yield record
+                    yield record
                 return
             if translated.manual is not None:
                 async for record in self._core.manual_events(translated.manual):
-                yield record
+                    yield record
                 return
             # Pydantic validation makes this unreachable. It remains a valid
             # stream terminal in case a future SDK deserialiser bypasses it.

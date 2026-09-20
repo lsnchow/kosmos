@@ -20,9 +20,19 @@ export const PENDING = "not yet measured" as const;
 
 export const PRODUCT = {
   name: "Kosmos",
-  /** The product one-liner, compressed from the build spec's. */
+  /**
+   * The product one-liner.
+   *
+   * Two sentences: the cost it removes, and the thing no simulator offers.
+   * The bottleneck is hardware, because evaluating a policy means booking a
+   * robot. The second sentence is the differentiator stated plainly rather
+   * than as a clause: a ranking that reports its own confidence is the whole
+   * product, and "know when it holds" was too vague to carry it. The proof
+   * lives on the console overview, where the physics simulator reports 4% on
+   * `Close the drawer` and the real robot reports 92%.
+   */
   promise:
-    "Point us at a policy endpoint. Get a ranked report in twenty minutes — and four numbers saying how far to trust it.",
+    "Rank robot policies without booking a robot. Every ranking says how confident it is.",
   tagline: "Policy evaluation with error bars.",
 } as const;
 
@@ -97,7 +107,7 @@ export const PILLARS = [
   },
   {
     id: "evidence",
-    figure: "stack" as const,
+    figure: "provenance" as const,
     number: "03",
     name: "Evidence",
     lead: "Evidence.",
@@ -118,7 +128,7 @@ export const PILLARS = [
   },
   {
     id: "console",
-    figure: "stack" as const,
+    figure: "console" as const,
     number: "04",
     name: "Console",
     lead: "Console.",
@@ -441,5 +451,3 @@ export const FOOTER_COLUMNS = [
 /** The footer's closing line. It is the tagline, set large. */
 export const FOOTER_DISPLAY = "Measure the ruler." as const;
 
-export const FOOTER_NOTE =
-  "Page imagery is illustrative and is not model output. Generated frames carry provenance in the console." as const;

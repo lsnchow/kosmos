@@ -88,11 +88,14 @@ describe("landing page", () => {
     for (const pillar of PILLARS) {
       const section = document.querySelector(`#${pillar.id}`) as HTMLElement;
 
-      if (pillar.figure === "pipeline") {
+      if (pillar.figure !== "stack") {
         // Supplied artwork, so the labels live in the pixels; the accessible
-        // name is what can be asserted.
-        const cycle = within(section).getByRole("img");
-        expect(cycle).toHaveClass("pipe-figure");
+        // name is what can be asserted. An empty alt would make the figure
+        // invisible to a screen reader rather than merely undescribed, so the
+        // name is required to be non-trivial.
+        const artwork = within(section).getByRole("img");
+        expect(artwork).toHaveClass("pipe-figure");
+        expect(artwork.getAttribute("alt")?.length ?? 0).toBeGreaterThan(20);
         continue;
       }
 
@@ -127,11 +130,6 @@ describe("landing page", () => {
     }
   });
 
-  it("says the page imagery is not model output", () => {
-    renderLanding();
-    expect(screen.getByText(/Page imagery is illustrative/)).toBeInTheDocument();
-    expect(screen.getByText(/carry provenance in the console/)).toBeInTheDocument();
-  });
 
   it("serves every asset from this origin and none from a CDN", () => {
     // The hero backdrop was once a CDN-hosted MP4. The rule that replaced it is

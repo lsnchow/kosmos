@@ -11,14 +11,15 @@ import type { ReactNode } from "react";
 import {
   FOOTER_COLUMNS,
   FOOTER_DISPLAY,
-  FOOTER_NOTE,
   LIMITS,
   PILLARS,
   PRODUCT,
   CONSOLE_PATH,
   LIVE_PATH,
 } from "./content";
+import { ConsoleMatrix } from "./figures/ConsoleMatrix";
 import { IsoStack } from "./figures/IsoStack";
+import { ProvenanceFunnel } from "./figures/ProvenanceFunnel";
 import { PipelineDiamond } from "./figures/PipelineDiamond";
 import { FigPanel, PillButton, Reveal, SectionCard } from "./Pieces";
 
@@ -39,6 +40,10 @@ function PillarSection({ pillar, index }: { pillar: Pillar; index: number }) {
       <FigPanel index={index}>
         {pillar.figure === "pipeline" ? (
           <PipelineDiamond />
+        ) : pillar.figure === "provenance" ? (
+          <ProvenanceFunnel />
+        ) : pillar.figure === "console" ? (
+          <ConsoleMatrix />
         ) : (
           <IsoStack number={pillar.number} layers={pillar.layers} />
         )}
@@ -182,7 +187,6 @@ export function LandingFooter() {
       </p>
 
       <div className="footer-bottom">
-        <p className="footer-note">{FOOTER_NOTE}</p>
         <p className="footer-copy font-mono">
           © {new Date().getFullYear()} {PRODUCT.name}
         </p>
