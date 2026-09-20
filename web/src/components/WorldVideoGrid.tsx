@@ -110,14 +110,6 @@ function VideoCard({
             This clip could not play. Download it or choose another recording.
           </p>
         )}
-        <button
-          type="button"
-          className="button button-secondary"
-          aria-label={`Start a new interactive branch from ${video.title}`}
-          onClick={(event) => onNewBranch(video, event.currentTarget)}
-        >
-          New interactive branch →
-        </button>
         <details>
           <summary>Clip details & download</summary>
           <p className="text-pretty">
@@ -244,11 +236,7 @@ export function WorldVideoGrid() {
         </p>
       )}
       <p className="gallery-footnote text-pretty">
-        Watching a clip never starts generation or scoring. A new interactive
-        branch starts from this clip’s last verified image and uses experimental
-        IRASim prediction; it is not an exact checkpoint resume. Loops replay
-        the saved clip; they do not extend the robot’s trajectory. Short probes
-        and repeats remain in the archive.
+        Saved playback. Use Generate above to create a new Cosmos video.
       </p>
       {branch && (
         <NewEvaluationDialog

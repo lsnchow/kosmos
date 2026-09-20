@@ -12,6 +12,9 @@ import {
 import { cn } from "../lib/utils";
 import { MediaFrame } from "./MediaFrame";
 import { EmptyState, Panel, StatusPill } from "./Primitives";
+import { InferenceBreakdown } from "./InferenceBreakdown";
+import { Assessment } from "./DemoJudgePanel";
+import { JudgeLogs } from "./JudgeLogs";
 
 const DEFAULT_PROMPT = "Put the pot to the left of the purple item.";
 const ACTIVE_STATES = new Set(["queued", "initializing", "running"]);
@@ -47,7 +50,7 @@ function requestId() {
 }
 
 function timingEntries(session: DemoSession) {
-  const latest = session.frames?.at(-1);
+  const latest = session.world_model === "cosmos" ? session.frames?.find((frame) => typeof frame.timings_ms?.world === "number") : session.frames?.at(-1);
   return Object.entries(latest?.timings_ms ?? {}).filter(
     (entry): entry is [string, number] =>
       typeof entry[1] === "number" && Number.isFinite(entry[1]),
@@ -179,30 +182,16 @@ function DemoSessionSurface({
     };
   }, [initialSession]);
 
-  // The state returned by a GET/command decides whether polling continues.
+  // The stream replays committed frames; reconnecting never dispatches work.
   useEffect(() => {
-    if (!isLiveState(session.state)) return;
-    let mounted = true;
-    const timer = window.setInterval(() => {
-      void api
-        .demoSession(session.id)
-        .then((next) => {
-          if (mounted) setSession(next);
-        })
-        .catch((reason) => {
-          if (mounted)
-            setError(
-              errorMessage(
-                reason,
-                "The live evaluation could not be refreshed.",
-              ),
-            );
-        });
-    }, 1_000);
-    return () => {
-      mounted = false;
-      window.clearInterval(timer);
-    };
+    if (["completed", "blocked", "error"].includes(session.state)) return;
+    const stream = new EventSource(`/api/demo/sessions/${encodeURIComponent(session.id)}/events`);
+    stream.addEventListener("snapshot", (event) => {
+      try { setSession(JSON.parse((event as MessageEvent).data)); setError(undefined); }
+      catch { setError("Could not read generation update."); }
+    });
+    stream.onerror = () => setError("Generation updates disconnected; reconnecting to saved progress…");
+    return () => stream.close();
   }, [session.id, session.state]);
 
   const frames = useMemo(() => sessionFrames(session), [session]);
@@ -247,7 +236,7 @@ function DemoSessionSurface({
             id="demo-dialog-description"
             className="dialog-description text-pretty"
           >
-            {session.mode === "policy"
+            {session.world_model === "cosmos" ? "Cosmos generated this video from the supplied manual action sequence." : session.mode === "policy"
               ? "OpenVLA chooses each action; IRASim predicts the next view. No task-success score is assigned."
               : "Each button sends one bounded directional action. Buttons never repeat from a held key."}
           </Dialog.Description>
@@ -265,7 +254,7 @@ function DemoSessionSurface({
           aria-label="Persisted live evaluation frame"
         >
           <MediaFrame
-            src={frames.at(-1)}
+            src={session.state === "completed" && session.latest_video_url ? artifactUrl(session.latest_video_url) : frames.at(-1)}
             alt={`Latest persisted frame for ${session.title || session.id}`}
             className="freeplay-media"
             emptyReason={
@@ -279,6 +268,13 @@ function DemoSessionSurface({
             <span className="tabular-nums">
               {frames.length} persisted frame{frames.length === 1 ? "" : "s"}
             </span>
+          </div>
+          <div className="generation-progress">
+            <div className="policy-progress" role="progressbar" aria-label="Generated world-model steps" aria-valuemin={0} aria-valuemax={session.mode === "policy" ? (session.requested_steps ?? 4) : (session.max_steps ?? 8)} aria-valuenow={session.completed_steps ?? 0}>
+              <span style={{ transform: `scaleX(${Math.min(1, (session.completed_steps ?? 0) / (session.mode === "policy" ? (session.requested_steps ?? 4) : (session.max_steps ?? 8)))})` }} />
+            </div>
+            <p className="judge-muted tabular-nums" role="status">{isLiveState(session.state) ? `Generating step ${(session.completed_steps ?? 0) + 1}` : session.state === "completed" ? "Generation complete" : "Ready"} · {session.completed_steps ?? 0} frames generated</p>
+            <p className="judge-muted text-pretty">Each update is a newly generated frame. Progress advances only when a step finishes.</p>
           </div>
         </section>
 
@@ -427,13 +423,9 @@ function DemoSessionSurface({
               ))}
             </dl>
           </details>
-          {timings.length === 0 && (
-            <p className="control-note mt-3">
-              No timing value has been reported for the latest persisted frame.
-            </p>
-          )}
         </aside>
       </div>
+      {session.judgment && <section aria-label="Saved judge assessment"><p className="eyebrow">LoRA-post-trained rollout judge</p><JudgeLogs judgment={session.judgment} /><Assessment judgment={session.judgment} /><InferenceBreakdown judgment={session.judgment} /></section>}
     </>
   );
 }
@@ -739,7 +731,7 @@ export function NewEvaluationDialog({
   );
 }
 
-export function LiveDemoPanel({ limit = 3 }: { limit?: number }) {
+export function LiveDemoPanel({ limit = 3, historyOnly = false }: { limit?: number; historyOnly?: boolean }) {
   const [status, setStatus] = useState<DemoStatus>();
   const [sessions, setSessions] = useState<DemoSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -785,9 +777,9 @@ export function LiveDemoPanel({ limit = 3 }: { limit?: number }) {
 
   return (
     <Panel
-      title="Live evaluations"
+      title={historyOnly ? "Past runs" : "Live evaluations"}
       action={
-        <button
+        !historyOnly && <button
           ref={newButton}
           type="button"
           className="button button-primary"
@@ -798,11 +790,9 @@ export function LiveDemoPanel({ limit = 3 }: { limit?: number }) {
       }
     >
       <p className="text-pretty text-sm text-[var(--text-muted)] mt-3">
-        Run the existing OpenVLA controller or steer a bounded manual session.
-        These are live experimental outputs, not a policy comparison or a scored
-        result.
+        {historyOnly ? "Reopen previously generated videos and their recorded steps." : "Generate a fresh rollout and watch each world-model step arrive."}
       </p>
-      {status?.reason && <p className="control-note mt-3">{status.reason}</p>}
+      {!historyOnly && status && !status.available && <p className="control-note mt-3">Live generation is currently unavailable. Saved runs remain accessible.</p>}
       {error && (
         <p className="inline-error" role="alert">
           {error}
@@ -842,7 +832,7 @@ export function LiveDemoPanel({ limit = 3 }: { limit?: number }) {
                   {session.title || session.prompt || session.id}
                 </p>
                 <p className="text-pretty text-sm text-[var(--text-muted)]">
-                  {session.mode === "policy"
+                  {session.world_model === "cosmos" ? "Cosmos · supplied actions" : session.mode === "policy"
                     ? "Existing OpenVLA controller"
                     : "Manual steering"}{" "}
                   · {sessionFrames(session).length} persisted frames

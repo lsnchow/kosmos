@@ -95,6 +95,9 @@ class Model:
         self.classes: Dict[str, Any] = {}
         self.receipt: Dict[str, Any] = {}
         self.load_seconds: float | None = None
+        self.model = None
+        self.calls = 0
+        self.generation_metrics = []
 
     def load(self) -> None:
         started = time.perf_counter()
@@ -119,6 +122,7 @@ class Model:
             from PIL import Image
             from huggingface_hub import snapshot_download
             from peft import PeftModel
+            import peft
             from plumb.policies.judge import (
                 JudgeInputProvenance,
                 JudgeRequest,
@@ -131,6 +135,8 @@ class Model:
             raise JudgeWorkerError("judge runtime dependency is unavailable") from error
         if str(transformers.__version__) != "4.49.0":
             raise JudgeWorkerError("Transformers runtime does not match the pinned 4.49.0 judge profile")
+        if peft.__version__ != "0.14.0":
+            raise JudgeWorkerError("PEFT runtime does not match 0.14.0")
         if not torch.cuda.is_available():
             raise JudgeWorkerError("semantic judge requires an H100 CUDA runtime")
         try:
@@ -153,6 +159,62 @@ class Model:
             raise JudgeWorkerError("semantic epoch-02 adapter could not be loaded and enabled") from error
         model = model.to("cuda")
         model.eval()
+        self.model = model
+        generate = model.generate
+
+        def measured_generate(*args, **kwargs):
+            # Observe the existing generate call without altering its sampler.
+            # Streamer receives the prompt first, then generated token IDs.
+            started = time.perf_counter()
+            token_times = []
+            forward_events = []
+            class TokenClock:
+                prompt_seen = False
+                def put(self, ids):
+                    if not self.prompt_seen:
+                        self.prompt_seen = True
+                    else:
+                        token_times.append(time.perf_counter())
+                def end(self):
+                    pass
+            def before_forward(module, inputs):
+                event = torch.cuda.Event(enable_timing=True)
+                event.record()
+                forward_events.append([event, None])
+            def after_forward(module, inputs, output):
+                event = torch.cuda.Event(enable_timing=True)
+                event.record()
+                forward_events[-1][1] = event
+            pre = base.register_forward_pre_hook(before_forward)
+            post = base.register_forward_hook(after_forward)
+            try:
+                generated = generate(*args, **kwargs, streamer=TokenClock())
+                torch.cuda.synchronize()
+                elapsed = time.perf_counter() - started
+                input_count = int(kwargs["input_ids"].shape[-1])
+                output_count = int(generated.shape[-1]) - input_count
+                cuda_ms = [a.elapsed_time(b) for a, b in forward_events if b is not None]
+                decode_span = token_times[-1] - token_times[0] if len(token_times) > 1 else None
+                free, total = torch.cuda.mem_get_info()
+                self.generation_metrics.append({
+                    "input_tokens": input_count, "output_tokens": output_count,
+                    "batch_size": int(generated.shape[0]), "generation_seconds": elapsed,
+                    "ttft_seconds": token_times[0] - started if token_times else None,
+                    "prefill_gpu_seconds": cuda_ms[0] / 1000 if cuda_ms else None,
+                    "decode_gpu_seconds": sum(cuda_ms[1:]) / 1000 if len(cuda_ms) > 1 else None,
+                    "decode_wall_seconds": decode_span,
+                    "decode_tokens_per_second": (output_count - 1) / decode_span if decode_span and output_count > 1 else None,
+                    "gpu_type": torch.cuda.get_device_name(),
+                    "device_hbm_used_bytes_after": total - free,
+                    "device_hbm_total_bytes": total,
+                    "allocator_reserved_bytes_after": torch.cuda.memory_reserved(),
+                    "scope": "TTFT from generate entry to first token callback; input tokens include expanded multimodal tokens; prefill/decode GPU timings are forward-pass CUDA events; HBM is a device-wide post-call snapshot."
+                })
+                return generated
+            finally:
+                pre.remove()
+                post.remove()
+        model.generate = measured_generate
         active = getattr(model, "active_adapter", None)
         active_value = active[0] if isinstance(active, (list, tuple)) and active else active
         if active_value != ADAPTER_ID:
@@ -165,8 +227,8 @@ class Model:
             transformers_version="4.49.0",
             asset_manifest_id=ADAPTER_ID,
             asset_manifest_sha256="sha256:" + hashlib.sha256(MANIFEST_PATH.read_bytes()).hexdigest(),
-            runtime_lock_id="requirements.txt",
-            runtime_lock_sha256="sha256:" + hashlib.sha256((MODEL_ROOT.parent / "requirements.txt").read_bytes()).hexdigest(),
+            runtime_lock_id="judge-demo/model.py",
+            runtime_lock_sha256=_sha(Path(__file__)),
         )
         # Passing the PEFT model via QwenRubricJudge's supported factory keeps
         # its original prompt, video/reference protocol, seeded five samples,
@@ -196,6 +258,13 @@ class Model:
             "peft_model_class": type(model).__name__,
             "adapter_manifest_sha256": "sha256:" + hashlib.sha256(MANIFEST_PATH.read_bytes()).hexdigest(),
         }
+        self._verify_enabled()
+
+    def _verify_enabled(self):
+        layers = [module for module in self.model.modules() if hasattr(module, "lora_A")]
+        if not layers or any(module.disable_adapters or module.merged or ADAPTER_ID not in module.active_adapters for module in layers):
+            raise JudgeWorkerError("semantic adapter layers are disabled, merged, or inactive")
+        self.receipt["verified_enabled_layer_count"] = len(layers)
 
     def _validate_request(self, request: Mapping[str, Any]) -> Dict[str, Any]:
         required = {"schema_version", "kind", "request_id", "frames", "frame_timestamps", "reference_images", "task_id", "seeds", "provenance"}
@@ -235,6 +304,7 @@ class Model:
         try:
             if self.judge is None:
                 raise JudgeWorkerError("judge was not loaded")
+            self._verify_enabled()
             checked = self._validate_request(request)
             Image = self.classes["Image"]
             frames = tuple(_png(frame, Image) for frame in checked["frames"])
@@ -254,18 +324,23 @@ class Model:
                 provenance=provenance,
             )
             judge_request.validate()
+            self.generation_metrics = []
             started = time.perf_counter()
             report = self.judge.evaluate(judge_request, seeds=checked["seeds"])
             report.validate_aggregation()
+            cold = self.calls == 0
+            self.calls += 1
             return {
                 "schema_version": 1,
                 "request_id": checked["request_id"],
                 "status": "completed",
                 "report": report.as_dict(),
                 "adapter_receipt": self.receipt,
+                "generation_metrics": self.generation_metrics,
                 "timing": {
                     "worker_inference_seconds": time.perf_counter() - started,
-                    "worker_load_seconds": self.load_seconds,
+                    "worker_load_seconds": self.load_seconds if cold else None,
+                    "first_call_on_replica": cold,
                     "gpu_peak_memory_bytes": getattr(report, "gpu_peak_memory_bytes", None),
                 },
                 "experimental": True,

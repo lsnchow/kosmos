@@ -26,10 +26,15 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .policies.judge import parse_rubric_json
+from .policies.provenance import image_pixel_hash
+from .policies.tasks import BENCHMARK_TASK_REGISTRY
+from .policies.demo_tasks import POT_TASK_ID, POT_INSTRUCTION, POT_RUBRIC_HASH
 from .records import canonical_json, utc_now
 from .world_videos import world_videos_payload
 
@@ -79,6 +84,8 @@ class DemoJudgeConfig:
     cli_profile: str
     timeout_seconds: float = 600.0
     budget_cap_usd: float = 100.0
+    worker_url: Optional[str] = None
+    worker_token_file: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> Optional["DemoJudgeConfig"]:
@@ -104,6 +111,8 @@ class DemoJudgeConfig:
             cli_profile=str(values["cli_profile"]).strip(),
             timeout_seconds=timeout,
             budget_cap_usd=budget,
+            worker_url=os.environ.get("PLUMB_DEMO_JUDGE_WORKER_URL"),
+            worker_token_file=os.environ.get("PLUMB_DEMO_JUDGE_WORKER_TOKEN_FILE"),
         )
 
 
@@ -235,7 +244,9 @@ def _derive_seeds(material: str) -> Tuple[int, ...]:
     counter = 0
     while len(values) < SAMPLE_COUNT:
         digest = hashlib.sha256(("plumb-demo-judge-v1:" + material + ":" + str(counter)).encode("utf-8")).digest()
-        value = int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+        # Baseten CLI JSON output passes numbers through floating-point JSON.
+        # Keep seeds exactly representable across Python, Go and browser JSON.
+        value = int.from_bytes(digest[:8], "big") & ((1 << 31) - 1)
         if value not in values:
             values.append(value)
         counter += 1
@@ -306,7 +317,7 @@ def _assessment_from_report(report: Mapping[str, Any]) -> Dict[str, Any]:
             return "Unable to assess"
         counts = {value: values.count(value) for value in set(values)}
         value, count = max(counts.items(), key=lambda item: (item[1], item[0]))
-        return value if count > len(values) / 2 else "Mixed"
+        return value if count >= QUORUM else "Unable to assess"
 
     if winner is None:
         return {
@@ -319,6 +330,7 @@ def _assessment_from_report(report: Mapping[str, Any]) -> Dict[str, Any]:
             "explanation": None,
             "evidence_frame_indices": [],
             "quorum": max(len(decisive[True]), len(decisive[False])),
+            "missing_reason": report.get("missing_reason") or "judge_insufficient_quorum",
         }
     sorted_progress = sorted(int(sample["progress"]) for sample in votes)
     chosen = votes[0]
@@ -346,6 +358,8 @@ class DemoJudgeService:
         self.judgments_root = self.root / "demo-judgments"
         self.db_path = self.root / "demo-judgments.sqlite3"
         self._lock = threading.RLock()
+        self._deployment_observation: Dict[str, Any] = {}
+        self._deployment_observed_at = 0.0
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plumb-demo-judge")
         self._init_schema()
         self._recover()
@@ -447,6 +461,36 @@ class DemoJudgeService:
                 os.unlink(temporary)
 
     def _supported_clip(self, clip_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        if clip_id and clip_id.startswith("live-demo:"):
+            session_id = clip_id.removeprefix("live-demo:")
+            if not re.fullmatch(r"[a-f0-9]{32}", session_id):
+                return None
+            db_path = self.root / "live-demo/live-demo.sqlite3"
+            if not db_path.is_file():
+                return None
+            with sqlite3.connect(str(db_path)) as db:
+                db.row_factory = sqlite3.Row
+                row = db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+            if not row or row["state"] != "completed":
+                return None
+            pot = json.loads(row["source_json"]).get("kind") == "demo_pot_fixture"
+            task_id, instruction = (POT_TASK_ID, POT_INSTRUCTION) if pot else (DEMO_TASK_ID, DEMO_TASK_LABEL)
+            if row["prompt"] != instruction or json.loads(row["source_json"]).get("kind") not in {"demo_drawer_fixture", "demo_pot_fixture"}:
+                return None
+            video = _under(self.root, "live-demo/" + str(row["latest_video_file"]))
+            receipt = json.loads(video.with_suffix(".manifest.json").read_text())
+            if receipt["session_id"] != session_id or receipt["sha256"] != _sha256_file(video):
+                return None
+            scene_name = "pot-scene.png" if pot else "scene-reference.png"
+            scene = _under(self.root, "demo-judge-fixtures/" + scene_name)
+            if _sha256_file(scene) != ("sha256:65db577ed68303af3931781428da7d017337b3b7be8c2eaac4fa192b2cb9dd69" if pot else "sha256:42ad1fe7593823c0aa33888ffd10927c2dde7cce8b65544e48dd9a5754e7f24e"):
+                return None
+            return {"id": clip_id, "title": row["title"], "video_path": video, "scene_path": scene,
+                    "video_url": "/api/artifacts/live-demo/" + video.name,
+                    "scene_url": "/api/artifacts/demo-judge-fixtures/" + scene_name,
+                    "video_sha256": receipt["sha256"], "task_id": task_id, "task_label": instruction,
+                    "action_source": "Supplied manual right actions" if json.loads(row["source_json"]).get("world_model") == "cosmos" else "OpenVLA actions generated in this run", "controller_identity": "Cosmos" if json.loads(row["source_json"]).get("world_model") == "cosmos" else "OpenVLA",
+                    "scene_reference_role": "scene_reference_not_goal"}
         catalog = world_videos_payload(self.root)
         candidates: List[Dict[str, Any]] = []
         for video in catalog.get("videos", []):
@@ -524,7 +568,6 @@ class DemoJudgeService:
             "base_model": {"id": QWEN_MODEL_ID, "revision": QWEN_BASE_REVISION},
             "adapter": {
                 "id": DEMO_PROFILE_ID,
-                "recorded_path": SEMANTIC_ADAPTER_PATH,
                 "tree_sha256": SEMANTIC_ADAPTER_TREE_SHA256,
             },
             "sampling": {"sample_count": 5, "quorum": 3, "temperature": 0.7},
@@ -546,9 +589,34 @@ class DemoJudgeService:
             "configured": True,
             "available": True,
             "reason": "Configured; an explicit assessment request is required to load or invoke the private judge worker.",
-            "deployment": {"model_id": self.config.model_id, "deployment_id": self.config.deployment_id, "max_replicas": 1, "budget_cap_usd": self.config.budget_cap_usd},
+            "deployment": ({"provider": "Trillium", "allocation_id": os.environ.get("PLUMB_DEMO_JUDGE_ALLOCATION_ID"), "max_replicas": 1} if self.config.worker_url else {"model_id": self.config.model_id, "deployment_id": self.config.deployment_id, "max_replicas": 1, "budget_cap_usd": self.config.budget_cap_usd}),
             "loaded_adapter_verified": receipt_ok,
         }
+
+    def performance_observation(self) -> Dict[str, Any]:
+        """Read-only management telemetry; never wakes the inference worker."""
+        if self.config is None:
+            return {"status": "unavailable"}
+        if self.config.worker_url:
+            try:
+                with urlopen(self._worker_request("/health"), timeout=5) as response:
+                    health = json.load(response)
+                return {"status": "ready", "active_replicas": 1, "gpu_configuration": health.get("gpu_type"), "provider": "Trillium", "observed_at": utc_now()}
+            except Exception:
+                return {"status": "unavailable"}
+        with self._lock:
+            if time.time() - self._deployment_observed_at < 30:
+                return self._deployment_observation
+            try:
+                call = subprocess.run(["baseten", "model", "deployment", "describe", "--profile", self.config.cli_profile,
+                    "--model-id", self.config.model_id, "--deployment-id", self.config.deployment_id, "--output", "json"], capture_output=True, timeout=15, check=True)
+                observed = json.loads(call.stdout)
+                self._deployment_observation = {"status": observed.get("status"), "active_replicas": observed.get("active_replica_count"),
+                    "autoscaling": observed.get("autoscaling_settings"), "gpu_configuration": observed.get("instance_type_name"), "observed_at": utc_now()}
+            except (OSError, ValueError, subprocess.SubprocessError):
+                self._deployment_observation = {"status": "unavailable", "active_replicas": None, "observed_at": utc_now()}
+            self._deployment_observed_at = time.time()
+            return self._deployment_observation
 
     @staticmethod
     def _public_clip(clip: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -560,6 +628,8 @@ class DemoJudgeService:
         )}
 
     def _prepare_input(self, judgment_id: str, clip: Mapping[str, Any]) -> Dict[str, Any]:
+        preparation_started = time.perf_counter()
+        from PIL import Image
         video = Path(str(clip["video_path"]))
         poster = Path(str(clip["scene_path"]))
         if _sha256_file(video) != clip["video_sha256"]:
@@ -578,13 +648,17 @@ class DemoJudgeService:
             {"index": index, "file": frame.relative_to(artifact).as_posix(), "sha256": _sha256_file(frame), "bytes": frame.stat().st_size}
             for index, frame in zip(indexes, frames)
         ]
+        for record, frame in zip(frame_records, frames):
+            with Image.open(frame) as decoded:
+                record["pixel_sha256"] = image_pixel_hash(decoded.convert("RGB"))["sha256"]
         reference_sha = _sha256_file(reference)
         seeds = _derive_seeds(str(clip["video_sha256"]) + ":" + str(clip["id"]))
         return {
             "schema_version": 1,
             "judgment_id": judgment_id,
             "clip": self._public_clip(clip),
-            "task_id": DEMO_TASK_ID,
+            "task_id": clip["task_id"],
+            "rubric_hash": POT_RUBRIC_HASH if clip["task_id"] == POT_TASK_ID else BENCHMARK_TASK_REGISTRY.get(DEMO_TASK_ID).rubric_hash,
             "profile": DEMO_PROFILE_ID,
             "video_sha256": clip["video_sha256"],
             "video_frame_count": frame_count,
@@ -599,9 +673,11 @@ class DemoJudgeService:
             },
             "sampling": {"sample_count": 5, "quorum": 3, "temperature": 0.7, "top_p": 1.0, "max_new_tokens": 512, "retries_per_sample": 1},
             "seeds": list(seeds),
+            "preparation_seconds": time.perf_counter() - preparation_started,
         }
 
     def submit(self, body: DemoJudgmentInput) -> Dict[str, Any]:
+        admitted_at = time.time()
         if not _IDEMPOTENCY_RE.fullmatch(body.idempotency_key):
             raise DemoJudgeInputError("idempotency_key is invalid")
         clip = self._supported_clip(body.clip_id)
@@ -622,6 +698,10 @@ class DemoJudgeService:
         judgment_id = "judge-" + uuid.uuid4().hex
         try:
             prepared = self._prepare_input(judgment_id, clip)
+            prepared["admitted_at_unix"] = admitted_at
+            prepared["deployment"] = {"model_id": self.config.model_id, "deployment_id": self.config.deployment_id, "max_replicas": 1, "min_replicas": 0, "concurrency": 1, "team_id": "q8grpdw"}
+            if self.config.worker_url:
+                prepared["deployment"] = {"provider": "Trillium", "worker": "semantic-epoch02", "allocation_id": os.environ.get("PLUMB_DEMO_JUDGE_ALLOCATION_ID"), "max_replicas": 1, "min_replicas": 1, "concurrency": 1}
         except Exception:
             shutil.rmtree(self._artifact_dir(judgment_id), ignore_errors=True)
             raise
@@ -738,13 +818,36 @@ class DemoJudgeService:
             raise DemoJudgeError("judge worker response lacks report or adapter receipt")
         if not self._receipt_matches(receipt):
             raise DemoJudgeError("judge worker did not prove the selected semantic epoch-02 adapter is loaded and enabled")
+        with self._connection() as connection:
+            stored = connection.execute("SELECT input_json FROM demo_judgments WHERE id = ?", (judgment_id,)).fetchone()
+        prepared = json.loads(stored["input_json"])
+        provenance = report.get("provenance") or {}
+        evidence = provenance.get("evidence_hashes") or {}
+        if evidence.get("video_hash") != prepared["video_sha256"] or evidence.get("frame_pixel_hashes") != [frame["pixel_sha256"] for frame in prepared["frames"]]:
+            raise DemoJudgeError("judge response input hashes differ from the persisted frames")
+        if provenance.get("rubric_hash") != prepared["rubric_hash"]:
+            raise DemoJudgeError("judge response rubric differs from the requested task")
+        samples = report.get("raw_judge_samples") or []
+        if [sample.get("seed") for sample in samples] != prepared["seeds"]:
+            raise DemoJudgeError("judge response seeds differ from the admitted request")
+        for index, sample in enumerate(samples):
+            for attempt_index, attempt in enumerate(sample.get("attempts") or []):
+                if attempt.get("sample_index") != index or attempt.get("seed") != prepared["seeds"][index] or attempt.get("attempt_index") != attempt_index:
+                    raise DemoJudgeError("judge attempt identity mismatch")
+                if attempt.get("parsed") is not None and dict(parse_rubric_json(attempt.get("raw_output")).as_dict()) != attempt["parsed"]:
+                    raise DemoJudgeError("judge attempt raw/parsed mismatch")
         assessment = _assessment_from_report(report)
+        expected_success = None if assessment["status"] != "evaluable" else assessment["completion"] == "Completed"
+        if report.get("binary_success") is not expected_success or report.get("progress") != assessment["progress"] or report.get("agreeing_samples") != assessment["quorum"]:
+            raise DemoJudgeError("judge summary differs from local quorum computation")
         timing = response.get("timing") if isinstance(response.get("timing"), Mapping) else {}
         return {
             "report": _safe_json(report),
             "adapter_receipt": _safe_json(receipt),
             "assessment": assessment,
             "timing": _safe_json(timing),
+            "deployment": prepared["deployment"],
+            "generation_metrics": _safe_json(response.get("generation_metrics", [])),
             "experimental": True,
             "qualified": False,
         }
@@ -764,14 +867,15 @@ class DemoJudgeService:
         prepared = json.loads(row["input_json"])
         try:
             payload = self._remote_payload(prepared)
-            self._set_status(judgment_id, "assessing", "assessing", {"sample_count": SAMPLE_COUNT, "quorum": QUORUM})
+            # A synchronous remote request does not reveal when warming ends.
+            # Keep the observed state as waiting for the remote worker.
             started = time.perf_counter()
             assert self.config is not None
             environment = dict(os.environ)
             environment.pop("BASETEN_API_KEY", None)
             environment.pop("BASETEN_AUTH_TOKEN", None)
             try:
-                call = subprocess.run(
+                call = self._cluster_call(payload, judgment_id) if self.config.worker_url else subprocess.run(
                     self._argv(), input=canonical_json(payload).encode("utf-8"), capture_output=True,
                     timeout=self.config.timeout_seconds, check=False, env=environment,
                 )
@@ -782,18 +886,34 @@ class DemoJudgeService:
             raw = {"returncode": call.returncode, "stdout": call.stdout.decode("utf-8", "replace"), "stderr": call.stderr.decode("utf-8", "replace")}
             self._write_json(self._artifact_dir(judgment_id) / "raw-response.json", raw)
             if call.returncode != 0:
+                if "status 403" in raw["stderr"]:
+                    raise DemoJudgeError("Baseten rejected authentication (HTTP 403). No automatic retry was issued.")
                 raise DemoJudgeError("judge worker returned a nonzero CLI status")
             try:
                 remote = json.loads(raw["stdout"])
             except ValueError as error:
                 raise DemoJudgeError("judge worker returned unreadable JSON") from error
+            remote_seconds = time.perf_counter() - started
+            validation_started = time.perf_counter()
             result = self._validate_response(remote, judgment_id)
             result["timing"] = dict(result["timing"])
             result["timing"]["client_request_seconds"] = time.perf_counter() - started
+            result["timing"]["remote_request_seconds"] = remote_seconds
+            result["timing"]["preparation_seconds"] = prepared["preparation_seconds"]
+            result["timing"]["outside_inference_seconds"] = max(0, remote_seconds - float(result["timing"].get("worker_inference_seconds", 0)))
+            result["timing"]["outside_inference_scope"] = "Observed transport, serialization and request waiting combined; queue time is not separately observable."
             result["timing"]["client_request_scope"] = "CLI request, model wake/load, five-sample inference, response validation; excludes local journal write"
+            if self.config.worker_url:
+                result["timing"]["client_request_scope"] = "Private worker stream, five-sample inference and response validation; excludes local journal write"
             self._write_json(self._artifact_dir(judgment_id) / "result.json", result)
             terminal = "completed" if result["assessment"]["status"] == "evaluable" else "abstained"
             self._set_status(judgment_id, terminal, "result", {"assessment_status": result["assessment"]["status"]}, finished=True, result=result)
+            result["timing"]["validation_and_persistence_seconds"] = time.perf_counter() - validation_started
+            result["timing"]["action_to_persisted_seconds"] = time.time() - prepared["admitted_at_unix"]
+            result["timing"]["total_scope"] = "Server admission through first durable result commit; browser network/render time excluded."
+            self._write_json(self._artifact_dir(judgment_id) / "result.json", result)
+            with self._connection() as connection:
+                connection.execute("UPDATE demo_judgments SET result_json = ? WHERE id = ?", (canonical_json(result), judgment_id))
         except Exception as error:  # explicitly terminal: never resubmit this request
             failure = {"kind": type(error).__name__, "message": str(error), "automatic_retry_allowed": False}
             self._write_json(self._artifact_dir(judgment_id) / "failure.json", failure)
@@ -831,10 +951,38 @@ class DemoJudgeService:
         if row is None:
             raise KeyError(judgment_id)
         public = self._public_row(row)
+        with self._connection() as connection:
+            event = connection.execute("SELECT detail_json FROM demo_judgment_events WHERE judgment_id=? AND stage='sample' ORDER BY sequence DESC LIMIT 1", (judgment_id,)).fetchone()
+        public["progress"] = json.loads(event["detail_json"]) if event else None
         artifact = self._artifact_dir(judgment_id)
         public["raw_response_url"] = "/api/artifacts/demo-judgments/%s/raw-response.json" % judgment_id if (artifact / "raw-response.json").is_file() else None
         public["failure_url"] = "/api/artifacts/demo-judgments/%s/failure.json" % judgment_id if (artifact / "failure.json").is_file() else None
         return public
+
+    def _worker_request(self, suffix: str, payload=None):
+        parsed = urlparse(self.config.worker_url)
+        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost"}:
+            raise DemoJudgeError("Judge worker requires a loopback tunnel")
+        token = Path(self.config.worker_token_file).read_text().strip()
+        return Request(self.config.worker_url.rstrip("/") + suffix, data=None if payload is None else canonical_json(payload).encode(), headers={"Authorization":"Bearer " + token,"Content-Type":"application/json"})
+
+    def _cluster_call(self, payload, judgment_id):
+        result = None
+        try:
+            with urlopen(self._worker_request("/assess", payload), timeout=self.config.timeout_seconds) as response:
+                while True:
+                    line = response.readline(MAX_CLI_RESPONSE_BYTES + 1)
+                    if not line: break
+                    if len(line) > MAX_CLI_RESPONSE_BYTES: raise DemoJudgeError("Oversized judge event")
+                    event = json.loads(line)
+                    if event.get("kind") == "progress":
+                        self._set_status(judgment_id,"assessing","sample",event)
+                    elif event.get("kind") == "result":
+                        result = event["response"]
+        except (OSError, ValueError) as error:
+            raise DemoJudgeError("Private judge stream interrupted; outcome is ambiguous; no retry") from error
+        if result is None: raise DemoJudgeError("Private judge returned no result; outcome is ambiguous")
+        return subprocess.CompletedProcess([],0,canonical_json(result).encode(),b"")
 
     def list(self, clip_id: Optional[str] = None) -> Dict[str, Any]:
         query = "SELECT * FROM demo_judgments"
@@ -871,6 +1019,10 @@ def register_demo_judge_routes(app: Any, service: DemoJudgeService) -> None:
     @app.get("/api/demo/judge/readiness")
     def readiness() -> Dict[str, Any]:
         return service.readiness()
+
+    @app.get("/api/demo/judge/performance")
+    def performance() -> Dict[str, Any]:
+        return service.performance_observation()
 
     @app.get("/api/demo/judgments")
     def list_judgments(clip_id: Optional[str] = None) -> Dict[str, Any]:

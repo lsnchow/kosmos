@@ -401,6 +401,15 @@ export type DemoFrame = {
 };
 
 export type DemoSession = {
+  world_model?: string;
+  world_progress?: { stage: string; step: number; total: number };
+  world_timing?: { world_seconds?: number; model_load_seconds?: number | null; peak_gpu_bytes?: number };
+  auto_assess?: boolean;
+  judgment?: DemoJudgment | null;
+  assessment_error?: string | null;
+  generation_completed_at?: number;
+  created_at?: number;
+  updated_at?: number;
   id: string;
   title?: string;
   prompt?: string;
@@ -428,6 +437,7 @@ export type DemoSession = {
 };
 
 export type DemoStatus = {
+  world_model?: string;
   available: boolean;
   configured: boolean;
   health: "ready" | "available" | "unavailable" | "error" | "not_configured" | string;
@@ -475,6 +485,7 @@ export type DemoJudgeAssessment = {
 };
 
 export type DemoJudgment = {
+  progress?: { stage?: string; completed_samples?: number; sample_count?: number } | null;
   id: string;
   status: "queued" | "warming" | "assessing" | "completed" | "abstained" | "failed" | "interrupted" | string;
   clip_id?: string;
@@ -498,6 +509,10 @@ export type DemoJudgment = {
 };
 
 export type CreateDemoSessionBody = {
+  world_model?: "cosmos";
+  auto_assess?: boolean;
+  starting_scene?: "drawer" | "pot";
+  seed?: number;
   title?: string;
   prompt?: string;
   mode: DemoMode;

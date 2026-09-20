@@ -10,6 +10,7 @@ frame if the worker is absent or a response is ambiguous.
 from __future__ import annotations
 
 import base64
+import asyncio
 from io import BytesIO
 import hashlib
 import json
@@ -27,13 +28,14 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request as ApiRequest
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 STATE_MODE = "experimental_reencoded_rgb_stateless"
 MAX_SESSIONS = 128
-MAX_SESSION_STEPS = 8
+MAX_SESSION_STEPS = 32
 MAX_PNG_BYTES = 12 * 1024 * 1024
 MAX_RESPONSE_BYTES = 20 * 1024 * 1024
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -147,6 +149,20 @@ class HttpWorkerTransport:
     def step(self, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         return self._request("POST", "/step", payload)
 
+    def cosmos(self, payload: Mapping[str, Any]):
+        request = Request(self.url + "/cosmos", data=_json(payload).encode(), method="POST", headers={"Authorization": "Bearer " + self._token(), "Content-Type": "application/json"})
+        try:
+            with urlopen(request, timeout=600) as response:
+                while True:
+                    line = response.readline(MAX_RESPONSE_BYTES + 1)
+                    if not line:
+                        break
+                    if len(line) > MAX_RESPONSE_BYTES:
+                        raise LiveDemoFailure("Cosmos event exceeds size limit", ambiguous=True)
+                    yield json.loads(line)
+        except (OSError, ValueError) as error:
+            raise LiveDemoFailure("Cosmos generation stream failed; no automatic retry was issued", ambiguous=True) from error
+
 
 class CreateSessionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -155,11 +171,26 @@ class CreateSessionInput(BaseModel):
     mode: str = Field(default="policy", pattern="^(policy|manual)$")
     steps: int = Field(default=4, ge=1, le=MAX_SESSION_STEPS)
     source_video_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    starting_scene: Optional[str] = Field(default=None, pattern="^(drawer|pot)$")
+    seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
+    auto_assess: bool = False
+    world_model: Optional[str] = Field(default=None, pattern="^cosmos$")
 
     @model_validator(mode="after")
     def source_requires_manual_mode(self) -> "CreateSessionInput":
         if self.source_video_id is not None and self.mode != "manual":
             raise ValueError("source_video_id is supported only for a manual fresh-image-reconditioned session")
+        expected = {"drawer": "Close the drawer", "pot": "Put the pot to the left of the purple item."}
+        if self.starting_scene and (self.source_video_id or self.mode != "policy" or self.prompt != expected[self.starting_scene]):
+            raise ValueError("Starting scene must match its supported task without a video branch")
+        if self.starting_scene == "pot" and self.world_model != "cosmos":
+            raise ValueError("Pot fixture requires Cosmos")
+        if self.auto_assess and (self.starting_scene not in expected or self.steps not in (16,32)):
+            raise ValueError("automatic assessment requires a supported rollout")
+        if self.world_model and (self.starting_scene not in expected or self.steps not in (16,32)):
+            raise ValueError("Cosmos requires 16 or 32 actions")
+        if self.steps == 32 and (self.world_model != "cosmos" or self.starting_scene != "pot"):
+            raise ValueError("Two-chunk continuation currently supports the Cosmos pot fixture only")
         return self
 
 
@@ -290,6 +321,7 @@ class LiveDemoService:
         self.db_path = self.demo_root / "live-demo.sqlite3"
         self.transport: WorkerTransport = transport or HttpWorkerTransport()
         self._lock = threading.RLock()
+        self.judge_service = None
         # This single-worker executor is the remote worker lock/queue.  Local
         # SQLite work is brief, while every fixture/step request is serialized.
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plumb-live-demo")
@@ -426,6 +458,9 @@ class LiveDemoService:
             return {**base, "health": "unavailable", "reason": str(exc)}
         except Exception:
             return {**base, "health": "unavailable", "reason": "live demo worker health check failed"}
+        base["world_model"] = result.get("world_model", "irasim")
+        if base["world_model"] == "cosmos":
+            base["state_mode"] = "cosmos_full_chunk_supplied_actions"
         ready = result.get("ready") is True or result.get("status") in {"ok", "ready", "available"}
         if not ready:
             return {**base, "health": "unavailable", "reason": "live demo worker health check is not ready"}
@@ -438,6 +473,8 @@ class LiveDemoService:
 
     def create(self, body: CreateSessionInput) -> Dict[str, Any]:
         self._require_available()
+        if self.status().get("world_model") == "cosmos" and body.world_model != "cosmos":
+            raise LiveDemoFailure("Use Generate to start a Cosmos experiment; the earlier interactive worker is offline.")
         # Resolve the catalog identity before queuing anything.  A client never
         # gets to supply a media URL/path, and an unknown selection is refused
         # synchronously rather than becoming an opaque background failure.
@@ -452,7 +489,9 @@ class LiveDemoService:
             prompt = body.prompt.strip() if body.prompt else ""
             title = body.title.strip() if body.title else ("OpenVLA live evaluation" if body.mode == "policy" else "Manual live steering")
             source = {"video_id": body.source_video_id} if body.source_video_id else {}
-            seed = int(session_id[:8], 16) & 0x7FFFFFFF
+            if body.starting_scene:
+                source = {"kind": "demo_pot_fixture" if body.starting_scene == "pot" else "demo_drawer_fixture", "auto_assess": body.auto_assess, "world_model": body.world_model or "irasim"}
+            seed = body.seed if body.seed is not None else int(session_id[:8], 16) & 0x7FFFFFFF
             connection.execute(
                 """INSERT INTO sessions (id, title, prompt, mode, requested_steps, seed, state, source_json, error, warnings_json, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, NULL, '[]', ?, ?)""",
@@ -570,6 +609,24 @@ class LiveDemoService:
             state = "completed" if session and session["mode"] == "policy" else "ready"
             connection.execute("UPDATE sessions SET state = ?, updated_at = ? WHERE id = ?", (state, now, job["session_id"]))
 
+        session = self._session_row(job["session_id"])
+        source = _mapping(_loads(session["source_json"], {}))
+        if session["state"] == "completed":
+            source["generation_completed_at"] = now
+            self._update_session(job["session_id"], source=source)
+        if source.get("auto_assess") and session["state"] == "completed":
+            try:
+                from plumb.demo_judge import DemoJudgmentInput
+                if self.judge_service is None or not session["latest_video_file"]:
+                    raise LiveDemoFailure("Automatic judge unavailable or generated video not committed")
+                result = self.judge_service.submit(DemoJudgmentInput(
+                    clip_id="live-demo:" + job["session_id"], profile="semantic_pilot_epoch_02",
+                    idempotency_key="auto-judge:" + job["session_id"]))
+                source["judgment_id"] = result["id"]
+            except Exception as error:
+                source["assessment_error"] = str(error)
+            self._update_session(job["session_id"], source=source)
+
     def _finish_job_error(self, job: sqlite3.Row, message: str, *, blocked: bool) -> None:
         state = "blocked" if blocked else "error"
         with self._lock, self._connection() as connection:
@@ -582,6 +639,24 @@ class LiveDemoService:
     def _initialize(self, session_id: str) -> None:
         session = self._session_row(session_id)
         source = _mapping(_loads(session["source_json"], {}))
+        if source.get("kind") == "demo_pot_fixture":
+            raw = (self.root / "demo-judge-fixtures/pot-scene.png").read_bytes()
+            if _sha(raw) != "sha256:65db577ed68303af3931781428da7d017337b3b7be8c2eaac4fa192b2cb9dd69":
+                raise LiveDemoFailure("Pot starting scene hash mismatch")
+            self._store_frame(session_id, "fixture", raw, provenance={"kind": "demo_pot_fixture", "source_video_sha256": "sha256:a86cfc81633b216891ca26dc58c72193a979c10ad72f123175fa8d61a67cdaec"})
+            self._cosmos_chunk(session_id, raw, source)
+            return
+        if source.get("kind") == "demo_drawer_fixture":
+            image = self.root / "demo-judge-fixtures/scene-reference.png"
+            raw = image.read_bytes()
+            if _sha(raw) != "sha256:42ad1fe7593823c0aa33888ffd10927c2dde7cce8b65544e48dd9a5754e7f24e":
+                raise LiveDemoFailure("Drawer starting scene hash mismatch")
+            self._store_frame(session_id, "fixture", raw, provenance={"kind": "demo_drawer_fixture", "sha256": _sha(raw)})
+            if source.get("world_model") == "cosmos":
+                self._cosmos_chunk(session_id, raw, source)
+                return
+            self._step_many(session_id, direction="forward", steps=int(session["requested_steps"]), mode="policy")
+            return
         if source.get("video_id"):
             raw, binding = self._source_final_frame(str(source["video_id"]))
             self._store_frame(session_id, "source", raw, provenance=binding)
@@ -601,6 +676,55 @@ class LiveDemoService:
         self._update_session(session_id, prompt=prompt)
         if session["mode"] == "policy":
             self._step_many(session_id, direction="forward", steps=int(session["requested_steps"]), mode="policy")
+
+    def _cosmos_chunk(self, session_id: str, image: bytes, source: dict) -> None:
+        from deploy.baseten.demo_chain import _forecast_compile, service_dispatch_to_stream_request
+        pot = source.get("kind") == "demo_pot_fixture"
+        if pot:
+            action_bytes = (self.root / "demo-judge-fixtures/pot-actions.json").read_bytes()
+            if _sha(action_bytes) != "sha256:5c26b3cb84799812a70b534ad939551d2ac308fdc870ea0e66163bb52c9d61da":
+                raise LiveDemoFailure("Pot action fixture hash mismatch")
+            actions = json.loads(action_bytes)
+            native = [None] * 16
+            detail = {"source": "official_bridge_fixture", "action_sha256": _sha(action_bytes), "compiled_rows": actions}
+        else:
+            recorded = json.loads((self.root / "demo-judge-fixtures/cosmos-request.json").read_text())["request"]
+            manual = service_dispatch_to_stream_request(recorded).manual
+            if manual is None or manual.source_png_sha256 != _sha(image):
+                raise LiveDemoFailure("Cosmos source/action fixture mismatch")
+            native = [[0.0025, 0, 0, 0, 0, 0, manual.held_gripper_action] for _ in range(16)]
+            actions, _, detail = _forecast_compile(manual.world, manual.bridge_control_profile_id, manual.state_snapshot, native)
+        session = self._session_row(session_id)
+        count = 0
+        chunks = int(session["requested_steps"]) // 16
+        timings = []
+        for chunk in range(chunks):
+            input_hash = _sha(image)
+            payload = {"png_base64": base64.b64encode(image).decode(), "sha256": input_hash, "prompt": session["prompt"], "actions": actions, "seed": session["seed"] + chunk}
+            terminal = None
+            local_count = 0
+            for event in self.transport.cosmos(payload):
+                if event.get("kind") == "progress":
+                    source["world_progress"] = {"stage": event["stage"], "step": chunk * 30 + event["step"], "total": chunks * 30, "chunk": chunk + 1}
+                    self._update_session(session_id, source=source)
+                elif event.get("kind") == "frame":
+                    count += 1; local_count += 1
+                    raw = _png_from_base64(event.get("png_base64"), "Cosmos frame")
+                    if local_count > 16 or event.get("index") != local_count or event.get("sha256") != _sha(raw):
+                        raise LiveDemoFailure("Cosmos frame order/hash mismatch", ambiguous=True)
+                    self._store_frame(session_id, "predicted", raw, action=native[local_count - 1],
+                        timings={"world": event["timing"]["world_seconds"] * 1000 if local_count == 1 else None},
+                        model="nvidia/Cosmos3-Nano", revision="e59a53c25979a090fa8706c9acc0c254a6e89b92",
+                        provenance={"kind": "cosmos_chunk", "chunk": chunk + 1, "chunk_input_sha256": input_hash, "policy_calls": 0, "action_source": "recorded_plan_repeated" if chunk else "recorded_fixture" if pot else "supplied_manual_right", "compiler": detail})
+                    image = raw
+                elif event.get("kind") == "terminal":
+                    terminal = event
+            if local_count != 16 or not terminal or terminal.get("status") != "completed":
+                raise LiveDemoFailure("Cosmos did not complete: " + str((terminal or {}).get("reason", "incomplete stream")), ambiguous=True)
+            timings.append(terminal["timing"])
+        source["world_timing"] = {"world_seconds": sum(t["world_seconds"] for t in timings), "peak_gpu_bytes": max(t["peak_gpu_bytes"] for t in timings), "chunks": chunks}
+        self._update_session(session_id, source=source)
+        self._encode_latest_video(session_id)
 
     def _execute_command(self, session_id: str, payload: Dict[str, Any]) -> None:
         direction = payload.get("direction")
@@ -903,11 +1027,16 @@ class LiveDemoService:
         # All filenames are service-generated, but quote the concat entries
         # correctly nonetheless.  This is not a shell command.
         try:
-            concat.write_text("".join("file '%s'\nduration 0.25\n" % str(path).replace("'", "'\\''") for path in paths), encoding="utf-8")
+            width, height = 320, 256
+            if json.loads(self._session_row(session_id)["source_json"]).get("world_model") == "cosmos":
+                from PIL import Image
+                with Image.open(paths[-1]) as image:
+                    width, height = image.size
+            concat.write_text("".join("file '%s'\nduration 0.2\n" % str(path).replace("'", "'\\''") for path in paths), encoding="utf-8")
             result = subprocess.run(
                 ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-r", "5", "-i", str(concat),
-                 "-vf", "scale=320:256:force_original_aspect_ratio=decrease,pad=320:256:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
-                 "-r", "5", "-movflags", "+faststart", str(temporary)],
+                 "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+                 "-fps_mode", "passthrough", "-movflags", "+faststart", str(temporary)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 timeout=40,
@@ -915,6 +1044,8 @@ class LiveDemoService:
             )
             if result.returncode == 0 and temporary.is_file() and temporary.stat().st_size > 0:
                 os.replace(temporary, output)
+                receipt = output.with_suffix(".manifest.json")
+                receipt.write_text(_json({"sha256": _sha(output.read_bytes()), "frame_count": len(rows), "session_id": session_id}), encoding="utf-8")
                 with self._lock, self._connection() as connection:
                     connection.execute("UPDATE sessions SET latest_video_file = ?, updated_at = ? WHERE id = ?", ("video-" + session_id + ".mp4", _now(), session_id))
         except (OSError, subprocess.SubprocessError):
@@ -961,12 +1092,21 @@ class LiveDemoService:
             if self.demo_root in candidate.parents and candidate.is_file() and candidate.suffix == ".mp4":
                 latest_video_url = self._artifact_url(latest_video)
         source = _mapping(_loads(session["source_json"], {}))
+        judgment = None
+        if source.get("judgment_id") and self.judge_service is not None:
+            try:
+                judgment = self.judge_service.get(source["judgment_id"])
+            except KeyError:
+                pass
         return {
             "id": session_id,
             "title": session["title"],
             "prompt": session["prompt"] or None,
             "mode": session["mode"],
-            "policy_label": "OpenVLA" if session["mode"] == "policy" else "Manual directional action",
+            "policy_label": "Supplied manual actions" if source.get("world_model") == "cosmos" else "OpenVLA" if session["mode"] == "policy" else "Manual directional action",
+            "world_model": source.get("world_model", "irasim"),
+            "world_progress": source.get("world_progress"),
+            "world_timing": source.get("world_timing"),
             "state": session["state"],
             "requested_steps": session["requested_steps"],
             "completed_steps": sum(1 for frame in frames if frame["role"] == "predicted"),
@@ -975,13 +1115,17 @@ class LiveDemoService:
             "seed": session["seed"],
             "current_frame_index": session["current_frame_ordinal"],
             "source": source or None,
+            "auto_assess": bool(source.get("auto_assess")),
+            "judgment": judgment,
+            "assessment_error": source.get("assessment_error"),
+            "generation_completed_at": source.get("generation_completed_at"),
             "frames": frames,
             "frame_urls": [frame["url"] for frame in frames],
             "latest_video_url": latest_video_url,
             "error": session["error"],
             "warnings": _loads(session["warnings_json"], []),
             "commands": [dict(row) for row in command_rows],
-            "state_mode": STATE_MODE,
+            "state_mode": "cosmos_full_chunk_supplied_actions" if source.get("world_model") == "cosmos" else STATE_MODE,
             "qualified": False,
             "scored": False,
             "created_at": session["created_at"],
@@ -1024,6 +1168,30 @@ def register_live_demo_routes(app: FastAPI, service: LiveDemoService) -> None:
             return service.get(session_id)
         except LiveDemoFailure as error:
             fail(error)
+
+    @app.get("/api/demo/sessions/{session_id}/events")
+    async def session_events(session_id: str, request: ApiRequest):
+        try:
+            service.get(session_id)
+        except LiveDemoFailure as error:
+            fail(error)
+
+        async def snapshots():
+            last = None
+            while not await request.is_disconnected():
+                snapshot = service.get(session_id)
+                encoded = _json(snapshot)
+                if encoded != last:
+                    yield "event: snapshot\ndata: " + encoded + "\n\n"
+                    last = encoded
+                else:
+                    yield ": heartbeat\n\n"
+                judgment = snapshot.get("judgment") or {}
+                judging_done = not snapshot.get("auto_assess") or snapshot.get("assessment_error") or judgment.get("status") in {"completed", "abstained", "failed", "interrupted"}
+                if snapshot["state"] in {"error", "blocked"} or (snapshot["state"] == "completed" and judging_done):
+                    return
+                await asyncio.sleep(0.25)
+        return StreamingResponse(snapshots(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.post("/api/demo/sessions/{session_id}/commands", status_code=202)
     def command(session_id: str, body: CommandInput) -> dict:

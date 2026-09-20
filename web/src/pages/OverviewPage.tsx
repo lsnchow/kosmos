@@ -1,7 +1,8 @@
 import { DemoJudgePanel } from "../components/DemoJudgePanel";
-import { WorldVideoGrid } from "../components/WorldVideoGrid";
-import { PolicyExperiment } from "../components/PolicyExperiment";
 import { PageHeader } from "./PageHeader";
+import { WorldVideoGrid } from "../components/WorldVideoGrid";
+import { LiveDemoPanel } from "../components/LiveDemo";
+import { LivePipeline } from "../components/LivePipeline";
 
 /** The primary console is one saved clip and one explicit trained-judge action. */
 export function OverviewPage() {
@@ -9,15 +10,13 @@ export function OverviewPage() {
     <div className="page-stack">
       <PageHeader
         eyebrow="Robot experiments"
-        title="Watch. Test. Assess."
-        lede="Set up a policy experiment or explore the saved recordings below."
+        title="Generate. Inspect. Assess."
+        lede="Start a fresh rollout or reopen a past run."
       />
-      <PolicyExperiment />
+      <LivePipeline />
+      <LiveDemoPanel historyOnly />
       <WorldVideoGrid />
-      <details className="gallery-guide">
-        <summary>Assess a saved clip with our trained judge</summary>
-        <DemoJudgePanel />
-      </details>
+      <details className="gallery-guide"><summary>Past drawer assessments</summary><DemoJudgePanel /></details>
     </div>
   );
 }

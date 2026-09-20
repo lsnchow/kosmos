@@ -467,6 +467,7 @@ def create_app(
     live_demo = live_demo_service or LiveDemoService(root)
     comparisons = comparison_service or ComparisonService(root)
     demo_judge = demo_judge_service or DemoJudgeService(root)
+    live_demo.judge_service = demo_judge
     submitted: set = set()
     lock = threading.RLock()
     freeplay_sessions: Dict[str, Dict[str, Any]] = {}
