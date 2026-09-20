@@ -23,16 +23,25 @@ export const PRODUCT = {
   /**
    * The product one-liner.
    *
-   * Two sentences: the cost it removes, and the thing no simulator offers.
-   * The bottleneck is hardware, because evaluating a policy means booking a
-   * robot. The second sentence is the differentiator stated plainly rather
-   * than as a clause: a ranking that reports its own confidence is the whole
-   * product, and "know when it holds" was too vague to carry it. The proof
-   * lives on the console overview, where the physics simulator reports 4% on
-   * `Close the drawer` and the real robot reports 92%.
+   * Two sentences: the bottleneck, and what replaces it.
+   *
+   * The first is the constraint a robotics team actually lives with — every
+   * comparison queues for the same arm — rather than the abstract cost of
+   * testing. The second says what is produced: not that a ranking exists, but
+   * that it separates a real difference from noise, which is the only reason
+   * to act on one.
+   *
+   * "The whole matrix" is deliberate. The unit of work here is not a single
+   * inference but a fanned-out grid of them across four stages and four
+   * hardware profiles, and that is the thing worth saying out loud.
+   *
+   * It carries no figure. The proof lives on the console overview, where the
+   * physics simulator reports 4% on `Close the drawer` against the real
+   * robot's 92%; a number in a subhead that the page cannot yet substantiate
+   * would be a claim rather than a promise.
    */
   promise:
-    "Rank robot policies without booking a robot. Every ranking says how confident it is.",
+    "Every policy comparison competes for the same robot. Kosmos runs the whole matrix in a world model and reports which differences survive their error bars.",
   tagline: "Policy evaluation with error bars.",
 } as const;
 

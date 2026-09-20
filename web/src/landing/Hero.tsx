@@ -14,7 +14,6 @@
  */
 import { Link } from "react-router-dom";
 import { CRTWarp } from "./CRTWarp";
-import { Glyph } from "../components/Terminal";
 import { BUILT_ON, CONSOLE_PATH, LIVE_PATH, NAV_LINKS, PRODUCT, PROTOCOL_PATH } from "./content";
 import { PillButton } from "./Pieces";
 
@@ -103,10 +102,6 @@ export function Hero() {
           </ul>
         </div>
       </div>
-
-      <a className="hero-scroll" href={`#${NAV_LINKS[0].href.slice(1)}`} aria-label="Skip to the first section">
-        <Glyph name="arrowRight" />
-      </a>
     </div>
   );
 }

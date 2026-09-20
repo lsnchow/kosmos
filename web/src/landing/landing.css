@@ -304,18 +304,6 @@
   color: var(--text-muted);
 }
 
-.hero-scroll {
-  position: absolute;
-  bottom: 1.5rem;
-  left: 50%;
-  display: none;
-  padding: 0.5rem;
-  color: var(--text-dim);
-  transform: translateX(-50%) rotate(90deg);
-}
-
-@media (min-width: 768px) { .hero-scroll { display: block; } }
-.hero-scroll:hover { color: var(--text-strong); }
 
 /* --- Section cards ------------------------------------------------------- */
 
