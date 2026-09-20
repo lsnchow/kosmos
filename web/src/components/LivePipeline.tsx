@@ -41,12 +41,31 @@ export function LivePipeline() {
 
   useEffect(() => {
     let mounted = true;
+    let requested = 0;
+    let applied = 0;
     window.history.replaceState(null, "", "/console");
     try { localStorage.removeItem("kosmos-current-live-rollout"); } catch { /* optional storage */ }
-    const check = () => api.demoStatus().then((value) => { if (mounted) setStatus(value); }).catch(() => undefined);
+    const check = async () => {
+      const sequence = ++requested;
+      try {
+        const value = await api.demoStatus();
+        if (mounted && sequence > applied) {
+          applied = sequence;
+          setStatus(value);
+        }
+      } catch { /* A later scheduled check can recover a transient connection failure. */ }
+    };
+    const refreshStatus = () => { void check(); };
     void check();
     const timer = window.setInterval(() => void check(), 5000);
-    return () => { mounted = false; window.clearInterval(timer); };
+    window.addEventListener("online", refreshStatus);
+    window.addEventListener("focus", refreshStatus);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+      window.removeEventListener("online", refreshStatus);
+      window.removeEventListener("focus", refreshStatus);
+    };
   }, []);
 
   useEffect(() => {
