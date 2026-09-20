@@ -1,5 +1,137 @@
 # PLUMB execution handoff — implementation in progress
 
+## REAL live steering and New evaluation verified — 2026-09-19 evening
+
+The earlier disabled-controls state is superseded for the main demo. Open
+`http://127.0.0.1:8787/console` → **New evaluation** → OpenVLA or **Steer
+manually**. Each gallery tile also starts a **New interactive branch** from
+its verified final image. This is a fresh IRASim RGB-reconditioned branch, not
+exact restoration of the recording's former hidden world state. Original media
+is preserved. Saved live evaluations appear on Console and Saved runs; older
+synthetic engineering results are collapsed separately on Saved runs.
+
+**Actual H100 backend is running:** Slurm `941263`, `trig0001`, 1 H100/24 CPUs,
+bounded 2 hours, expires **2026-09-19 21:40:51 Toronto time**. Worker startup
+loaded OpenVLA in 86.45 s and IRASim in 6.68 s. No model downloads or new training.
+This is the Trillium live world runtime, not the separate Baseten policy-only
+diagnostic; that deployment remains unchanged. Do not silently extend GPU time.
+
+Worker immutable release:
+`55d88899e254968dbbb1a5046fb338be7d4e568093a9b842c5ebd39355834626`.
+LOCAL tmux `plumb-live-gpu` forwards `127.0.0.1:8917` through the existing
+Trillium SSH master to `trig0001:8917`; never kill that shared master.
+LOCAL `plumb-live` now runs API PID 57490 at verification time (recheck) with
+the old pinned Baseten arguments plus `--live-demo-url http://127.0.0.1:8917`
+and `--live-demo-token-file data/private/live-demo-t1xfYe/worker.token`.
+Token is private/gitignored and never browser-delivered or logged.
+
+Actual browser proof, persisted in `data/live-integrated/live-demo/`:
+
+- Manual `b310ffb9b6984117b181dcb11df30a73`: 3 generated frames; next input is
+  prior output by exact PNG hash. Consecutive displayed commands took 3.12/3.23 s.
+- Policy `269c23a9c6d64fd8b70a44028af0a3ca`: 4 real OpenVLA + IRASim steps,
+  10.06 s to displayed completion; UI observed 0→1→2→3→4; saved 5-frame MP4.
+- Gallery/mobile `722b5b6e98f74897b495f0c4b95747ef`: source final-image branch,
+  one real manual step, matched source/input/output provenance; no overflow or
+  JS errors; close restored focus. First failed extraction `4fbba6...` retained.
+
+New `plumb/live_demo.py` journals sessions/jobs/commands in SQLite and saves
+immutable PNGs/actions/model/timing/hash lineage. HTTP worker is stateless and
+Bearer-authenticated. Each policy tick obtains a fresh action from its new
+observation. Manual timing `policy:null` is preserved; no policy call is made.
+Commands serialize and use idempotency keys; ambiguous failures are not retried.
+The current live preview displays the newest PNG; MP4 is a separate download,
+not appended to the frame list. Final-frame extraction fully decodes the short
+clip instead of seeking past its final 5 FPS presentation timestamp.
+
+Full validation: **1,379 Python passed / 6 skipped; 272 frontend passed; build
+passed**, plus actual desktop/mobile GPU browser flows. Saved records survive
+the API restart. Existing Pillow/Vite warnings remain. No judge scores or gate
+passes are claimed. This is experimental image feedback; world fidelity and
+the other policy runtimes remain unfinished. Do not call it a full comparison.
+
+Read [docs/LIVE-DEMO.md](docs/LIVE-DEMO.md) for actual timings, startup/renewal,
+source/asset identity, limits, and the current simple product flow. Current
+changes are local; no push was performed in this feature turn.
+
+## Gallery “Take the controls” integration — 2026-09-19
+
+Every gallery tile now opens a source-specific control dialog from `/console`.
+Opening it pauses the grid, previews the unchanged original recording, and
+checks `GET /api/freeplay/status?video_id=...` without invoking inference.
+Unavailable controls explain why; technical details are collapsed. Keyboard
+focus returns on close, video-seeking keys do not steer, and closing/failure
+drops queued commands. Stop acknowledgements do not count as generated chunks.
+
+**Actual live steering remains unavailable for current recordings.** They lack
+resumable world-state checkpoints, and the deployed cloud MVP is policy-only.
+Do not describe the new UI/contract as a working interactive GPU rollout.
+
+The API requires exact video ID/hash, verifies optional checkpoint manifests,
+and only dispatches through an explicitly configured source-branch adapter.
+Sessions lock source/mode/checkpoint/adapter identity; overlapping commands
+reject and ambiguous source failures quarantine the session. Unsupported
+recordings never fall back to generic task-start free-play. The old developer
+path is retained and explicitly distinguished.
+
+Verification: 1,368 Python tests passed / 6 skipped; 270 frontend tests passed;
+typecheck/build passed. Browser desktop/mobile checks verified source preview,
+disabled controls, gallery pause, focus restoration, no JS errors, and no
+inference POSTs on entry/keys/close. A separate localhost negative API check
+returned 409 before generation for the current unsupported source. Existing
+Pillow deprecation and Vite bundle-size warnings remain.
+
+API restarted with the same pinned Baseten diagnostic command in LOCAL tmux
+`plumb-live`; PID 50994 at verification time (recheck before any restart).
+No GPU job, cloud deployment, checkpoint fabrication or qualification change.
+Read [docs/INTERACTIVE-CONTROLS.md](docs/INTERACTIVE-CONTROLS.md) for the contract
+and the remaining concrete runtime/checkpoint work. Changes are local; no push
+was performed for this feature turn.
+
+## Media-first console implemented — 2026-09-19
+
+Open `http://127.0.0.1:8787/console` and refresh. The built frontend now opens
+on a responsive six-recording video gallery, not the qualification wall.
+Only **Video gallery** and **Saved runs** are primary navigation; **Tools &
+validation** contains Recording archive, Developer tools, Validation,
+Compute & cost, and Review clips. Existing URLs remain valid. Published
+reference percentages moved into a collapsed Validation section, explicitly
+identified as reference-study results. Run selection now precedes the scoreboard.
+
+The gallery reads the existing hash-checked catalog, excludes two-frame probes
+and duplicate media, and loops visible clips muted. Pause all, offscreen and
+background pausing, reduced-motion behavior, failure/retry states and downloads
+are implemented. It shows saved experiments, NOT six authentic policy results.
+Exact conditioning is still in source reports. No new render, poster pipeline,
+live world-video route, interpolation, judge training or gate changes occurred.
+
+Verification: 263 frontend tests passed, typecheck/build passed. Real Chromium
+loaded/played all six clips and paused them; desktop and mobile navigation
+passed; 390 px had no horizontal overflow; reduced-motion stayed paused;
+zero JS errors or non-GET requests during checks. Vite's existing >500 kB chunk
+warning remains. The existing API serves the rebuilt assets without restart.
+Python backend code was unchanged and its full suite was not rerun this turn.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the deep, current breakdown
+of UI, control plane, ML paths, persistence, deployment and remaining work.
+[docs/DEMO-RESTRUCTURE-PLAN.md](docs/DEMO-RESTRUCTURE-PLAN.md) remains the broader
+plan; the matched-policy generation and quality phases are still outstanding.
+
+## World-model videos delivered to Downloads and rollout viewport
+
+The unchanged Cosmos3 MP4 is in Downloads as
+`Kosmos-Cosmos3-generated-937575.mp4` with a provenance sidecar. It is a real
+previously generated3.4s/640×480 clip, not a new render or a synthetic fixture.
+All37 existing generated MP4s now appear in the default World-model videos tab
+of `/live#world-model-videos`; Play all is a63.8s playback queue. The previous
+synthetic/episode grid is retained under Run frames, not relabelled or deleted.
+Catalog `/api/world-videos` verifies output hashes and excludes source footage.
+All37 fully decoded and played through in a real browser;70 media/report range
+reads passed, zero JS errors/POSTs, mobile390px no overflow. No GPU job launched.
+Tests:1360 Python passed/6skipped;256 frontend passed/build after the latest
+landing-page merge (abd70ec preserves origin/main06bbf55 and the video queue).
+See docs/WORLD-VIDEO-PLAYBACK.md. Model generation/scoring gates remain unchanged.
+
 ## Baseten diagnostic MVP verified — localhost E2E is live
 
 Open http://127.0.0.1:8787/live#cloud-diagnostic and use **Run cloud model**.

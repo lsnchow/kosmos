@@ -8,7 +8,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {/* Regions have their own boundaries; this one is the last line of defence
         so a throw outside every panel still leaves a readable page. */}
-    <ErrorBoundary region="Nightshift console">
+    <ErrorBoundary region="Kosmos console">
       <App />
     </ErrorBoundary>
   </StrictMode>,

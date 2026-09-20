@@ -26,7 +26,7 @@ const BAR_HEIGHT = 34;
 /**
  * A Wilson interval drawn, not just printed.
  *
- * Two marks share one 0–100% axis: the Nightshift estimate as a circle and the
+ * Two marks share one 0–100% axis: the Kosmos estimate as a circle and the
  * published human reference as a diamond, each with its own interval whiskers.
  * Shape distinguishes them, so the pair does not rely on color, and the numeric
  * values remain in the adjacent cells for anyone who cannot use the graphic.
@@ -463,7 +463,7 @@ export function Scoreboard({
         pairwise test reports it as supported under its declared family alpha; every other pair stays
         indeterminate. Coverage carries both denominators, so <code>V</code> and <code>n</code> are never
         collapsed into a single rate. Wilson intervals are descriptive where starts are correlated or
-        repeated. Published reference cells are AutoEval's real-robot results, not Nightshift outcomes, and an
+        repeated. Published reference cells are AutoEval's real-robot results, not Kosmos outcomes, and an
         absent SIMPLER cell is an absence rather than a zero.
       </Note>
     </Panel>

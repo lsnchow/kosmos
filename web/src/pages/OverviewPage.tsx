@@ -1,72 +1,51 @@
-/**
- * The entry point, and the start of the path through the product.
- *
- * The claim, then the one thing blocking it, then the called shot and the
- * gates. The primary action goes to the run, because the run is what the rest
- * of the console is about — free-play is a demonstration, not the flow.
- */
-import { Glyph } from "../components/Terminal";
 import { Link } from "react-router-dom";
-import { STARTS_PER_TASK, useAppData } from "../AppData";
-import { CalledShotPanel } from "../components/CalledShotPanel";
-import { ErrorBoundary } from "../components/ErrorBoundary";
-import { GatePanel } from "../components/GatePanel";
-import { StatusPill } from "../components/Primitives";
-import { pickString } from "../lib/format";
+import { ComparisonWall } from "../components/ComparisonWall";
+import { LiveDemoPanel } from "../components/LiveDemo";
+import { WorldVideoGrid } from "../components/WorldVideoGrid";
 import { PageHeader } from "./PageHeader";
 
+/** The demo opens on saved media. Playback never submits inference work. */
 export function OverviewPage() {
-  const { protocol, policies, tasks, blockers, calledShot, gates, openFreeplay } = useAppData();
-  const matrix =
-    policies.length > 0 && tasks.length > 0
-      ? `${policies.length} policies × ${tasks.length} tasks × ${STARTS_PER_TASK} starts`
-      : undefined;
-
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow={
-          <StatusPill status="unqualified" title={`mode: ${pickString(protocol?.mode) ?? "not reported"}`}>
-            unqualified
-          </StatusPill>
-        }
-        title="Measure the ruler before trusting the ranking."
-        lede="Six robot policies scored inside a generative world model, with four numbers saying how far to trust the ranking."
+        eyebrow="Interactive demo and saved media"
+        title="Evaluate or watch"
+        lede="Start a bounded OpenVLA or manual experimental evaluation, then inspect its persisted frames alongside the saved recording archive."
         actions={
-          <>
-            <Link className="button button-primary" to="/live">
-              Start a run
-              <Glyph name="arrowRight" />
-            </Link>
-            <button type="button" className="button button-quiet" onClick={() => openFreeplay()}>
-              <Glyph name="expand" />
-              Drive the world model
-            </button>
-          </>
+          <Link className="button button-secondary" to="/clips">
+            Browse all recordings →
+          </Link>
         }
       />
-
-      {/* One line, not a paragraph. The blockers themselves are the content. */}
-      <section className="status-strip" aria-label="Qualification status">
-        <p>
-          <strong>Not qualified.</strong> Real backends stay blocked until these pass
-          {matrix ? ` · ${matrix}` : ""}
+      <ComparisonWall />
+      <section aria-labelledby="legacy-demo-heading">
+        <h2 id="legacy-demo-heading" className="text-balance">
+          Legacy experimental controls
+        </h2>
+        <p className="text-pretty text-sm text-fg-muted">
+          This earlier bounded demo remains available for engineering checks. It is not a cell in the controlled wall and is not a policy comparison.
         </p>
-        <ul>
-          {blockers.slice(0, 3).map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
+        <LiveDemoPanel />
       </section>
-
-      <div className="split-grid">
-        <ErrorBoundary region="Called shot">
-          <CalledShotPanel calledShot={calledShot} />
-        </ErrorBoundary>
-        <ErrorBoundary region="Qualification gates">
-          <GatePanel gates={gates} />
-        </ErrorBoundary>
-      </div>
+      <WorldVideoGrid />
+      <details className="gallery-guide">
+        <summary>What are policies, and what will we compare?</summary>
+        <p className="text-pretty">
+          A policy is the robot’s controller: it looks at the scene and goal,
+          then chooses arm and gripper movements. The world model predicts the
+          next view; a separate judge can assess the result.
+        </p>
+        <p className="text-pretty">
+          The controlled preview fixes OpenVLA, MiniVLA, and Octo-Small across
+          four matched world seeds from one Close the drawer starting bundle.
+        </p>
+        <p className="text-pretty">
+          The wall remains unscored: it reports operational progress and
+          persisted media, never a success score, rank, or policy winner.
+        </p>
+        <Link to="/evidence">See what has been verified →</Link>
+      </details>
     </div>
   );
 }

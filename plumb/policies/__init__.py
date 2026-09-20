@@ -128,6 +128,17 @@ from .openvla import (
     OpenVLAPolicyProfile,
     OpenVLAUnavailableError,
 )
+from .experimental import (
+    EXPERIMENTAL_POLICY_TURN_SCHEMA,
+    ExperimentalPolicyId,
+    ExperimentalPolicyTurnError,
+    ExperimentalPolicyTurnRequest,
+    ExperimentalPolicyTurnResult,
+    ExperimentalPolicyTurnRouter,
+    ExperimentalPolicyTurnStatus,
+    canonical_experimental_policy_id,
+    make_experimental_policy_router,
+)
 from .susie import (
     SUSIE_AUTOEVAL_RELEASED_ARM,
     SUSIE_LOW_LEVEL_CHECKPOINT_FILE,
@@ -243,6 +254,15 @@ __all__ = (
     "OpenVLAPolicyAdapter",
     "OpenVLAPolicyProfile",
     "OpenVLAUnavailableError",
+    "EXPERIMENTAL_POLICY_TURN_SCHEMA",
+    "ExperimentalPolicyId",
+    "ExperimentalPolicyTurnError",
+    "ExperimentalPolicyTurnRequest",
+    "ExperimentalPolicyTurnResult",
+    "ExperimentalPolicyTurnRouter",
+    "ExperimentalPolicyTurnStatus",
+    "canonical_experimental_policy_id",
+    "make_experimental_policy_router",
     "SUSIE_AUTOEVAL_RELEASED_ARM",
     "SUSIE_CONTRACT",
     "SUSIE_LL_CONTRACT",

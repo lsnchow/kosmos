@@ -60,6 +60,7 @@ from ..platform import (
     VerifiedChainQueueRoute,
     VerifiedPriceBasis,
 )
+from ..freeplay import SourceBranchAdapter
 from ..records import canonical_json, file_digest, json_digest, utc_now
 from ..result_store import ResultStoreBinding, S3ResultStore, request_payload_digest
 from ..starts import StartResolutionError, StartResolver
@@ -624,6 +625,7 @@ class BasetenChainBackend:
         transport_kind: str = "network",
         start_resolver: Optional[StartResolver] = None,
         result_store: Optional[ChainResultStore] = None,
+        source_branch_adapter: Optional[SourceBranchAdapter] = None,
     ) -> None:
         if transport_kind not in ("network", "simulated"):
             raise ValueError("transport_kind must be 'network' or 'simulated'")
@@ -639,6 +641,11 @@ class BasetenChainBackend:
         # separately verified adapter.
         inferred_store = transport if callable(getattr(transport, "get_result", None)) else None
         self.result_store: Optional[ChainResultStore] = result_store or inferred_store
+        # Generic free-play resolves a task start for each request.  It must
+        # never be used as an implicit recording continuation, so source-bound
+        # control requires this separately configured adapter and an explicit
+        # checkpoint manifest.
+        self.source_branch_adapter = source_branch_adapter
         self.allocations = AllocationLedger(price_basis=price_basis)
         self._clock = clock
         self._queue_route = queue_route
@@ -1364,6 +1371,44 @@ class BasetenChainBackend:
         }
 
     # -- free play ------------------------------------------------------------
+
+    def source_branch_status(self, source: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Ask an injected exact-source adapter; never fall back to task start."""
+
+        if self.source_branch_adapter is None:
+            return {
+                "available": False,
+                "exact_branch_supported": False,
+                "reason": (
+                    "The configured Baseten free-play path can start an unscored task, but no "
+                    "source-branch adapter is configured to restore this recording's checkpoint."
+                ),
+                "missing": ["a source-branch adapter bound to this checkpoint format"],
+            }
+        return self.source_branch_adapter.source_branch_status(source)
+
+    def source_branch_step(
+        self,
+        *,
+        session_id: str,
+        source: Mapping[str, Any],
+        actions: Sequence[Sequence[float]],
+        protocol_hash: str,
+        seed: int,
+        resolution: int,
+    ) -> Mapping[str, Any]:
+        """Run only an explicit exact-source adapter, never generic free-play."""
+
+        if self.source_branch_adapter is None:
+            raise BackendNotConfigured("no source-branch adapter is configured")
+        return self.source_branch_adapter.source_branch_step(
+            session_id=session_id,
+            source=source,
+            actions=actions,
+            protocol_hash=protocol_hash,
+            seed=seed,
+            resolution=resolution,
+        )
 
     def _persist_freeplay_frames(self, session_id: str, outcome: Mapping[str, Any]) -> List[str]:
         """Write the Chain's returned free-play frames and return their URLs.

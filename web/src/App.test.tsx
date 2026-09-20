@@ -174,6 +174,9 @@ function installRoutes() {
       fixture: {},
     },
     "/api/cloud-diagnostics": { requests: [] },
+    "/api/world-videos": { videos: [], total: 0, qualified: false },
+    "/api/demo/status": { available: false, configured: false, health: "not_configured", reason: "No live runtime is configured.", qualified: false },
+    "/api/demo/sessions": { sessions: [] },
     "/api/protocol": PROTOCOL,
     "/api/gates": GATES,
     "/api/runs/run-1/episodes": EPISODES,
@@ -241,9 +244,12 @@ async function renderAt(route: string, heading: RegExp) {
   return { ...view, ...routes };
 }
 
-const overview = () => renderAt("/console", /Measure the ruler before trusting the ranking/i);
+const overview = () => renderAt("/console", /^Evaluate or watch$/i);
 const live = async () => {
-  const view = await renderAt("/live", /^Live run$/i);
+  const view = await renderAt("/live", /^Developer tools$/i);
+  // Recorded world-model videos are the default viewport content. Tests that
+  // inspect the distinct persisted run-frame wall explicitly choose its tab.
+  fireEvent.click(screen.getByRole("tab", { name: "Run frames" }));
   // Wait on something the *episodes* produce, not on protocol data. The wall's
   // tiles only exist once /api/runs/run-1/episodes has landed; waiting on a
   // protocol field instead let the test proceed with an empty wall whenever the
@@ -252,7 +258,7 @@ const live = async () => {
   return view;
 };
 
-describe("Nightshift shell", () => {
+describe("Kosmos shell", () => {
   it("gives every page exactly one h1 and marks the current one", async () => {
     // Two h1s on one scrolling page read as two document titles. One page, one
     // title, and the sidebar says which page you are on without relying on the
@@ -260,16 +266,19 @@ describe("Nightshift shell", () => {
     await overview();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     const current = document.querySelector('[aria-current="page"]');
-    expect(current?.textContent).toMatch(/Overview/);
+    expect(current?.textContent).toMatch(/Video gallery/);
+    const brand = screen.getByRole("link", { name: "Kosmos console home" });
+    expect(brand.querySelector(".brand-mark")).toHaveTextContent("K");
+    expect(document.body).not.toHaveTextContent("Nightshift");
   });
 
   it("routes every sidebar link to a page that renders", async () => {
     for (const [route, title] of [
-      ["/live", /^Live run$/i],
-      ["/results", /^Results$/i],
-      ["/evidence", /^Evidence$/i],
-      ["/cost", /^Cost$/i],
-      ["/clips", /^Clips$/i],
+      ["/live", /^Developer tools$/i],
+      ["/results", /^Saved runs$/i],
+      ["/evidence", /^Validation$/i],
+      ["/cost", /^Compute & cost$/i],
+      ["/clips", /^Recording archive$/i],
     ] as const) {
       const { unmount } = await renderAt(route, title);
       expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -291,30 +300,32 @@ describe("Nightshift shell", () => {
     expect(link).toHaveAttribute("href", "/THIRD-PARTY-NOTICES.md");
   });
 
-  it("has no free-text input anywhere, including the surface that calls the world model", async () => {
-    await overview();
+  it("keeps free-play fixed-instruction even though synthetic tools accept text", async () => {
+    await live();
     const assertNoFreeText = (where: string) => {
-      expect(document.querySelectorAll("textarea"), where).toHaveLength(0);
-      expect(document.querySelectorAll("[contenteditable]"), where).toHaveLength(0);
-      const typed = [...document.querySelectorAll("input")].map((input) => input.type);
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.querySelectorAll("textarea"), where).toHaveLength(0);
+      expect(dialog.querySelectorAll("[contenteditable]"), where).toHaveLength(0);
+      const typed = [...dialog.querySelectorAll("input")].map((input) => input.type);
       expect(typed.filter((type) => type !== "range"), where).toEqual([]);
     };
-    assertNoFreeText("overview");
+    // The synthetic task prompt intentionally accepts free text; free-play does not.
 
     // Free-play is the only surface that dispatches to the world model directly.
-    fireEvent.click(screen.getByRole("button", { name: /Drive the world model/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Open free-play control/i })[0]);
     expect(await screen.findByRole("dialog", { name: /Free-play control/i })).toBeInTheDocument();
     assertNoFreeText("free-play dialog");
     expect(screen.getByText(/Fixed instruction, clamped actions, release to stop/i)).toBeInTheDocument();
   });
 });
 
-describe("Nightshift pages render their beats", () => {
-  it("puts the claim, the called shot and the gates on the overview", async () => {
+describe("Kosmos pages render their beats", () => {
+  it("opens on a video gallery, not research claims or gates", async () => {
     await overview();
-    expect(screen.getByRole("heading", { name: /The called shot/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
-    expect(screen.getByText(/Not qualified/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Saved experiments" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /The called shot/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Qualification gates/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Real model outputs, not yet a matched six-policy comparison/)).toBeInTheDocument();
   });
 
   it("keeps the live page in the script's beat order", async () => {
@@ -347,30 +358,33 @@ describe("Nightshift pages render their beats", () => {
   });
 
   it("puts the scoreboard and the run ledger on results", async () => {
-    await renderAt("/results", /^Results$/i);
+    await renderAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     expect(await screen.findByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Run ledger/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Run history/i })).toBeInTheDocument();
   });
 
   it("puts the gates and the imported smoke report on evidence", async () => {
-    await renderAt("/evidence", /^Evidence$/i);
+    await renderAt("/evidence", /^Validation$/i);
     expect(screen.getByRole("heading", { name: /Qualification gates/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Real model smoke evidence/i })).toBeInTheDocument();
   });
 
   it("puts the dial on cost", async () => {
-    await renderAt("/cost", /^Cost$/i);
+    await renderAt("/cost", /^Compute & cost$/i);
     expect(screen.getByRole("heading", { name: /Cost–fidelity operating point/i })).toBeInTheDocument();
   });
 
   it("puts the six-clip test and the 480p track on clips", async () => {
-    await renderAt("/clips", /^Clips$/i);
+    await renderAt("/clips", /^Recording archive$/i);
+    fireEvent.click(screen.getByText("Development clip exercise & presentation track"));
     expect(screen.getByRole("heading", { name: /Real or generated\?/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /480p presentation rollout/i })).toBeInTheDocument();
   });
 
   it("selects the hero episode from its explicit flag, not array position", async () => {
-    await renderAt("/results", /^Results$/i);
+    await renderAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     // ep-1 is episodes[0]; the hero is ep-hero, chosen by presentation_track.
     expect(await screen.findByText("ep-hero")).toBeInTheDocument();
     expect(screen.getByText("480x480")).toBeInTheDocument();
@@ -379,12 +393,12 @@ describe("Nightshift pages render their beats", () => {
   it("never uses a phrase from the never-say list", async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /Measure the ruler/i],
-      ["/live", /^Live run$/i],
-      ["/results", /^Results$/i],
-      ["/evidence", /^Evidence$/i],
-      ["/cost", /^Cost$/i],
-      ["/clips", /^Clips$/i],
+      ["/console", /^Evaluate or watch$/i],
+      ["/live", /^Developer tools$/i],
+      ["/results", /^Saved runs$/i],
+      ["/evidence", /^Validation$/i],
+      ["/cost", /^Compute & cost$/i],
+      ["/clips", /^Recording archive$/i],
     ] as const) {
       const { unmount } = await renderAt(route, title);
       const text = (document.body.textContent ?? "").toLowerCase();
@@ -413,12 +427,12 @@ describe("Nightshift pages render their beats", () => {
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
       ["/", /Evaluate a robot policy/i],
-      ["/console", /Measure the ruler/i],
-      ["/live", /^Live run$/i],
-      ["/results", /^Results$/i],
-      ["/evidence", /^Evidence$/i],
-      ["/cost", /^Cost$/i],
-      ["/clips", /^Clips$/i],
+      ["/console", /^Evaluate or watch$/i],
+      ["/live", /^Developer tools$/i],
+      ["/results", /^Saved runs$/i],
+      ["/evidence", /^Validation$/i],
+      ["/cost", /^Compute & cost$/i],
+      ["/clips", /^Recording archive$/i],
     ] as const) {
       const { container, unmount } = await renderAt(route, title);
       let results!: axe.AxeResults;
@@ -449,7 +463,7 @@ describe("Nightshift pages render their beats", () => {
   });
 });
 
-describe("Nightshift live page interactions", () => {
+describe("Kosmos live page interactions", () => {
   it("advances the Chain ladder when a real segment event lands", async () => {
     await live();
     const stages = screen.getByRole("heading", { name: /Chain stages/i }).closest(".panel") as HTMLElement;
@@ -576,7 +590,7 @@ describe("Nightshift live page interactions", () => {
  * empty sweep list, null telemetry and no clip or called-shot route. The console
  * has to degrade by saying so, not by filling the gaps with zeros.
  */
-describe("Nightshift against the current backend responses", () => {
+describe("Kosmos against the current backend responses", () => {
   async function renderTodayAt(route: string, heading: RegExp) {
     installEventSource();
     const routes = mockFetch({
@@ -590,6 +604,7 @@ describe("Nightshift against the current backend responses", () => {
         fixture: {},
       },
       "/api/cloud-diagnostics": { requests: [] },
+      "/api/world-videos": { videos: [], total: 0, qualified: false },
       "/api/protocol": {
         policies: PROTOCOL.policies,
         tasks: PROTOCOL.tasks,
@@ -629,13 +644,15 @@ describe("Nightshift against the current backend responses", () => {
   it("does not report a load error when only the additive routes are missing", async () => {
     // The clip and called-shot routes 404 here; the core control plane did not
     // fail, so the console must not display a load error over the whole page.
-    await renderTodayAt("/results", /^Results$/i);
+    await renderTodayAt("/results", /^Saved runs$/i);
+    fireEvent.click(screen.getByText("Engineering run history & diagnostics"));
     await waitFor(() => expect(screen.getByRole("heading", { name: /^Scoreboard$/i })).toBeInTheDocument());
     expect(document.querySelector(".error-banner")).toBeNull();
   });
 
   it("recovers the called shot from protocol.reference and marks it pending", async () => {
-    await renderTodayAt("/console", /Measure the ruler/i);
+    await renderTodayAt("/evidence", /^Validation$/i);
+    fireEvent.click(screen.getByText("Research background & published reference numbers"));
     expect(await screen.findByText("92%")).toBeInTheDocument();
     expect(screen.getByText("4%")).toBeInTheDocument();
     expect(screen.getByText("pending")).toBeInTheDocument();
@@ -643,7 +660,7 @@ describe("Nightshift against the current backend responses", () => {
   });
 
   it("explains the empty sweep instead of rendering an unreachable slider", async () => {
-    await renderTodayAt("/cost", /^Cost$/i);
+    await renderTodayAt("/cost", /^Compute & cost$/i);
     expect(
       await screen.findByText(/No independent real-model cost-fidelity sweep has completed\./),
     ).toBeInTheDocument();
@@ -651,13 +668,15 @@ describe("Nightshift against the current backend responses", () => {
   });
 
   it("shows no hero rollout rather than relabelling a 256p episode as 480p", async () => {
-    await renderTodayAt("/clips", /^Clips$/i);
+    await renderTodayAt("/clips", /^Recording archive$/i);
+    fireEvent.click(screen.getByText("Development clip exercise & presentation track"));
     expect(await screen.findByText(/No episode declares/)).toBeInTheDocument();
     expect(screen.getByText(/is not promoted here and relabelled 480p/)).toBeInTheDocument();
   });
 
   it("explains the missing six-clip panel rather than showing stand-in clips", async () => {
-    await renderTodayAt("/clips", /^Clips$/i);
+    await renderTodayAt("/clips", /^Recording archive$/i);
+    fireEvent.click(screen.getByText("Development clip exercise & presentation track"));
     expect(
       await screen.findByText(/No six-clip panel has been published by the API\./),
     ).toBeInTheDocument();
@@ -665,7 +684,7 @@ describe("Nightshift against the current backend responses", () => {
   });
 
   it("invents no cost, queue depth or replica count", async () => {
-    await renderTodayAt("/live", /^Live run$/i);
+    await renderTodayAt("/live", /^Developer tools$/i);
     await screen.findByRole("heading", { name: /Full-matrix burst/i });
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
     expect(screen.getByText(/No replica counts have been reported/)).toBeInTheDocument();

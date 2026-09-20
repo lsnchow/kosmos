@@ -22,26 +22,6 @@ import { Sidebar } from "./components/Sidebar";
 import { formatCount, formatFrameCaption, pickString } from "./lib/format";
 import { cn } from "./lib/utils";
 
-/*
- * A session opens the way a shell does: chrome, then rail, then page, in three
- * steps. Once per session and no more — a boot sequence that replayed on every
- * route change would stop reading as a boot and start reading as a stutter
- * between pages. It is suppressed entirely under prefers-reduced-motion, in the
- * stylesheet, and it gates nothing: the markup is complete before it starts.
- */
-const BOOT_KEY = "plumb.booted";
-const BOOT_MS = 320;
-
-function shouldBoot(): boolean {
-  try {
-    return sessionStorage.getItem(BOOT_KEY) === null;
-  } catch {
-    // Private-mode Safari throws on sessionStorage. Skipping the flourish is
-    // the right failure; blocking the console on it is not.
-    return false;
-  }
-}
-
 export function AppShell() {
   const {
     health,
@@ -59,19 +39,7 @@ export function AppShell() {
     cancelRun,
   } = useAppData();
   const [navOpen, setNavOpen] = useState(false);
-  const [booting, setBooting] = useState(shouldBoot);
   const location = useLocation();
-
-  // The boot sequence is a first-impression, not a loading state: it must never
-  // delay reading. The class is dropped on the next frame, so the animation the
-  // browser already started runs to completion while React stops re-rendering
-  // for it, and nothing about the page is gated on it finishing.
-  useEffect(() => {
-    if (!booting) return;
-    sessionStorage.setItem(BOOT_KEY, "done");
-    const handle = setTimeout(() => setBooting(false), BOOT_MS);
-    return () => clearTimeout(handle);
-  }, [booting]);
 
   // Below the sidebar breakpoint the nav is a disclosure. Leaving it open after
   // a route change would cover the page the reader just asked for.
@@ -80,7 +48,7 @@ export function AppShell() {
   }, [location.pathname]);
 
   return (
-    <div className={cn("app-shell", booting && "booting")}>
+    <div className="app-shell">
       <a className="skip-link" href="#page">
         Skip to content
       </a>
@@ -96,16 +64,27 @@ export function AppShell() {
           <Glyph name="menu" />
           Sections
         </button>
-        <Link className="brand" to="/console" aria-label="Nightshift console home">
-          <span className="brand-mark">N</span>
-          <span>Nightshift</span>
+        <Link className="brand" to="/console" aria-label="Kosmos console home">
+          <span className="brand-mark" aria-hidden="true">
+            K
+          </span>
+          <span>Kosmos</span>
         </Link>
         <div className="topbar-right">
           <span className="api-health">
-            <span className={cn("health-dot", health ? "health-known" : "health-pending")} />
+            <span
+              className={cn(
+                "health-dot",
+                health ? "health-known" : "health-pending",
+              )}
+            />
             API {pickString(health?.status) ?? "checking"}
           </span>
-          <button type="button" className="button button-quiet" onClick={() => void refresh()}>
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={() => void refresh()}
+          >
             <Glyph name="refresh" />
             Refresh
           </button>
@@ -129,7 +108,7 @@ export function AppShell() {
           </ErrorBoundary>
 
           <footer className="footer-note">
-            <span>Nightshift</span>
+            <span>Kosmos</span>
             <a href="/THIRD-PARTY-NOTICES.md" target="_blank" rel="noreferrer">
               Third-party notices <Glyph name="arrowUpRight" />
             </a>
@@ -154,7 +133,10 @@ export function AppShell() {
           viewerSlot
             ? [
                 { label: "Run", value: viewerSlot.runId ?? "not reported" },
-                { label: "Segments", value: formatCount(viewerSlot.segmentCount) },
+                {
+                  label: "Segments",
+                  value: formatCount(viewerSlot.segmentCount),
+                },
                 {
                   label: "Frames",
                   value: formatFrameCaption(
@@ -163,7 +145,10 @@ export function AppShell() {
                     undefined,
                   ),
                 },
-                { label: "Resolution", value: viewerSlot.resolution ?? "not reported" },
+                {
+                  label: "Resolution",
+                  value: viewerSlot.resolution ?? "not reported",
+                },
               ]
             : []
         }
@@ -183,7 +168,11 @@ export function AppShell() {
         }
       />
 
-      <FreeplayDialog open={freeplayOpen} onOpenChange={setFreeplayOpen} subjectLabel={freeplaySubject} />
+      <FreeplayDialog
+        open={freeplayOpen}
+        onOpenChange={setFreeplayOpen}
+        subjectLabel={freeplaySubject}
+      />
 
       <AlertDialog.Root open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialog.Portal>
@@ -191,11 +180,17 @@ export function AppShell() {
           <AlertDialog.Content className="alert-dialog">
             <AlertDialog.Title>Cancel this run?</AlertDialog.Title>
             <AlertDialog.Description className="text-pretty">
-              Cancellation leaves explicit terminal records and retains already allocated work and its cost.
+              Cancellation leaves explicit terminal records and retains already
+              allocated work and its cost.
             </AlertDialog.Description>
             <div className="alert-actions">
-              <AlertDialog.Cancel className="button button-secondary">Keep running</AlertDialog.Cancel>
-              <AlertDialog.Action className="button button-danger" onClick={() => void cancelRun()}>
+              <AlertDialog.Cancel className="button button-secondary">
+                Keep running
+              </AlertDialog.Cancel>
+              <AlertDialog.Action
+                className="button button-danger"
+                onClick={() => void cancelRun()}
+              >
                 Cancel run
               </AlertDialog.Action>
             </div>

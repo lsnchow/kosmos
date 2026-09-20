@@ -1,5 +1,22 @@
 # PLUMB cluster operations — handoff for num2
 
+## Current live-demo worker — 2026-09-19 evening
+
+Trillium SSH was freshly verified. One-H100 job **941263** runs on **trig0001**
+until **21:40:51 Toronto time, 2026-09-19**. It serves the actual OpenVLA/IRASim
+experimental live demo at private-node8917, via LOCAL tmux `plumb-live-gpu`
+forwarding localhost8917. Only authenticated worker calls are accepted; token
+contents stay in private files, not browser payloads. No additional models were
+downloaded. Source release55d88899e254968dbbb1a5046fb338be7d4e568093a9b842c5ebd39355834626.
+
+The primary API remains LOCAL tmux `plumb-live`, localhost8787, now with optional
+live-demo URL/token-file flags. Actual manual and policy browser flows passed;
+read docs/LIVE-DEMO.md and the newest HANDOFF section for session IDs/measurements.
+The allocation ends automatically; saved results remain local. Recheck squeue,
+ports, and in-flight API jobs before renewing/restarting. Do not cancel unrelated
+jobs, mutate immutable releases, or terminate the shared SSH control master.
+This world runtime is separate from the unchanged Baseten policy-only MVP.
+
 ## Current Baseten managed inference
 
 Model3mzlenow / deploymentq929yoj, team33/q8grpdw, profileplumb-api is the

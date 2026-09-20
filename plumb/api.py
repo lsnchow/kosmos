@@ -42,11 +42,12 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from plumb.artifacts import ArtifactStore
 from plumb.engine import RunService
 from plumb.evidence import experiments_payload
+from plumb.freeplay import recording_branch_status, source_branch_step, source_identity, task_start_status
 from plumb.gates import GATE_DESCRIPTIONS, GateLedger, GateStatus
 from plumb.measurement import analyze
 from plumb.protocol import (
@@ -58,6 +59,8 @@ from plumb.protocol import (
 from plumb.records import BACKENDS, COHORTS, RUN_MODES, ConfigurationError
 from plumb.reference import reference_payload
 from plumb.ledger import CallbackConflictError
+from plumb.live_demo import LiveDemoService, register_live_demo_routes
+from plumb.comparisons import ComparisonService, register_comparison_routes
 from plumb.outbox import BasetenOutbox
 from plumb.platform import BasetenChainClient, BasetenPlatformConfig, CallbackVerificationError, PlatformSchemaError
 
@@ -148,6 +151,17 @@ class FreeplayInput(BaseModel):
     session_id: Optional[str] = None
     direction: str = Field(pattern="^(up|down|left|right|forward|back|stop)$")
     task: str = Field(default="close_drawer")
+    # A source-bound request names a catalog identity and repeats its content
+    # hash.  The server re-resolves both; clients never supply a path, frame, or
+    # timestamp from which a branch could be guessed.
+    video_id: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    source_sha256: Optional[str] = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def source_binding_is_complete(self) -> "FreeplayInput":
+        if (self.video_id is None) != (self.source_sha256 is None):
+            raise ValueError("video_id and source_sha256 must be supplied together for source-bound free-play")
+        return self
 
 
 class AnnotationInput(BaseModel):
@@ -421,6 +435,8 @@ def create_app(
     baseten_client: Optional[BasetenChainClient] = None,
     development_review_root: Optional[Path] = None,
     development_review_private_root: Optional[Path] = None,
+    live_demo_service: Optional[LiveDemoService] = None,
+    comparison_service: Optional[ComparisonService] = None,
 ) -> FastAPI:
     root = (data_dir or Path(os.environ.get("PLUMB_DATA_DIR", "data"))).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -446,6 +462,8 @@ def create_app(
     )
     cloud_diagnostic, cloud_diagnostic_status = _cloud_diagnostic_service(root)
     cloud_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="plumb-cloud-diagnostic")
+    live_demo = live_demo_service or LiveDemoService(root)
+    comparisons = comparison_service or ComparisonService(root)
     submitted: set = set()
     lock = threading.RLock()
     freeplay_sessions: Dict[str, Dict[str, Any]] = {}
@@ -456,8 +474,10 @@ def create_app(
         yield
         pool.shutdown(wait=True)
         cloud_pool.shutdown(wait=True)
+        live_demo.shutdown()
+        comparisons.shutdown()
 
-    app = FastAPI(title="Nightshift", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Kosmos", version="0.2.0", lifespan=lifespan)
     app.state.service = service
     app.state.data_dir = root
     app.state.store = store
@@ -466,6 +486,10 @@ def create_app(
     app.state.baseten_outbox = outbox
     app.state.cloud_diagnostic = cloud_diagnostic
     app.state.cloud_diagnostic_status = cloud_diagnostic_status
+    app.state.live_demo = live_demo
+    app.state.comparisons = comparisons
+    register_live_demo_routes(app, live_demo)
+    register_comparison_routes(app, comparisons)
     # Development review is intentionally isolated from the annotation/Gate D
     # routes. Its SQLite database is private data, never an artifact endpoint.
     from plumb.development_review import DevelopmentReviewStore, register_development_review_routes
@@ -816,6 +840,56 @@ def create_app(
     @app.get("/api/experiments")
     def experiments() -> dict:
         return experiments_payload(root)
+
+    @app.get("/api/world-videos")
+    def world_videos() -> dict:
+        """Existing, hash-bound model outputs; never enqueue inference jobs."""
+        from plumb.world_videos import world_videos_payload
+        return world_videos_payload(root)
+
+    def freeplay_source(video_id: str) -> Optional[Dict[str, Any]]:
+        """Look up one server-derived source identity from the current catalog."""
+
+        from plumb.world_videos import world_videos_payload
+
+        matches = [
+            video for video in world_videos_payload(root).get("videos", [])
+            if isinstance(video, Mapping) and video.get("id") == video_id
+        ]
+        # A source-bound control cannot choose arbitrarily if an old catalog
+        # happened to create duplicate IDs. The catalog now incorporates the
+        # evidence root and digest, but preserve the refusal for old data.
+        if len(matches) != 1:
+            return None
+        return dict(matches[0])
+
+    @app.get("/api/freeplay/status")
+    def freeplay_status(video_id: Optional[str] = None) -> dict:
+        """Read-only capability report; it never submits a generation request."""
+
+        protocol_hash = document.sha256 if (document is not None and document.frozen) else None
+        if video_id is None:
+            return task_start_status(baseten_backend, baseten_missing, protocol_hash, protocol_reason)
+        if not video_id or len(video_id) > 200:
+            raise HTTPException(422, "Invalid video ID")
+        source = freeplay_source(video_id)
+        if source is None:
+            return {
+                "available": False,
+                "mode": "recording_branch",
+                "reason": "No current saved recording matches this video_id, so no source-bound branch can be restored.",
+                "source": None,
+                "binding": {
+                    "requested": True,
+                    "exact_branch_supported": False,
+                    "checkpoint": None,
+                    "adapter": None,
+                },
+                "missing": ["a current hash-bound catalog recording matching video_id"],
+                "scored": False,
+                "qualified": False,
+            }
+        return recording_branch_status(baseten_backend, source)
 
     @app.get("/api/artifact-inventory")
     def artifact_inventory() -> dict:
@@ -1208,22 +1282,127 @@ def create_app(
         action vector directly.  When no certified world backend is configured
         this returns ``503`` with a named reason -- it never returns a placeholder
         frame, because the entire point of this beat is that the video is really
-        being generated in response to the keypress.
+        being generated in response to the keypress.  A ``video_id`` path is
+        stricter: it can use only a verified exact-source branch adapter and
+        never falls back to this task-start path.
         """
+
+        source: Optional[Dict[str, Any]] = None
+        source_status: Optional[Dict[str, Any]] = None
+        if body.video_id is not None:
+            source = freeplay_source(body.video_id)
+            if source is None:
+                raise HTTPException(
+                    409,
+                    {
+                        "available": False,
+                        "mode": "recording_branch",
+                        "reason": "No current saved recording matches this video_id, so no source-bound branch can be restored.",
+                        "source": None,
+                        "binding": {
+                            "requested": True,
+                            "exact_branch_supported": False,
+                            "checkpoint": None,
+                            "adapter": None,
+                        },
+                        "missing": ["a current hash-bound catalog recording matching video_id"],
+                        "scored": False,
+                        "qualified": False,
+                    },
+                )
+            if body.source_sha256 != source.get("sha256"):
+                raise HTTPException(
+                    409,
+                    {
+                        "available": False,
+                        "mode": "recording_branch",
+                        "reason": "The selected recording's hash no longer matches source_sha256; reload its capability status before commanding it.",
+                        "source": source_identity(source),
+                        "binding": {
+                            "requested": True,
+                            "exact_branch_supported": False,
+                            "checkpoint": None,
+                            "adapter": None,
+                        },
+                        "missing": ["the current source_sha256 returned by /api/freeplay/status"],
+                        "scored": False,
+                        "qualified": False,
+                    },
+                )
+            # This is a side-effect-free adapter capability check.  It occurs
+            # before a session is created and, crucially, before any world-model
+            # generation call. Unsupported MP4-only recordings never fall
+            # through to generic task-start free-play.
+            source_status = recording_branch_status(baseten_backend, source)
+            if not source_status["available"]:
+                raise HTTPException(409, source_status)
 
         session_id = body.session_id or uuid.uuid4().hex
         if not session_id.isalnum() or len(session_id) > 64:
             raise HTTPException(422, "Invalid session ID")
+        requested_mode = "recording_branch" if source is not None else "task_start"
+        source_binding = None
+        if source is not None and source_status is not None:
+            checkpoint = source_status["binding"].get("checkpoint") or {}
+            source_binding = {
+                "video_id": source["id"],
+                "source_sha256": source["sha256"],
+                "checkpoint_sha256": checkpoint.get("sha256"),
+                "adapter": source_status["binding"].get("adapter"),
+            }
         with lock:
             if len(freeplay_sessions) >= 256 and session_id not in freeplay_sessions:
                 raise HTTPException(429, "Free-play session limit reached")
-            session = freeplay_sessions.setdefault(
-                session_id, {"created_at": time.time(), "steps": 0, "frames": []}
-            )
+            session = freeplay_sessions.get(session_id)
+            if session is None:
+                session = {
+                    "created_at": time.time(),
+                    "steps": 0,
+                    "frames": [],
+                    "mode": requested_mode,
+                    "source_binding": source_binding,
+                    "busy": False,
+                }
+                freeplay_sessions[session_id] = session
+            else:
+                # Pre-source-binding sessions are legacy generic sessions. They
+                # can continue their old task-start semantics, but cannot be
+                # silently upgraded into a recording continuation.
+                existing_mode = session.setdefault("mode", "task_start")
+                existing_binding = session.setdefault("source_binding", None)
+                session.setdefault("busy", False)
+                if existing_mode != requested_mode or existing_binding != source_binding:
+                    raise HTTPException(
+                        409,
+                        {
+                            "reason": "A free-play session is permanently bound to its original task-start mode or exact recording checkpoint.",
+                            "session_id": session_id,
+                            "existing_mode": existing_mode,
+                            "requested_mode": requested_mode,
+                        },
+                    )
+            if session.get("source_branch_failure"):
+                raise HTTPException(
+                    409,
+                    {
+                        "reason": session["source_branch_failure"],
+                        "session_id": session_id,
+                    },
+                )
+            if session["busy"]:
+                raise HTTPException(409, {"reason": "Free-play session already has a generation in flight.", "session_id": session_id})
         if body.direction == "stop":
             return {
                 "session_id": session_id,
                 "direction": "stop",
+                "mode": "recording_branch" if source is not None else "task_start",
+                "source": source_identity(source) if source is not None else None,
+                "binding": source_status.get("binding") if source_status is not None else {
+                    "requested": False,
+                    "exact_branch_supported": False,
+                    "checkpoint": None,
+                    "adapter": None,
+                },
                 "generating": False,
                 "frame_urls": list(session["frames"]),
                 "frame_count": len(session["frames"]),
@@ -1233,7 +1412,7 @@ def create_app(
                 "reason": "Release-to-stop: no action was commanded.",
             }
         chunk = _freeplay_chunk(body.direction, baseten_backend)
-        if baseten_backend is None or not hasattr(baseten_backend, "freeplay_step"):
+        if source is None and (baseten_backend is None or not hasattr(baseten_backend, "freeplay_step")):
             raise HTTPException(
                 503,
                 {
@@ -1262,43 +1441,97 @@ def create_app(
                     "commanded_chunk": {"rows": len(chunk), "direction": body.direction},
                 },
             )
+        with lock:
+            # The first lock covers source/mode binding. This second, short
+            # lock marks the session busy only after all non-generation
+            # validation has passed; a second keypress can never overlap a
+            # source-branch step or observe it as a completed frame set.
+            if session["busy"]:
+                raise HTTPException(409, {"reason": "Free-play session already has a generation in flight.", "session_id": session_id})
+            session["busy"] = True
         started = time.perf_counter()
         try:
-            outcome = baseten_backend.freeplay_step(
-                session_id=session_id,
-                task=body.task,
-                actions=chunk,
-                protocol_hash=protocol_hash,
-                # Derived from the session and step so a free-play frame is
-                # reproducible, and so holding a key does not redraw the same
-                # noise every chunk. Not a protocol seed: nothing here is scored.
-                seed=zlib.crc32(("%s:%d" % (session_id, session["steps"])).encode("utf-8")),
-                resolution=480,
-            )
+            seed = zlib.crc32(("%s:%d" % (session_id, session["steps"])).encode("utf-8"))
+            if source is not None:
+                outcome = source_branch_step(
+                    baseten_backend,
+                    session_id=session_id,
+                    source=source,
+                    actions=chunk,
+                    protocol_hash=protocol_hash,
+                    seed=seed,
+                    resolution=480,
+                )
+            else:
+                outcome = baseten_backend.freeplay_step(
+                    session_id=session_id,
+                    task=body.task,
+                    actions=chunk,
+                    protocol_hash=protocol_hash,
+                    # Derived from the session and step so a free-play frame is
+                    # reproducible, and so holding a key does not redraw the same
+                    # noise every chunk. Not a protocol seed: nothing here is scored.
+                    seed=seed,
+                    resolution=480,
+                )
+            if not isinstance(outcome, Mapping):
+                raise ValueError("world-model adapter returned a non-object result")
+            frame_urls = outcome.get("frame_urls") or []
+            if not isinstance(frame_urls, (list, tuple)) or not all(isinstance(url, str) and url for url in frame_urls):
+                raise ValueError("world-model adapter returned invalid frame URLs")
+            frame_urls = list(frame_urls)
+            frame_count = int(outcome.get("frame_count") or 0)
+            requested_resolution = outcome.get("requested_resolution")
+            frame_height = outcome.get("frame_height")
+            frame_width = outcome.get("frame_width")
         except Exception as exc:
+            with lock:
+                session["busy"] = False
+                if source is not None:
+                    # Once a source-bound request left this process, a transport
+                    # failure cannot prove whether the remote world advanced.
+                    # Preserve the exact-source contract by refusing blind
+                    # retries under the same session/seed.
+                    session["source_branch_failure"] = (
+                        "The source-bound generation failed after dispatch; its remote state may be ambiguous, "
+                        "so this exact-source session cannot be retried automatically."
+                    )
             raise HTTPException(502, {"reason": "world-model generation failed", "detail": str(exc)})
         with lock:
             session["steps"] += 1
-            session["frames"] = list(outcome.get("frame_urls") or [])
+            session["frames"] = frame_urls
+            session["busy"] = False
         return {
             "session_id": session_id,
             "direction": body.direction,
+            "mode": "recording_branch" if source is not None else "task_start",
+            "source": source_identity(source) if source is not None else None,
+            "binding": source_status.get("binding") if source_status is not None else {
+                "requested": False,
+                "exact_branch_supported": False,
+                "checkpoint": None,
+                "adapter": None,
+            },
             "generating": False,
-            "frame_urls": list(outcome.get("frame_urls") or []),
-            "frame_count": int(outcome.get("frame_count") or 0),
+            "frame_urls": frame_urls,
+            "frame_count": frame_count,
             "commanded_rows": len(chunk),
             "latency_ms": (time.perf_counter() - started) * 1000.0,
             # What was asked for, and separately what the frames measurably are.
             # Reporting the request as though it were the result is how a 64px
             # rehearsal frame would end up captioned "480p" on stage.
-            "requested_resolution": outcome.get("requested_resolution"),
-            "frame_height": outcome.get("frame_height"),
-            "frame_width": outcome.get("frame_width"),
+            "requested_resolution": requested_resolution,
+            "frame_height": frame_height,
+            "frame_width": frame_width,
             "backend": "baseten",
             "protocol_hash": protocol_hash,
             "qualified": False,
             "scored": False,
-            "reason": "Unscored free-play. No policy, no language model, no validity gate, no judge.",
+            "reason": (
+                "Unscored exact source-bound free-play. No policy, no language model, no validity gate, no judge."
+                if source is not None
+                else "Unscored task-start free-play. No policy, no language model, no validity gate, no judge."
+            ),
         }
 
     @app.get("/api/annotation/packets")
