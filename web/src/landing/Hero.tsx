@@ -13,7 +13,8 @@
  * demoed has failed at the one moment it matters.
  */
 import { CRTWarp } from "./CRTWarp";
-import { PRODUCT } from "./content";
+import { CONSOLE_PATH, PRODUCT } from "./content";
+import { PillButton } from "./Pieces";
 
 export function Hero() {
   return (
@@ -37,6 +38,7 @@ export function Hero() {
         </h1>
 
         <p className="hero-promise">{PRODUCT.promise}</p>
+        <div className="hero-actions"><PillButton href={CONSOLE_PATH} variant="primary">Open the console</PillButton></div>
       </div>
     </div>
   );
