@@ -503,6 +503,7 @@ code { font-family: var(--font-mono); font-size: inherit; overflow-wrap: anywher
 .judge-clip, .judge-assessment { display: grid; gap: var(--space-3); min-width: 0; }
 .judge-clip h2, .judge-assessment h2 { margin: 0; color: var(--text-strong); font-size: var(--fs-sm); font-weight: 500; }
 .judge-video { display: block; width: 100%; max-height: 22rem; aspect-ratio: 4 / 3; border: var(--border-width) solid var(--line-2); background: black; object-fit: contain; }
+.custom-rollout-media { min-width: 0; width: 100%; max-width: 32rem; }
 .judge-muted { margin: 0; color: var(--text-muted); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
 .judge-disclosure { margin: 0; color: var(--caution-text); font-size: var(--fs-2xs); }
 .judge-progress, .judge-unable, .judge-result { display: grid; gap: var(--space-3); border-top: var(--border-width) solid var(--line-1); padding-top: var(--space-3); }

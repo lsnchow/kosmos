@@ -15,7 +15,7 @@ import peft
 from PIL import Image
 from peft import PeftModel
 from plumb.policies.judge import QwenRubricJudge, QwenJudgeProfile, JudgeRequest, ReferenceImage, JudgeInputProvenance
-from plumb.policies.demo_tasks import POT_TASK_ID, POT_INSTRUCTION, POT_RUBRIC
+from plumb.policies.demo_tasks import POT_TASK_ID, POT_INSTRUCTION, POT_RUBRIC, CUSTOM_TASK_ID, custom_task_rubric
 from deploy.baseten.judge_demo.model.model import _tree_hash, _png, ADAPTER_TREE_SHA256, ADAPTER_ID, BASE_MODEL_ID, BASE_MODEL_REVISION
 from deploy.baseten.training.train_judge_lora import _local_model_binding
 
@@ -73,8 +73,12 @@ class Handler(BaseHTTPRequestHandler):
                 frames = tuple(_png(f,Image) for f in payload["frames"])
                 refs = tuple(ReferenceImage(_png(r,Image), r["source_uri"], r["sha256"].removeprefix("sha256:")) for r in payload["reference_images"])
                 task = payload["task_id"]
-                if task not in {"close_drawer", POT_TASK_ID}: raise ValueError("Unsupported task")
+                if task not in {"close_drawer", POT_TASK_ID, CUSTOM_TASK_ID}: raise ValueError("Unsupported task")
                 fields = {"diagnostic_mode":True,"task_instruction":POT_INSTRUCTION,"task_rubric":POT_RUBRIC} if task == POT_TASK_ID else {"task_id":task}
+                if task == CUSTOM_TASK_ID:
+                    rubric = custom_task_rubric(payload["task_instruction"])
+                    if rubric != payload.get("task_rubric"): raise ValueError("Custom task rubric mismatch")
+                    fields = {"diagnostic_mode":True,"task_instruction":payload["task_instruction"],"task_rubric":rubric}
                 request = JudgeRequest(frames,tuple(payload["frame_timestamps"]),refs,provenance=JudgeInputProvenance(**payload["provenance"]),**fields)
                 started_call = time.perf_counter()
                 report = judge.evaluate(request,seeds=payload["seeds"])

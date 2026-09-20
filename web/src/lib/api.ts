@@ -509,6 +509,7 @@ export type DemoJudgment = {
 };
 
 export type CreateDemoSessionBody = {
+  demo_policy?: "openvla" | "pi0" | "octo" | "baseline";
   world_model?: "cosmos";
   auto_assess?: boolean;
   starting_scene?: "drawer" | "pot";

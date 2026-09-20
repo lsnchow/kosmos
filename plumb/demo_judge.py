@@ -34,7 +34,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .policies.judge import parse_rubric_json
 from .policies.provenance import image_pixel_hash
 from .policies.tasks import BENCHMARK_TASK_REGISTRY
-from .policies.demo_tasks import POT_TASK_ID, POT_INSTRUCTION, POT_RUBRIC_HASH
+from .policies.demo_tasks import POT_TASK_ID, POT_INSTRUCTION, POT_RUBRIC_HASH, CUSTOM_TASK_ID, custom_task_rubric
+from .policies.provenance import canonical_json_sha256
 from .records import canonical_json, utc_now
 from .world_videos import world_videos_payload
 
@@ -475,8 +476,11 @@ class DemoJudgeService:
                 return None
             pot = json.loads(row["source_json"]).get("kind") == "demo_pot_fixture"
             task_id, instruction = (POT_TASK_ID, POT_INSTRUCTION) if pot else (DEMO_TASK_ID, DEMO_TASK_LABEL)
-            if row["prompt"] != instruction or json.loads(row["source_json"]).get("kind") not in {"demo_drawer_fixture", "demo_pot_fixture"}:
+            if json.loads(row["source_json"]).get("kind") not in {"demo_drawer_fixture", "demo_pot_fixture"}:
                 return None
+            if row["prompt"] != instruction:
+                task_id, instruction = CUSTOM_TASK_ID, row["prompt"]
+                custom_task_rubric(instruction)
             video = _under(self.root, "live-demo/" + str(row["latest_video_file"]))
             receipt = json.loads(video.with_suffix(".manifest.json").read_text())
             if receipt["session_id"] != session_id or receipt["sha256"] != _sha256_file(video):
@@ -658,7 +662,8 @@ class DemoJudgeService:
             "judgment_id": judgment_id,
             "clip": self._public_clip(clip),
             "task_id": clip["task_id"],
-            "rubric_hash": POT_RUBRIC_HASH if clip["task_id"] == POT_TASK_ID else BENCHMARK_TASK_REGISTRY.get(DEMO_TASK_ID).rubric_hash,
+            **({"task_instruction": clip["task_label"], "task_rubric": custom_task_rubric(clip["task_label"])} if clip["task_id"] == CUSTOM_TASK_ID else {}),
+            "rubric_hash": canonical_json_sha256({"diagnostic_rubric": custom_task_rubric(clip["task_label"])}) if clip["task_id"] == CUSTOM_TASK_ID else POT_RUBRIC_HASH if clip["task_id"] == POT_TASK_ID else BENCHMARK_TASK_REGISTRY.get(DEMO_TASK_ID).rubric_hash,
             "profile": DEMO_PROFILE_ID,
             "video_sha256": clip["video_sha256"],
             "video_frame_count": frame_count,
@@ -785,6 +790,7 @@ class DemoJudgeService:
                 "role": reference_info["role"],
             }],
             "task_id": prepared["task_id"],
+            **({"task_instruction": prepared["task_instruction"], "task_rubric": prepared["task_rubric"]} if prepared["task_id"] == CUSTOM_TASK_ID else {}),
             "seeds": prepared["seeds"],
             "provenance": {
                 "clip_id": prepared["clip"]["id"],

@@ -17,6 +17,6 @@ export function demoHeuristic(judgment?: DemoJudgment | null) {
   }
   // Fixed five-sample protocol: never turn missing or malformed output into a vote.
   if (samples.length !== 5) return undefined;
-  const label = met >= 3 ? "Likely completed" : notMet >= 3 ? "Likely not completed" : "Insufficient agreement";
+  const label = met >= 3 ? "Success" : notMet >= 3 ? "Fail" : "Unable to assess";
   return { label, votes: Math.max(met, notMet), total: samples.length };
 }

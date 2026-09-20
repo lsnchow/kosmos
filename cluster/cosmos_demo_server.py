@@ -60,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
             image = Image.open(io.BytesIO(raw)).convert("RGB")
             rows = request["actions"]
             assert len(rows) == 16 and all(len(row) == 10 and all(math.isfinite(float(v)) for v in row) for row in rows)
-            assert isinstance(request["prompt"], str) and 1 <= len(request["prompt"].strip()) <= 1000
+            assert isinstance(request["prompt"], str) and 1 <= len(request["prompt"].strip()) <= 1200
             assert request.get("scene") in {"drawer", "pot"}
             resolution = 480 if request["scene"] == "pot" else 256
         except Exception:

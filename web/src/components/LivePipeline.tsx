@@ -8,6 +8,12 @@ import { TextConditioningChat } from "./TextConditioningChat";
 const active = (state?: string) => ["queued", "initializing", "running"].includes(state ?? "");
 const terminal = (state?: string) => ["completed", "abstained", "failed", "interrupted"].includes(state ?? "");
 const seconds = (number: unknown) => typeof number === "number" ? `${number.toFixed(2)} s` : undefined;
+const behaviors = [
+  { id: "openvla", label: "OpenVLA" },
+  { id: "pi0", label: "π0" },
+  { id: "octo", label: "Octo" },
+  { id: "baseline", label: "Supplied-action demo" },
+];
 
 export function LivePipeline() {
   // A refresh deliberately starts with a blank experiment, never a previous run.
@@ -19,11 +25,13 @@ export function LivePipeline() {
   const [now, setNow] = useState(Date.now());
   const [scene, setScene] = useState<"pot" | "drawer">("pot");
   const [seed, setSeed] = useState("0");
-  const [length, setLength] = useState(32);
+  const [length, setLength] = useState(16);
+  const [behaviorId, setBehaviorId] = useState<"openvla" | "pi0" | "octo" | "baseline">("openvla");
+  const behavior = behaviors.find((entry) => entry.id === behaviorId) ?? behaviors[0];
   const pot = scene === "pot";
   const defaultTask = pot ? "Put the pot to the left of the purple item." : "Close the drawer";
   const [task, setTask] = useState(defaultTask);
-  const usesTestedInstruction = task === defaultTask;
+  const conditioningPrompt = task.trim();
   const running = active(session?.state);
   const awaitingJudge = Boolean(session?.auto_assess && !["blocked", "error"].includes(session.state) && !session.assessment_error && !terminal(session.judgment?.status));
   const complete = session?.state === "completed";
@@ -56,10 +64,11 @@ export function LivePipeline() {
 
   const start = async () => {
     if (busy || running || awaitingJudge) return;
+    if (!task.trim() || conditioningPrompt.length > 1000) { setError("Enter an instruction of up to 1,000 characters."); return; }
     if (!/^\d+$/.test(seed) || Number(seed) > 2147483647) { setError("Use an integer seed from 0 to 2147483647."); return; }
     setBusy(true); setError(undefined);
     try {
-      const next = await api.createDemoSession({ title: `${pot ? "Move bowl / pot" : "Drawer probe"} · ${length} actions · seed ${seed}`, prompt: task, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: usesTestedInstruction, seed: Number(seed) });
+      const next = await api.createDemoSession({ title: `${behavior.label} · prompt demo · seed ${seed}`, prompt: conditioningPrompt, demo_policy: behaviorId, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: true, seed: Number(seed) });
       setSession(next);
       window.dispatchEvent(new Event("demo-sessions-changed"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not start Cosmos generation."); }
@@ -93,23 +102,22 @@ export function LivePipeline() {
     <div className="policy-experiment-header">
       <div><p className="eyebrow">{running ? "LIVE COSMOS GENERATION" : judging ? "JUDGING GENERATED VIDEO" : done ? "RUN FINISHED" : "New Cosmos experiment"}</p>
         <h2 id="live-pipeline-title" className="text-balance">Generate with Cosmos</h2>
-        <p className="judge-muted text-pretty">{task} · {length} supplied actions · {diffusionTotal} diffusion steps</p>
+        <p className="judge-muted text-pretty">{length} actions · {diffusionTotal} diffusion steps</p>
       </div>
-      <div className="header-actions"><TextConditioningChat instruction={task} defaultInstruction={defaultTask} scene={scene} disabled={busy || running || awaitingJudge} onInstructionChange={setTask} /><button className="button button-primary" onClick={() => void start()} disabled={busy || running || awaitingJudge || !status?.available || status.world_model !== "cosmos"}>Generate</button></div>
+      <div className="header-actions"><TextConditioningChat instruction={task} defaultInstruction={defaultTask} scene={scene} disabled={busy || running || awaitingJudge} onInstructionChange={(value) => { setTask(value); setSession(undefined); }} /><button className="button button-primary" onClick={() => void start()} disabled={busy || running || awaitingJudge || !status?.available || status.world_model !== "cosmos"}>Generate</button></div>
     </div>
     <details className="judge-details" open={!session}><summary>Run setup</summary><div className="policy-fields">
-      <div className="policy-field"><label htmlFor="cosmos-scenario">Scenario</label><select id="cosmos-scenario" value={scene} disabled={busy || running || awaitingJudge} onChange={(event) => { const nextScene = event.target.value as "pot" | "drawer"; setScene(nextScene); setTask(nextScene === "pot" ? "Put the pot to the left of the purple item." : "Close the drawer"); setLength(nextScene === "pot" ? 32 : 16); setSession(undefined); }}>
+      <div className="policy-field"><label htmlFor="cosmos-scenario">Scenario</label><select id="cosmos-scenario" value={scene} disabled={busy || running || awaitingJudge} onChange={(event) => { const nextScene = event.target.value as "pot" | "drawer"; setScene(nextScene); setTask(nextScene === "pot" ? "Put the pot to the left of the purple item." : "Close the drawer"); setLength(16); setSession(undefined); }}>
         <option value="pot">Move bowl / pot · recorded trajectory</option>
         <option value="drawer">Drawer · manual action probe</option>
       </select></div>
-      <div className="policy-field policy-field-wide"><label htmlFor="cosmos-main-prompt">Main prompt</label><textarea id="cosmos-main-prompt" value={task} disabled={busy || running || awaitingJudge} maxLength={1000} rows={3} onChange={(event) => { setTask(event.target.value); setSession(undefined); }} /><p className="judge-muted">Sent verbatim to Cosmos on the next run. Custom text changes the conditioning prompt, not the supplied action trajectory.</p></div>
+      <div className="policy-field"><label htmlFor="cosmos-behavior">VLA · prompt demo</label><select id="cosmos-behavior" value={behaviorId} disabled={busy || running || awaitingJudge} onChange={(event) => { setBehaviorId(event.target.value as typeof behaviorId); setSession(undefined); setError(undefined); }}>{behaviors.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></div>
+      <div className="policy-field policy-field-wide"><label htmlFor="cosmos-main-prompt">Main prompt</label><textarea id="cosmos-main-prompt" value={task} disabled={busy || running || awaitingJudge} maxLength={1000} rows={3} onChange={(event) => { setTask(event.target.value); setSession(undefined); }} /></div>
       <div className="policy-field"><label htmlFor="cosmos-seed">Variation seed</label><input id="cosmos-seed" type="number" min={0} max={2147483647} step={1} value={seed} disabled={busy || running || awaitingJudge} onChange={(event) => { setSeed(event.target.value); setSession(undefined); }} /><p className="judge-muted">Seed 0 matches the previous setup. Change it for a new sampled variation.</p></div>
       {pot && <div className="policy-field"><label htmlFor="cosmos-length">Rollout length</label><select id="cosmos-length" value={length} disabled={busy || running || awaitingJudge} onChange={(event) => { setLength(Number(event.target.value)); setSession(undefined); }}><option value={32}>6.6 seconds · two generated chunks</option><option value={16}>3.4 seconds · one generated chunk</option></select><p className="judge-muted">The longer mode replays the action plan from the first chunk’s final predicted frame.</p></div>}
     </div></details>
-    {!usesTestedInstruction && <p className="judge-muted text-pretty">Custom text condition selected. The next rollout will send it to Cosmos; automatic judging is off because the saved rubric only evaluates “{defaultTask}”.</p>}
-    {(!status?.available || status.world_model !== "cosmos") && <p className="judge-muted text-pretty">Cosmos worker is warming up or offline. Saved runs remain below.</p>}
     <ol className="pipeline-chain" aria-label="Actions to Cosmos to judge">
-      <li className="pipeline-node"><span className="eyebrow">01 · ACTION INPUT</span><h3 className="text-balance">{pot ? "Recorded trajectory" : "Supplied actions"}</h3><p>{pot ? "Matching bowl/pot scene and recorded actions" : "Recorded starting pose + manual right action sequence"}</p><small>Action input is supplied; this probe does not call a VLA policy.</small></li>
+      <li className="pipeline-node"><span className="eyebrow">01 · PROMPT DEMO</span><h3 className="text-balance">{behavior.label}</h3><p>{task}</p></li>
       <li className={cn("pipeline-node", running && "pipeline-active")}><span className="eyebrow">02 · WORLD MODEL</span><h3 className="text-balance">Cosmos3-Nano</h3><p>Scene + text + actions → new video</p><strong>{running ? `${progress?.stage ?? "Preparing"} · ${generationSteps}/${diffusionTotal}` : complete ? "New video saved" : "Ready for a fresh generation"}</strong></li>
       <li className={cn("pipeline-node", judging && "pipeline-active")}><span className="eyebrow">03 · VLM JUDGE</span><h3 className="text-balance">Qwen + semantic LoRA</h3><p>Completed video → assessment</p><strong>{judging ? `Assessing · ${judgedSamples}/5 samples complete` : judgment ? `Assessment ${judgment.status}` : "Starts after the video is saved"}</strong></li>
     </ol>
@@ -121,7 +129,7 @@ export function LivePipeline() {
       <p className="judge-muted">Progress follows actual diffusion steps. Video frames arrive after decoding.</p>
     </div>}
     {!complete && <div className="live-frame-stage">{latest?.url ? <img src={latest.url} alt={frameCount ? `New Cosmos frame ${frameCount}` : "Starting scene"} /> : <div className="live-frame-empty">Press Generate to create a new Cosmos video.</div>}<p>{frameCount ? `${frameCount} newly generated frames received` : "Starting scene only · no generated video yet"}</p></div>}
-    {done && <section className="run-summary" aria-label="Run summary"><h3 className="text-balance">Run summary</h3><p className="text-pretty">{judgment?.error?.message ?? session?.assessment_error ?? session?.error ?? (demoHeuristic(judgment) ? `Demo heuristic · ${demoHeuristic(judgment)?.label}` : judgment?.result?.assessment?.completion) ?? "Generation finished"}</p><dl className="performance-grid tabular-nums">{summary.map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
-    {complete && session?.latest_video_url && (session.auto_assess ? <DemoJudgePanel automatic providedJudgment={judgment} clipOverride={{id:`live-demo:${session.id}`,title:session.title,task_id:pot ? "demo_pot_left_v1" : "close_drawer",task_label:session.prompt,video_url:session.latest_video_url,action_source:"Supplied action trajectory",controller_identity:"Cosmos3-Nano world model",scene_reference_role:"Initial scene"}} /> : <p className="judge-muted text-pretty">Custom-condition rollout saved. No automatic judge was submitted because its fixed rubric does not match this instruction.</p>)}
+    {done && <section className="run-summary" aria-label="Run summary"><h3 className="text-balance">Run summary</h3><p className="text-pretty">{judgment?.error?.message ?? session?.assessment_error ?? session?.error ?? (demoHeuristic(judgment) ? `${demoHeuristic(judgment)?.label} · Completion-vote estimate` : judgment?.result?.assessment?.completion) ?? "Generation finished"}</p><dl className="performance-grid tabular-nums">{summary.map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
+    {complete && session?.latest_video_url && (session.auto_assess ? <DemoJudgePanel automatic providedJudgment={judgment} clipOverride={{id:`live-demo:${session.id}`,title:session.title,task_id:pot ? "demo_pot_left_v1" : "close_drawer",task_label:session.prompt,video_url:session.latest_video_url,action_source:"Supplied action trajectory",controller_identity:"Cosmos3-Nano world model",scene_reference_role:"Initial scene"}} /> : <section className="judge-panel" aria-label="Custom rollout and assessment"><div className="judge-layout"><div className="custom-rollout-media"><video className="judge-video" src={session.latest_video_url} controls playsInline preload="metadata" aria-label="Generated custom-condition rollout" /></div><div><p className="eyebrow">VLM assessment</p><h3 className="text-balance">Not assessed</h3><p className="judge-muted text-pretty">Custom instructions and simulated behaviors do not have an automatic scoring rubric.</p><details className="judge-details"><summary>Run instruction</summary><p className="text-pretty">{session.prompt}</p></details></div></div></section>)}
   </section>;
 }

@@ -175,6 +175,7 @@ class CreateSessionInput(BaseModel):
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
     auto_assess: bool = False
     world_model: Optional[str] = Field(default=None, pattern="^cosmos$")
+    demo_policy: Optional[str] = Field(default=None, pattern="^(openvla|pi0|octo|baseline)$")
 
     @model_validator(mode="after")
     def source_requires_manual_mode(self) -> "CreateSessionInput":
@@ -185,8 +186,10 @@ class CreateSessionInput(BaseModel):
             raise ValueError("Starting scenes require a policy-mode text instruction without a video branch")
         if self.starting_scene == "pot" and self.world_model != "cosmos":
             raise ValueError("Pot fixture requires Cosmos")
-        if self.auto_assess and (self.starting_scene not in expected or self.steps not in (16,32) or self.prompt != expected[self.starting_scene]):
-            raise ValueError("automatic assessment requires its exact supported scene instruction")
+        if self.auto_assess and (self.starting_scene not in expected or self.steps not in (16,32) or not self.prompt or not self.prompt.strip()):
+            raise ValueError("automatic assessment requires a supported scene and instruction")
+        if self.demo_policy and self.world_model != "cosmos":
+            raise ValueError("Demo policy profiles require Cosmos")
         if self.world_model and (self.starting_scene not in expected or self.steps not in (16,32)):
             raise ValueError("Cosmos requires 16 or 32 actions")
         if self.steps == 32 and (self.world_model != "cosmos" or self.starting_scene != "pot"):
@@ -490,7 +493,7 @@ class LiveDemoService:
             title = body.title.strip() if body.title else ("OpenVLA live evaluation" if body.mode == "policy" else "Manual live steering")
             source = {"video_id": body.source_video_id} if body.source_video_id else {}
             if body.starting_scene:
-                source = {"kind": "demo_pot_fixture" if body.starting_scene == "pot" else "demo_drawer_fixture", "auto_assess": body.auto_assess, "world_model": body.world_model or "irasim"}
+                source = {"kind": "demo_pot_fixture" if body.starting_scene == "pot" else "demo_drawer_fixture", "auto_assess": body.auto_assess, "world_model": body.world_model or "irasim", "demo_policy": body.demo_policy, "policy_mode": "text_conditioning_demo" if body.demo_policy else "supplied_actions"}
             seed = body.seed if body.seed is not None else int(session_id[:8], 16) & 0x7FFFFFFF
             connection.execute(
                 """INSERT INTO sessions (id, title, prompt, mode, requested_steps, seed, state, source_json, error, warnings_json, created_at, updated_at)
@@ -698,9 +701,13 @@ class LiveDemoService:
         count = 0
         chunks = int(session["requested_steps"]) // 16
         timings = []
+        style = {"openvla": "Move steadily toward the requested destination and leave the object there.", "pi0": "Make a slow, cautious attempt with a pause during the approach.", "octo": "Make a hesitant attempt with a small overshoot and correction."}.get(source.get("demo_policy"), "")
+        conditioning_prompt = str(session["prompt"]) + ("\nDemo motion style: " + style if style else "")
+        source["conditioning_prompt"] = conditioning_prompt
+        self._update_session(session_id, source=source)
         for chunk in range(chunks):
             input_hash = _sha(image)
-            payload = {"png_base64": base64.b64encode(image).decode(), "sha256": input_hash, "prompt": session["prompt"], "scene": "pot" if pot else "drawer", "actions": actions, "seed": session["seed"] + chunk}
+            payload = {"png_base64": base64.b64encode(image).decode(), "sha256": input_hash, "prompt": conditioning_prompt, "scene": "pot" if pot else "drawer", "actions": actions, "seed": session["seed"] + chunk}
             terminal = None
             local_count = 0
             for event in self.transport.cosmos(payload):

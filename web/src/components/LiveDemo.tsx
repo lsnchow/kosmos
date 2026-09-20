@@ -789,9 +789,7 @@ export function LiveDemoPanel({ limit = 3, historyOnly = false }: { limit?: numb
         </button>
       }
     >
-      <p className="text-pretty text-sm text-[var(--text-muted)] mt-3">
-        {historyOnly ? "Reopen previously generated videos and their recorded steps." : "Generate a fresh rollout and watch each world-model step arrive."}
-      </p>
+      {!historyOnly && <p className="text-pretty text-sm text-[var(--text-muted)] mt-3">Generate a fresh rollout and watch each world-model step arrive.</p>}
       {!historyOnly && status && !status.available && <p className="control-note mt-3">Live generation is currently unavailable. Saved runs remain accessible.</p>}
       {error && (
         <p className="inline-error" role="alert">

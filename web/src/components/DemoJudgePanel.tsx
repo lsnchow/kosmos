@@ -56,9 +56,9 @@ export function Assessment({ judgment }: { judgment?: DemoJudgment }) {
   }
   if (judgment.status !== "completed" || !assessment || assessment.status !== "evaluable") {
     if (heuristic) return <div className="judge-result" role="status">
-      <p className="eyebrow">Demo heuristic</p>
+      <p className="eyebrow">Completion-vote estimate</p>
       <h3 className="text-balance">{heuristic.label}</h3>
-      <p className="judge-muted text-pretty">{heuristic.votes}/{heuristic.total} completion votes agree. Completion-only estimate; visual-integrity and collision votes are excluded. Original judge result and all votes are retained in telemetry.</p>
+      <p className="judge-muted tabular-nums">{heuristic.votes}/{heuristic.total} votes agree</p>
     </div>;
     const report = judgment.result?.report;
     const samples = Array.isArray(report?.raw_judge_samples) ? report.raw_judge_samples.filter(isRecord) : [];
