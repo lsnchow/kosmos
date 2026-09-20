@@ -64,22 +64,17 @@ export function Hero() {
   return (
     <div className="hero">
       {/*
-        The backdrop is static.
+        There is no backdrop element.
 
-        It was a remote MP4, then a wall of drifting gradients that read as a
-        video still buffering — motion behind a headline that the eye keeps
-        checking on instead of reading past. What is left is the console's own
-        idiom: a hairline lattice on the field colour, drawn once and never
-        moved, with a scrim handing off to the first section.
+        It was a remote MP4, then a wall of drifting gradients, then a hairline
+        lattice. With the grid gone the hero is the field colour and nothing
+        else — which `.kosmos-landing` already paints, so a layer here would
+        only restate it. The scrim went with it: it faded surface-0 into
+        surface-0, which is a gradient between a colour and itself.
 
-        Nothing here loads. The hero renders identically with no network, which
-        is the one moment that matters if the API is the thing being demoed.
+        The handoff to the first section is the same hairline every other
+        section boundary uses.
       */}
-      <div className="hero-backdrop" aria-hidden="true">
-        <div className="hero-lattice" />
-        <div className="hero-scrim" />
-      </div>
-
       <Nav />
 
       <div className="hero-body">

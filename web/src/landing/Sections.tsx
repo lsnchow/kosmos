@@ -18,53 +18,66 @@ import {
   CONSOLE_PATH,
   LIVE_PATH,
 } from "./content";
-import { PillButton, Reveal, SectionCard } from "./Pieces";
+import { IsoStack } from "./figures/IsoStack";
+import { PipelineDiamond } from "./figures/PipelineDiamond";
+import { FigPanel, PillButton, Reveal, SectionCard } from "./Pieces";
 
 type Pillar = (typeof PILLARS)[number];
 
-function PillarSection({ pillar }: { pillar: Pillar }) {
+/**
+ * One pillar: its graphic above, its claim and its commitments below.
+ *
+ * The cell is a quadrant of a 2 x 2 grid rather than a full-width band, so the
+ * graphic and the copy share a column and a reader takes the pillar as one
+ * object. The heading is `NN Title` on a single line — the number set dim
+ * beside it rather than stacked above — and the three commitments sit opposite
+ * as single lines, numbered `N.1` through `N.3`.
+ */
+function PillarSection({ pillar, index }: { pillar: Pillar; index: number }) {
   return (
-    <SectionCard id={pillar.id}>
-      <div className="pillar-head">
+    <section id={pillar.id} className="pillar-cell">
+      <FigPanel index={index}>
+        {pillar.figure === "pipeline" ? (
+          <PipelineDiamond />
+        ) : (
+          <IsoStack number={pillar.number} layers={pillar.layers} />
+        )}
+      </FigPanel>
+
+      <div className="pillar-foot">
         <Reveal className="pillar-copy">
-          <p className="pillar-number font-mono" aria-hidden="true">
-            {pillar.number}
-          </p>
           <h2 className="pillar-heading">
-            <span className="text-fg-strong">{pillar.lead}</span>{" "}
-            <span className="text-fg-muted">{pillar.headline}</span>
+            <span className="pillar-number font-mono">{pillar.number}</span>
+            <span className="text-fg-strong">{pillar.name}</span>
           </h2>
-          <p className="pillar-body">{pillar.body}</p>
+          <p className="pillar-body">{pillar.headline}</p>
           <PillButton href={pillar.cta.href}>{pillar.cta.label}</PillButton>
         </Reveal>
 
-        <Reveal className="pillar-items" delay={0.12}>
+        <Reveal className="pillar-items" delay={0.1}>
           <ul>
             {pillar.items.map((item) => (
               <li key={item.key}>
-                <span className="pillar-item-key font-mono" aria-hidden="true">
-                  {item.key}
-                </span>
-                <span className="pillar-item-text">
-                  <span className="text-fg">{item.title}</span>
-                  <span className="text-fg-muted">{item.body}</span>
-                </span>
+                <span className="pillar-item-key font-mono">{item.key}</span>
+                <span className="pillar-item-text">{item.title}</span>
               </li>
             ))}
           </ul>
         </Reveal>
       </div>
-    </SectionCard>
+    </section>
   );
 }
 
 export function Pillars() {
+  // The grid draws the hairlines between quadrants, so the cells themselves
+  // carry no border and cannot double one up along a shared edge.
   return (
-    <>
-      {PILLARS.map((pillar) => (
-        <PillarSection key={pillar.id} pillar={pillar} />
+    <div className="pillar-grid">
+      {PILLARS.map((pillar, index) => (
+        <PillarSection key={pillar.id} pillar={pillar} index={index + 1} />
       ))}
-    </>
+    </div>
   );
 }
 

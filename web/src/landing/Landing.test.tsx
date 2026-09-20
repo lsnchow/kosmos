@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { Landing } from "./Landing";
-import { LIMITS, PILLARS, PRODUCT } from "./content";
+import { LIMITS, PILLARS, PIPELINE_STAGES, PRODUCT } from "./content";
 
 function renderLanding() {
   return render(
@@ -45,13 +45,19 @@ describe("landing page", () => {
     for (const href of toLive) expect(href).toBe("/live");
   });
 
-  it("renders all four pillars with their number, claim and sub-items", () => {
+  it("renders all four pillars as `NN Title`, claim, action and commitments", () => {
     renderLanding();
     for (const pillar of PILLARS) {
       const section = document.querySelector(`#${pillar.id}`) as HTMLElement;
       expect(section).toBeTruthy();
-      expect(within(section).getByRole("heading", { level: 2 })).toHaveTextContent(pillar.headline);
-      expect(within(section).getByText(pillar.number)).toBeInTheDocument();
+
+      // The heading is the number and the name on one line — the claim moved
+      // out of it and into the paragraph below.
+      const heading = within(section).getByRole("heading", { level: 2 });
+      expect(heading).toHaveTextContent(pillar.number);
+      expect(heading).toHaveTextContent(pillar.name);
+      expect(within(section).getByText(pillar.headline)).toBeInTheDocument();
+
       for (const item of pillar.items) {
         expect(within(section).getByText(item.title)).toBeInTheDocument();
         expect(within(section).getByText(item.key)).toBeInTheDocument();
@@ -63,15 +69,40 @@ describe("landing page", () => {
     }
   });
 
-  it("carries no figure panels", () => {
-    // The four FIG.N data panels were removed. This asserts they are gone
-    // rather than merely unstyled — an orphaned panel with no CSS would still
-    // render its markup and would not show up in a visual check.
+  it("lays the pillars out as a four-quadrant grid", () => {
     renderLanding();
-    expect(document.querySelectorAll(".fig-panel")).toHaveLength(0);
-    expect(document.querySelectorAll("svg.reliability-plot")).toHaveLength(0);
-    expect(document.querySelectorAll(".matrix-cell, .console-tile, .evidence-row")).toHaveLength(0);
-    expect(screen.queryByText(/^FIG\.\d$/)).not.toBeInTheDocument();
+    const grid = document.querySelector(".pillar-grid") as HTMLElement;
+    expect(grid).toBeTruthy();
+    expect(grid.querySelectorAll(":scope > .pillar-cell")).toHaveLength(PILLARS.length);
+  });
+
+  it("gives every pillar a numbered figure with its own graphic", () => {
+    renderLanding();
+    expect(document.querySelectorAll(".fig-panel")).toHaveLength(PILLARS.length);
+    for (let index = 1; index <= PILLARS.length; index += 1) {
+      expect(screen.getByText(`FIG.${index}`)).toBeInTheDocument();
+    }
+
+    // Two graphics, and each pillar names which it carries. The labels are the
+    // figure's content, so they are asserted rather than the shape alone.
+    for (const pillar of PILLARS) {
+      const section = document.querySelector(`#${pillar.id}`) as HTMLElement;
+
+      if (pillar.figure === "pipeline") {
+        // Supplied artwork, so the labels live in the pixels; the accessible
+        // name is what can be asserted.
+        const cycle = within(section).getByRole("img");
+        expect(cycle).toHaveClass("pipe-figure");
+        continue;
+      }
+
+      const stack = section.querySelector("svg.iso-stack") as SVGElement;
+      expect(stack).toBeTruthy();
+      expect(stack.querySelectorAll(".iso-plane")).toHaveLength(pillar.layers.length);
+      for (const layer of pillar.layers) {
+        expect(within(section).getByText(layer.label)).toBeInTheDocument();
+      }
+    }
   });
 
   it("keeps every limit on the page at full weight", () => {
@@ -102,29 +133,46 @@ describe("landing page", () => {
     expect(screen.getByText(/carry provenance in the console/)).toBeInTheDocument();
   });
 
-  it("loads no remote media at all", () => {
-    // The hero backdrop was a CDN-hosted MP4. It is CSS now, which is the rule
-    // the rest of the project holds to: nothing on this page can fail to load
-    // and leave a broken element behind, and the page has to render identically
-    // with no network — the one moment that matters is when the API is the
-    // thing being demoed.
+  it("serves every asset from this origin and none from a CDN", () => {
+    // The hero backdrop was once a CDN-hosted MP4. The rule that replaced it is
+    // not "no media" but "no *remote* media": the page has to render
+    // identically with no network, which a same-origin file satisfies and a
+    // third-party URL does not. FIG.1's artwork is self-hosted under /figures.
     renderLanding();
     expect(document.querySelectorAll("video")).toHaveLength(0);
-    expect(document.querySelectorAll("img")).toHaveLength(0);
     for (const element of document.querySelectorAll("[src]")) {
-      expect(element.getAttribute("src")).not.toMatch(/^https?:/);
+      const src = element.getAttribute("src") ?? "";
+      expect(src).not.toMatch(/^https?:/);
+      expect(src.startsWith("/")).toBe(true);
     }
   });
 
-  it("draws a static hero backdrop with nothing animating behind the headline", () => {
-    // The backdrop was a wall of drifting gradients that read as a video still
-    // buffering. It is one static lattice now: motion behind a headline is
-    // something the eye keeps checking on instead of reading past.
+  it("gives the supplied FIG.1 artwork alt text built from its own labels", () => {
+    // The artwork carries the stage names as pixels, so the alt text is
+    // generated from the same constants rather than typed out beside them —
+    // otherwise the two drift and the screen-reader copy goes stale silently.
     renderLanding();
-    expect(document.querySelectorAll(".hero-lattice")).toHaveLength(1);
-    expect(document.querySelectorAll(".dream-tile")).toHaveLength(0);
-    // Nothing in the hero carries an inline animation delay any more.
+    const image = document.querySelector("img.pipe-figure") as HTMLImageElement;
+    expect(image).toBeTruthy();
+    expect(image.getAttribute("src")).toBe("/figures/pipeline-cycle.png");
+    for (const stage of PIPELINE_STAGES) {
+      expect(image.alt).toContain(stage.label);
+      expect(image.alt).toContain(stage.note);
+    }
+  });
+
+  it("gives the hero no backdrop layer at all", () => {
+    // The hero has carried a video, then a wall of drifting gradients, then a
+    // hairline lattice. It is the bare field colour now, so the assertion is
+    // that none of those layers is left behind — a stray decorative div with no
+    // CSS still renders, and would not show up in a visual check.
+    renderLanding();
     const hero = document.querySelector(".hero") as HTMLElement;
+    expect(hero).toBeTruthy();
+    for (const selector of [".hero-backdrop", ".hero-lattice", ".hero-scrim", ".dream-tile"]) {
+      expect(document.querySelectorAll(selector)).toHaveLength(0);
+    }
+    // Nothing in the hero carries an inline animation delay any more.
     for (const element of hero.querySelectorAll<HTMLElement>("[style]")) {
       expect(element.style.animationDelay).toBe("");
     }

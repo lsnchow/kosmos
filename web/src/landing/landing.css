@@ -225,44 +225,9 @@
 /* --- Hero ---------------------------------------------------------------- */
 
 .hero {
-  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100svh;
-  isolation: isolate;
-}
-
-.hero-backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: var(--surface-0); }
-
-/*
- * The lattice.
- *
- * Two repeating hairlines on the field colour — the console's own idiom, where
- * surfaces separate with a 1 px line and never a shadow. It is drawn once and
- * never animated: motion behind a headline is something the eye keeps checking
- * on instead of reading past, which is exactly how the previous wall of
- * drifting gradients read.
- *
- * The radial on top lifts the centre-right a few percent so the field is not
- * perfectly flat. That is the whole effect; widening it turns it into fog.
- */
-.hero-lattice {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(70% 55% at 62% 48%, rgb(233 232 250 / 5%) 0%, rgb(27 27 39 / 0%) 70%),
-    repeating-linear-gradient(to right, var(--line-1) 0 1px, transparent 1px 12.5%),
-    repeating-linear-gradient(to bottom, var(--line-1) 0 1px, transparent 1px 25%);
-  opacity: 0.55;
-}
-
-.hero-scrim {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 14rem;
-  background: linear-gradient(to bottom, rgb(27 27 39 / 0%), var(--surface-0));
 }
 
 .hero-body {
@@ -342,59 +307,187 @@
 
 .section-card:first-of-type { border-top: 0; }
 
+/* The pillar grid draws its own top rule, so the block after it must not. */
+.pillar-grid + .section-card { border-top: 0; }
+
 @media (min-width: 768px) { .section-card { padding: 5rem var(--page-gutter); } }
 
 /* --- Pillars ------------------------------------------------------------- */
 
-.pillar-head { display: grid; gap: 2.5rem; margin-bottom: 2.5rem; }
-
-@media (min-width: 900px) {
-  .pillar-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4rem; }
+/*
+ * Four quadrants, separated by the page's hairline rather than by margin.
+ *
+ * The grid owns every rule: `gap: 1px` over a `--line-1` background paints one
+ * shared line between neighbours, so no cell can draw its own border and end up
+ * doubling one along an edge it shares.
+ */
+.pillar-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  background: var(--line-1);
+  border-top: 1px solid var(--line-1);
+  border-bottom: 1px solid var(--line-1);
 }
 
-.pillar-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+@media (min-width: 900px) {
+  .pillar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
-.pillar-number {
-  margin: 0;
-  font-size: 0.75rem;
+.pillar-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem var(--page-gutter) 2.5rem;
+  background: var(--surface-0);
+}
+
+/* --- The figure panel ---------------------------------------------------- */
+
+/*
+ * No border and no fill: the quadrant already has an edge, and a second
+ * hairline inside it would read as a frame around the graphic rather than as
+ * the graphic occupying the cell.
+ */
+.fig-panel { display: flex; flex: 1; flex-direction: column; margin: 0; }
+
+.fig-panel-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--text-dim);
 }
 
+.fig-panel-body {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 1rem 0 2rem;
+}
+
+/* --- The isometric stack ------------------------------------------------- */
+
+.iso-stack { width: 100%; max-width: 24rem; height: auto; }
+
+.iso-guide line { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 3 4; }
+
+.iso-plane polygon {
+  fill: color-mix(in srgb, var(--text-strong) 5%, transparent);
+  stroke: var(--line-3);
+  stroke-width: 1;
+}
+
+/* The top plane is the one a reader is meant to land on first. */
+.iso-plane[data-top="true"] polygon {
+  fill: color-mix(in srgb, var(--text-strong) 11%, transparent);
+  stroke: var(--line-interactive);
+}
+
+.iso-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  fill: var(--text-muted);
+}
+
+.iso-plane[data-top="true"] .iso-label { fill: var(--text-strong); }
+
+.iso-sub {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  fill: var(--text-dim);
+}
+
+.iso-number {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.14em;
+  fill: var(--text-muted);
+}
+
+.iso-marker { fill: var(--text-strong); }
+
+/* --- FIG.1 the pipeline cycle -------------------------------------------- */
+
+/*
+ * A supplied asset, self-hosted in public/figures.
+ *
+ * `screen` is load-bearing, not a polish pass: the artwork is white line work
+ * on a black field, and this page's field is the console's blue-purple
+ * charcoal. Screening takes black to nothing, so the diagram sits on the page's
+ * own surface instead of inside a black rectangle that misses the surrounding
+ * colour by an obvious margin.
+ *
+ * Wider than FIG.2's stack because the cycle is square while the stack is tall;
+ * matched on width, FIG.1 read as the smaller of the two.
+ */
+.pipe-figure {
+  width: 100%;
+  max-width: 32rem;
+  height: auto;
+  mix-blend-mode: screen;
+}
+
+/* --- The pillar's copy --------------------------------------------------- */
+
+/* Claim and action left, the three commitments right. */
+.pillar-foot { display: grid; gap: 2rem; }
+
+@media (min-width: 1200px) {
+  .pillar-foot { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem; }
+}
+
+.pillar-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+
+/* `NN Title` on one line, the number dim and set in mono beside it. */
 .pillar-heading,
 .two-tone-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
   margin: 0;
   font-family: var(--font-sans);
-  font-size: clamp(1.625rem, 3vw, 2.5rem);
+  font-size: 1.5rem;
   font-weight: 400;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.pillar-heading .pillar-number {
+  font-size: 1.375rem;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
 }
 
 .pillar-body {
-  max-width: 52ch;
+  max-width: 34ch;
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 1.0625rem;
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
-.pillar-items ul { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line-1); }
+/* One line per commitment, hung off its `N.n` key. No rules between them. */
+.pillar-items ul { display: grid; gap: 0.875rem; margin: 0; padding: 0; list-style: none; }
 
 .pillar-items li {
   display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr);
-  gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--line-1);
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
 }
 
-.pillar-item-key { font-size: 0.75rem; color: var(--text-dim); }
+.pillar-item-key { font-size: 0.8125rem; color: var(--text-dim); }
 
-.pillar-item-text { display: flex; flex-direction: column; gap: 0.25rem; }
-.pillar-item-text span:first-child { font-family: var(--font-sans); font-size: 0.9375rem; }
-.pillar-item-text span:last-child { font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.5; }
+.pillar-item-text {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text);
+}
 
 /* --- Limits and CTA ------------------------------------------------------ */
 

@@ -51,6 +51,31 @@ export function Reveal({ children, className, from = { y: 40 }, delay = 0, durat
   );
 }
 
+/**
+ * A labelled figure panel.
+ *
+ * `FIG.n` sits in the corner in mono at the dimmest ink on the page, the way a
+ * plate is numbered in a paper. The graphic fills the panel above the pillar's
+ * copy; the panel itself draws no border, because the cell it lives in already
+ * has one and a second hairline inside it would read as a frame.
+ */
+export function FigPanel({
+  index,
+  children,
+  className,
+}: {
+  index: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <figure className={cn("fig-panel", className)}>
+      <figcaption className="fig-panel-label font-mono">FIG.{index}</figcaption>
+      <div className="fig-panel-body">{children}</div>
+    </figure>
+  );
+}
+
 /** The small mono label that opens a section. */
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
   return (

@@ -45,10 +45,16 @@ export const PROTOCOL_PATH = "/api/protocol";
  *
  * Every `items` entry is a claim already made elsewhere in this file or in the
  * build spec. Nothing here is new marketing.
+ *
+ * `layers` is the same spine again, compressed for the pillar's graphic: the
+ * top three restate the three commitments beside them and the fourth names the
+ * property those three exist to produce. They are short because they are set on
+ * a plane seen at an angle, where a long string stops being legible.
  */
 export const PILLARS = [
   {
     id: "evaluate",
+    figure: "pipeline" as const,
     number: "01",
     name: "Evaluate",
     /** Rendered as a white lead-in followed by the muted remainder. */
@@ -61,9 +67,16 @@ export const PILLARS = [
       { key: "1.2", title: "Four steps, four hardware profiles", body: "Policy, world model, validity gate, judge — autoscaled independently." },
       { key: "1.3", title: "Bounded and cancellable", body: "Owner leases, orphan recovery, immutable attempt artifacts." },
     ],
+    layers: [
+      { label: "EPISODE LEDGER" },
+      { label: "FOUR PROFILES" },
+      { label: "BOUNDED RUNS", sub: "CANCELLABLE" },
+      { label: "THROUGHPUT", sub: "1,500 EPISODES" },
+    ],
   },
   {
     id: "reliability",
+    figure: "stack" as const,
     number: "02",
     name: "Reliability",
     lead: "Reliability.",
@@ -75,9 +88,16 @@ export const PILLARS = [
       { key: "2.2", title: "Cluster bootstrap on tasks", body: "On tasks, not episodes — the unit that actually varies." },
       { key: "2.3", title: "Pre-registered thresholds", body: "In a timestamped commit, before the run that tests them." },
     ],
+    layers: [
+      { label: "WILSON INTERVALS" },
+      { label: "CLUSTER BOOTSTRAP" },
+      { label: "PRE-REGISTERED", sub: "THRESHOLDS" },
+      { label: "PRECISION", sub: "REPEATABILITY" },
+    ],
   },
   {
     id: "evidence",
+    figure: "stack" as const,
     number: "03",
     name: "Evidence",
     lead: "Evidence.",
@@ -89,9 +109,16 @@ export const PILLARS = [
       { key: "3.2", title: "Coverage and missing-outcome bounds", body: "Horowitz–Manski bounds beside complete-case rates." },
       { key: "3.3", title: "Unsupported inference stays unavailable", body: "Indeterminate rather than approximated under a false name." },
     ],
+    layers: [
+      { label: "PROVENANCE" },
+      { label: "COVERAGE BOUNDS" },
+      { label: "NO SUBSTITUTES", sub: "INDETERMINATE" },
+      { label: "TRACEABILITY", sub: "CITED OR PENDING" },
+    ],
   },
   {
     id: "console",
+    figure: "stack" as const,
     number: "04",
     name: "Console",
     lead: "Console.",
@@ -103,7 +130,31 @@ export const PILLARS = [
       { key: "4.2", title: "Cancel mid-matrix", body: "Cancellation is tracked through the outbox and the ledger alike." },
       { key: "4.3", title: "Synthetic mode is labelled", body: "Fixture episodes are shown separately from real clips. Always." },
     ],
+    layers: [
+      { label: "EVENT STREAM" },
+      { label: "CANCEL MID-RUN" },
+      { label: "LABELLED MODE", sub: "SYNTHETIC" },
+      { label: "OBSERVABILITY", sub: "LIVE" },
+    ],
   },
+] as const;
+
+/**
+ * The four Chain steps as FIG.1 draws them: top, left, right, bottom.
+ *
+ * `note` is the dimension each step contributes to the matrix, so the figure
+ * states 6 x 5 x 50 by naming its factors rather than printing the product.
+ * `cmd` is the CLI verb the step actually runs, not an illustration of one.
+ *
+ * Kept beside `CHAIN_STEPS` rather than derived from it: that constant carries
+ * the hardware profile each step is scaled on, which is the right detail for a
+ * spec table and the wrong one for a label read at a glance.
+ */
+export const PIPELINE_STAGES = [
+  { key: "policy", label: "POLICY", note: "6 policies", cmd: "run policies" },
+  { key: "world-model", label: "WORLD MODEL", note: "5 tasks", cmd: "simulate tasks" },
+  { key: "gate", label: "VALIDITY GATE", note: "50 rollouts", cmd: "check validity" },
+  { key: "judge", label: "JUDGE", note: "episode metrics", cmd: "score & log" },
 ] as const;
 
 export const NAV_LINKS = PILLARS.map((pillar) => ({
