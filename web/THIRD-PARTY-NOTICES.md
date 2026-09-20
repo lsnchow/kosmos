@@ -1,5 +1,16 @@
 # Third-party notices
 
+## React Bits (hero and closer backdrop)
+
+`web/src/landing/CRTWarp.tsx` adapts the **CRTWarp** component from React Bits
+(https://reactbits.dev). The shader is the published one; the wrapper differs in
+four ways, each noted in the file's own header: it freezes under
+`prefers-reduced-motion` rather than slowing, it renders nothing when WebGL is
+unavailable instead of failing, it is `aria-hidden`, and it reads visibility
+from the element's rect each frame rather than from an `IntersectionObserver`.
+
+`three` is a direct dependency, so nothing here is fetched from a CDN.
+
 ## Mirage (design language and landing-page patterns)
 
 Nightshift's console theme and landing page adapt the visual language of **Mirage**

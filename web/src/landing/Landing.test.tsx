@@ -159,21 +159,37 @@ describe("landing page", () => {
     }
   });
 
-  it("gives the hero no backdrop layer at all", () => {
-    // The hero has carried a video, then a wall of drifting gradients, then a
-    // hairline lattice. It is the bare field colour now, so the assertion is
-    // that none of those layers is left behind — a stray decorative div with no
-    // CSS still renders, and would not show up in a visual check.
+  it("gives the hero a decorative backdrop that announces nothing", () => {
+    // The hero has carried a CDN video, a wall of drifting gradients, and a
+    // hairline lattice. It carries a locally compiled shader now. Two things
+    // are asserted: that the dead layers did not survive, and that the live one
+    // is hidden from assistive technology — a canvas of moving phosphor holds
+    // no information, and announcing it is noise.
     renderLanding();
     const hero = document.querySelector(".hero") as HTMLElement;
     expect(hero).toBeTruthy();
-    for (const selector of [".hero-backdrop", ".hero-lattice", ".hero-scrim", ".dream-tile"]) {
+    for (const selector of [".hero-lattice", ".hero-scrim", ".dream-tile"]) {
       expect(document.querySelectorAll(selector)).toHaveLength(0);
     }
+    const backdrop = hero.querySelector(".hero-backdrop") as HTMLElement;
+    expect(backdrop).toBeTruthy();
+    expect(backdrop).toHaveAttribute("aria-hidden", "true");
+    expect(backdrop.textContent).toBe("");
+
     // Nothing in the hero carries an inline animation delay any more.
     for (const element of hero.querySelectorAll<HTMLElement>("[style]")) {
       expect(element.style.animationDelay).toBe("");
     }
+  });
+
+  it("renders the page without WebGL rather than failing", () => {
+    // jsdom has no WebGL, so constructing the renderer throws and the component
+    // takes its fallback path. That is the case this asserts: the heading is
+    // still on screen and the backdrop is empty — which is also what a
+    // locked-down browser or a refusing driver produces.
+    renderLanding();
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(document.querySelector(".hero-backdrop")?.querySelector("canvas")).toBeNull();
   });
 
 });

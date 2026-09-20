@@ -225,9 +225,35 @@
 /* --- Hero ---------------------------------------------------------------- */
 
 .hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100svh;
+}
+
+/* The backdrop sits behind everything and takes no pointer events, so the nav,
+   the buttons and the scroll cue behave as if it were not there. The shader's
+   own pointer listener is bound to the section above it, so it still bends
+   toward the cursor. */
+.hero-backdrop,
+.cta-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero-backdrop canvas,
+.cta-backdrop canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hero > *:not(.hero-backdrop) {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-body {
@@ -510,7 +536,8 @@
 .limit-card h3 { margin: 0; font-family: var(--font-sans); font-size: 0.9375rem; font-weight: 500; }
 .limit-card p { margin: 0; font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.55; }
 
-.cta-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
+.cta-section { position: relative; overflow: hidden; }
+.cta-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1.25rem; }
 
 /* --- Footer -------------------------------------------------------------- */
 

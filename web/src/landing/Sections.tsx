@@ -17,6 +17,7 @@ import {
   CONSOLE_PATH,
   LIVE_PATH,
 } from "./content";
+import { CRTWarp } from "./CRTWarp";
 import { ConsoleMatrix } from "./figures/ConsoleMatrix";
 import { IsoStack } from "./figures/IsoStack";
 import { ProvenanceFunnel } from "./figures/ProvenanceFunnel";
@@ -123,6 +124,8 @@ export function LimitsSection() {
 export function CtaSection() {
   return (
     <SectionCard className="cta-section">
+      {/* The same field the hero opens on, so the page closes where it began. */}
+      <CRTWarp className="cta-backdrop" />
       <Reveal className="cta-inner">
         <h2 className="pillar-heading">
           <span className="text-fg-strong">We measured the ruler</span>{" "}

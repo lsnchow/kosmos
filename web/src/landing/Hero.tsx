@@ -7,11 +7,13 @@
  * anchors and two buttons collapse to a scrollable row without one.
  *
  * Nothing here fetches, and nothing here is remote. Every string is a constant
- * in `content.ts` and the backdrop is CSS, so the hero renders identically with
+ * in `content.ts` and the backdrop is a locally compiled shader, so the hero
+ * renders identically with
  * no network — a landing page that goes blank when the API is the thing being
  * demoed has failed at the one moment it matters.
  */
 import { Link } from "react-router-dom";
+import { CRTWarp } from "./CRTWarp";
 import { Glyph } from "../components/Terminal";
 import { BUILT_ON, CONSOLE_PATH, LIVE_PATH, NAV_LINKS, PRODUCT, PROTOCOL_PATH } from "./content";
 import { PillButton } from "./Pieces";
@@ -64,17 +66,17 @@ export function Hero() {
   return (
     <div className="hero">
       {/*
-        There is no backdrop element.
+        The backdrop is a CRT phosphor field on the GPU, not a video.
 
-        It was a remote MP4, then a wall of drifting gradients, then a hairline
-        lattice. With the grid gone the hero is the field colour and nothing
-        else — which `.kosmos-landing` already paints, so a layer here would
-        only restate it. The scrim went with it: it faded surface-0 into
-        surface-0, which is a gradient between a colour and itself.
-
-        The handoff to the first section is the same hairline every other
-        section boundary uses.
+        It carried a remote MP4 once, which is the thing this page must never do
+        again: a landing page that goes blank when the network is the thing
+        being demoed has failed at the one moment it matters. This is `three` as
+        a dependency and a shader compiled locally, so it renders with no
+        network. It freezes under `prefers-reduced-motion`, stops when scrolled
+        past, and renders nothing at all if WebGL is unavailable.
       */}
+      <CRTWarp className="hero-backdrop" />
+
       <Nav />
 
       <div className="hero-body">
