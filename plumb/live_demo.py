@@ -181,12 +181,12 @@ class CreateSessionInput(BaseModel):
         if self.source_video_id is not None and self.mode != "manual":
             raise ValueError("source_video_id is supported only for a manual fresh-image-reconditioned session")
         expected = {"drawer": "Close the drawer", "pot": "Put the pot to the left of the purple item."}
-        if self.starting_scene and (self.source_video_id or self.mode != "policy" or self.prompt != expected[self.starting_scene]):
-            raise ValueError("Starting scene must match its supported task without a video branch")
+        if self.starting_scene and (self.source_video_id or self.mode != "policy" or not self.prompt):
+            raise ValueError("Starting scenes require a policy-mode text instruction without a video branch")
         if self.starting_scene == "pot" and self.world_model != "cosmos":
             raise ValueError("Pot fixture requires Cosmos")
-        if self.auto_assess and (self.starting_scene not in expected or self.steps not in (16,32)):
-            raise ValueError("automatic assessment requires a supported rollout")
+        if self.auto_assess and (self.starting_scene not in expected or self.steps not in (16,32) or self.prompt != expected[self.starting_scene]):
+            raise ValueError("automatic assessment requires its exact supported scene instruction")
         if self.world_model and (self.starting_scene not in expected or self.steps not in (16,32)):
             raise ValueError("Cosmos requires 16 or 32 actions")
         if self.steps == 32 and (self.world_model != "cosmos" or self.starting_scene != "pot"):
@@ -700,7 +700,7 @@ class LiveDemoService:
         timings = []
         for chunk in range(chunks):
             input_hash = _sha(image)
-            payload = {"png_base64": base64.b64encode(image).decode(), "sha256": input_hash, "prompt": session["prompt"], "actions": actions, "seed": session["seed"] + chunk}
+            payload = {"png_base64": base64.b64encode(image).decode(), "sha256": input_hash, "prompt": session["prompt"], "scene": "pot" if pot else "drawer", "actions": actions, "seed": session["seed"] + chunk}
             terminal = None
             local_count = 0
             for event in self.transport.cosmos(payload):

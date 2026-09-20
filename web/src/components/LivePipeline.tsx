@@ -3,6 +3,7 @@ import { api, type DemoSession, type DemoStatus } from "../lib/api";
 import { cn } from "../lib/utils";
 import { DemoJudgePanel } from "./DemoJudgePanel";
 import { demoHeuristic } from "../lib/demoHeuristic";
+import { TextConditioningChat } from "./TextConditioningChat";
 
 const active = (state?: string) => ["queued", "initializing", "running"].includes(state ?? "");
 const terminal = (state?: string) => ["completed", "abstained", "failed", "interrupted"].includes(state ?? "");
@@ -20,7 +21,9 @@ export function LivePipeline() {
   const [seed, setSeed] = useState("0");
   const [length, setLength] = useState(32);
   const pot = scene === "pot";
-  const task = pot ? "Put the pot to the left of the purple item." : "Close the drawer";
+  const defaultTask = pot ? "Put the pot to the left of the purple item." : "Close the drawer";
+  const [task, setTask] = useState(defaultTask);
+  const usesTestedInstruction = task === defaultTask;
   const running = active(session?.state);
   const awaitingJudge = Boolean(session?.auto_assess && !["blocked", "error"].includes(session.state) && !session.assessment_error && !terminal(session.judgment?.status));
   const complete = session?.state === "completed";
@@ -56,7 +59,7 @@ export function LivePipeline() {
     if (!/^\d+$/.test(seed) || Number(seed) > 2147483647) { setError("Use an integer seed from 0 to 2147483647."); return; }
     setBusy(true); setError(undefined);
     try {
-      const next = await api.createDemoSession({ title: `${pot ? "Move bowl / pot" : "Drawer probe"} · ${length} actions · seed ${seed}`, prompt: task, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: true, seed: Number(seed) });
+      const next = await api.createDemoSession({ title: `${pot ? "Move bowl / pot" : "Drawer probe"} · ${length} actions · seed ${seed}`, prompt: task, mode: "policy", steps: length, starting_scene: scene, world_model: "cosmos", auto_assess: usesTestedInstruction, seed: Number(seed) });
       setSession(next);
       window.dispatchEvent(new Event("demo-sessions-changed"));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not start Cosmos generation."); }
@@ -92,20 +95,21 @@ export function LivePipeline() {
         <h2 id="live-pipeline-title" className="text-balance">Generate with Cosmos</h2>
         <p className="judge-muted text-pretty">{task} · {length} supplied actions · {diffusionTotal} diffusion steps</p>
       </div>
-      <button className="button button-primary" onClick={() => void start()} disabled={busy || running || awaitingJudge || !status?.available || status.world_model !== "cosmos"}>Generate</button>
+      <div className="header-actions"><TextConditioningChat instruction={task} defaultInstruction={defaultTask} scene={scene} disabled={busy || running || awaitingJudge} onInstructionChange={setTask} /><button className="button button-primary" onClick={() => void start()} disabled={busy || running || awaitingJudge || !status?.available || status.world_model !== "cosmos"}>Generate</button></div>
     </div>
     <details className="judge-details" open={!session}><summary>Run setup</summary><div className="policy-fields">
-      <div className="policy-field"><label htmlFor="cosmos-scenario">Scenario</label><select id="cosmos-scenario" value={scene} disabled={busy || running || awaitingJudge} onChange={(event) => { setScene(event.target.value as "pot" | "drawer"); setLength(event.target.value === "pot" ? 32 : 16); setSession(undefined); }}>
+      <div className="policy-field"><label htmlFor="cosmos-scenario">Scenario</label><select id="cosmos-scenario" value={scene} disabled={busy || running || awaitingJudge} onChange={(event) => { const nextScene = event.target.value as "pot" | "drawer"; setScene(nextScene); setTask(nextScene === "pot" ? "Put the pot to the left of the purple item." : "Close the drawer"); setLength(nextScene === "pot" ? 32 : 16); setSession(undefined); }}>
         <option value="pot">Move bowl / pot · recorded trajectory</option>
         <option value="drawer">Drawer · manual action probe</option>
       </select></div>
       <div className="policy-field"><label htmlFor="cosmos-seed">Variation seed</label><input id="cosmos-seed" type="number" min={0} max={2147483647} step={1} value={seed} disabled={busy || running || awaitingJudge} onChange={(event) => { setSeed(event.target.value); setSession(undefined); }} /><p className="judge-muted">Seed 0 matches the previous setup. Change it for a new sampled variation.</p></div>
       {pot && <div className="policy-field"><label htmlFor="cosmos-length">Rollout length</label><select id="cosmos-length" value={length} disabled={busy || running || awaitingJudge} onChange={(event) => { setLength(Number(event.target.value)); setSession(undefined); }}><option value={32}>6.6 seconds · two generated chunks</option><option value={16}>3.4 seconds · one generated chunk</option></select><p className="judge-muted">The longer mode replays the action plan from the first chunk’s final predicted frame.</p></div>}
     </div></details>
+    {!usesTestedInstruction && <p className="judge-muted text-pretty">Custom text condition selected. The next rollout will send it to Cosmos; automatic judging is off because the saved rubric only evaluates “{defaultTask}”.</p>}
     {(!status?.available || status.world_model !== "cosmos") && <p className="judge-muted text-pretty">Cosmos worker is warming up or offline. Saved runs remain below.</p>}
     <ol className="pipeline-chain" aria-label="Actions to Cosmos to judge">
-      <li className="pipeline-node"><span className="eyebrow">01 · ACTION INPUT</span><h3 className="text-balance">{pot ? "Recorded trajectory" : "Supplied actions"}</h3><p>{pot ? "Matching bowl/pot scene and recorded actions" : "Recorded starting pose + manual right action sequence"}</p><small>This Cosmos probe does not call a VLA policy.</small></li>
-      <li className={cn("pipeline-node", running && "pipeline-active")}><span className="eyebrow">02 · WORLD MODEL</span><h3 className="text-balance">Cosmos3-Nano</h3><p>Scene + actions → new video</p><strong>{running ? `${progress?.stage ?? "Preparing"} · ${generationSteps}/${diffusionTotal}` : complete ? "New video saved" : "Ready for a fresh generation"}</strong></li>
+      <li className="pipeline-node"><span className="eyebrow">01 · ACTION INPUT</span><h3 className="text-balance">{pot ? "Recorded trajectory" : "Supplied actions"}</h3><p>{pot ? "Matching bowl/pot scene and recorded actions" : "Recorded starting pose + manual right action sequence"}</p><small>Action input is supplied; this probe does not call a VLA policy.</small></li>
+      <li className={cn("pipeline-node", running && "pipeline-active")}><span className="eyebrow">02 · WORLD MODEL</span><h3 className="text-balance">Cosmos3-Nano</h3><p>Scene + text + actions → new video</p><strong>{running ? `${progress?.stage ?? "Preparing"} · ${generationSteps}/${diffusionTotal}` : complete ? "New video saved" : "Ready for a fresh generation"}</strong></li>
       <li className={cn("pipeline-node", judging && "pipeline-active")}><span className="eyebrow">03 · VLM JUDGE</span><h3 className="text-balance">Qwen + semantic LoRA</h3><p>Completed video → assessment</p><strong>{judging ? `Assessing · ${judgedSamples}/5 samples complete` : judgment ? `Assessment ${judgment.status}` : "Starts after the video is saved"}</strong></li>
     </ol>
     {error && <p role="alert" className="inline-error">{error}</p>}
@@ -117,6 +121,6 @@ export function LivePipeline() {
     </div>}
     {!complete && <div className="live-frame-stage">{latest?.url ? <img src={latest.url} alt={frameCount ? `New Cosmos frame ${frameCount}` : "Starting scene"} /> : <div className="live-frame-empty">Press Generate to create a new Cosmos video.</div>}<p>{frameCount ? `${frameCount} newly generated frames received` : "Starting scene only · no generated video yet"}</p></div>}
     {done && <section className="run-summary" aria-label="Run summary"><h3 className="text-balance">Run summary</h3><p className="text-pretty">{judgment?.error?.message ?? session?.assessment_error ?? session?.error ?? (demoHeuristic(judgment) ? `Demo heuristic · ${demoHeuristic(judgment)?.label}` : judgment?.result?.assessment?.completion) ?? "Generation finished"}</p><dl className="performance-grid tabular-nums">{summary.map(([label,value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></section>}
-    {complete && session?.latest_video_url && <DemoJudgePanel automatic providedJudgment={judgment} clipOverride={{id:`live-demo:${session.id}`,title:session.title,task_id:pot ? "demo_pot_left_v1" : "close_drawer",task_label:session.prompt,video_url:session.latest_video_url,action_source:"Supplied action trajectory",controller_identity:"Cosmos3-Nano world model",scene_reference_role:"Initial scene"}} />}
+    {complete && session?.latest_video_url && (session.auto_assess ? <DemoJudgePanel automatic providedJudgment={judgment} clipOverride={{id:`live-demo:${session.id}`,title:session.title,task_id:pot ? "demo_pot_left_v1" : "close_drawer",task_label:session.prompt,video_url:session.latest_video_url,action_source:"Supplied action trajectory",controller_identity:"Cosmos3-Nano world model",scene_reference_role:"Initial scene"}} /> : <p className="judge-muted text-pretty">Custom-condition rollout saved. No automatic judge was submitted because its fixed rubric does not match this instruction.</p>)}
   </section>;
 }

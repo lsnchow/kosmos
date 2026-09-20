@@ -60,8 +60,9 @@ class Handler(BaseHTTPRequestHandler):
             image = Image.open(io.BytesIO(raw)).convert("RGB")
             rows = request["actions"]
             assert len(rows) == 16 and all(len(row) == 10 and all(math.isfinite(float(v)) for v in row) for row in rows)
-            assert request["prompt"] in {"Close the drawer", "Put the pot to the left of the purple item."}
-            resolution = 480 if request["prompt"].startswith("Put the pot") else 256
+            assert isinstance(request["prompt"], str) and 1 <= len(request["prompt"].strip()) <= 1000
+            assert request.get("scene") in {"drawer", "pot"}
+            resolution = 480 if request["scene"] == "pot" else 256
         except Exception:
             self.send_error(422); return
         self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
