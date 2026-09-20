@@ -23,25 +23,21 @@ export const PRODUCT = {
   /**
    * The product one-liner.
    *
-   * Two sentences: the bottleneck, and what replaces it.
+   * Two sentences: what it replaces, and what only it reports.
    *
    * The first is the constraint a robotics team actually lives with — every
-   * comparison queues for the same arm — rather than the abstract cost of
-   * testing. The second says what is produced: not that a ranking exists, but
-   * that it separates a real difference from noise, which is the only reason
-   * to act on one.
+   * comparison queues for the same arm — compressed into the one comparison
+   * that lands: a week becomes a minute. The second is the differentiator.
+   * Three prior systems already score policies in a world model; all three
+   * report accuracy and none reports whether the answer repeats. Saying that
+   * nobody else measures it is the claim the reliability pillar then backs.
    *
-   * "The whole matrix" is deliberate. The unit of work here is not a single
-   * inference but a fanned-out grid of them across four stages and four
-   * hardware profiles, and that is the thing worth saying out loud.
-   *
-   * It carries no figure. The proof lives on the console overview, where the
-   * physics simulator reports 4% on `Close the drawer` against the real
-   * robot's 92%; a number in a subhead that the page cannot yet substantiate
-   * would be a claim rather than a promise.
+   * "When nothing changes" is load-bearing. It names the specific thing being
+   * measured — rerun variance under a fixed protocol — rather than gesturing
+   * at confidence in general.
    */
   promise:
-    "Every policy comparison competes for the same robot. Kosmos runs the whole matrix in a world model and reports which differences survive their error bars.",
+    "A week on a shared robot arm becomes one minute. Kosmos also reports how much its own answer moves when nothing changes, which is the part nobody else measures.",
   tagline: "Policy evaluation with error bars.",
 } as const;
 

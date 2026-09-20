@@ -18,7 +18,7 @@ describe("landing page", () => {
     // landing page that goes blank when the API is the thing being demoed.
     renderLanding();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      /Evaluate a robot policy without a robot/i,
+      /Compare robot AI models without a robot/i,
     );
   });
 
@@ -32,16 +32,18 @@ describe("landing page", () => {
     const toConsole = screen
       .getAllByRole("link", { name: /Open the console/i })
       .map((link) => link.getAttribute("href"));
-    expect(toConsole.length).toBeGreaterThanOrEqual(2);
+    // One fewer since the hero's pair was removed: the pillar action and the
+    // closing block remain, and both must still resolve.
+    expect(toConsole.length).toBeGreaterThanOrEqual(1);
     for (const href of toConsole) expect(href).toBe("/console");
 
-    // "Start a live run" appears twice on purpose — once as the fourth
-    // pillar's action and once in the closing block — so this asserts every
-    // one of them lands on /live rather than that there is only one.
+    // "Start a live run" appears more than once on purpose — the fourth
+    // pillar's action and the closing block — so this asserts every one of
+    // them lands on /live rather than that there is only one.
     const toLive = screen
       .getAllByRole("link", { name: /(Watch|Start) a live run/i })
       .map((link) => link.getAttribute("href"));
-    expect(toLive.length).toBeGreaterThanOrEqual(3);
+    expect(toLive.length).toBeGreaterThanOrEqual(2);
     for (const href of toLive) expect(href).toBe("/live");
   });
 
@@ -108,14 +110,39 @@ describe("landing page", () => {
     }
   });
 
-  it("keeps every limit on the page at full weight", () => {
-    // With the figures gone this block is the only place the page states a
-    // caveat about itself, so it is checked in full rather than sampled.
+  it("keeps the masthead hidden until the reader is past the hero", () => {
+    // The hero already says the product's name at full size and carries both of
+    // the bar's actions, so a bar over it is a second copy of what the reader
+    // is looking at. It is rendered either way — the state is an attribute, not
+    // a mount — so the links stay in the document and in the tab order only
+    // once the stylesheet makes it visible.
     renderLanding();
-    const section = document.querySelector("#limits") as HTMLElement;
+    const nav = document.querySelector(".landing-nav") as HTMLElement;
+    expect(nav).toBeTruthy();
+    expect(nav.dataset.visible).toBe("false");
+
+    // The sentinel it keys off sits on the hero's bottom edge.
+    const sentinel = document.querySelector(".nav-sentinel");
+    expect(sentinel).toBeTruthy();
+    expect(sentinel?.previousElementSibling).toHaveClass("hero");
+  });
+
+  it("mounts the masthead outside the hero so it outlasts it", () => {
+    // Sticky inside `.hero` it scrolled away with the hero. Nesting is the bug,
+    // so the structure is what gets asserted rather than the CSS.
+    renderLanding();
+    const nav = document.querySelector(".landing-nav") as HTMLElement;
+    expect(nav.closest(".hero")).toBeNull();
+  });
+
+  it("no longer carries the limits section", () => {
+    // Section 05 was removed from the page. Asserting its absence rather than
+    // deleting the test outright: a stray #limits node with no styling still
+    // renders and would not show up in a visual check.
+    renderLanding();
+    expect(document.querySelector("#limits")).toBeNull();
     for (const limit of LIMITS) {
-      expect(within(section).getByText(limit.title)).toBeInTheDocument();
-      expect(within(section).getByText(limit.body)).toBeInTheDocument();
+      expect(screen.queryByText(limit.title)).not.toBeInTheDocument();
     }
   });
 

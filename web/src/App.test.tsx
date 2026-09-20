@@ -392,7 +392,7 @@ describe("Kosmos pages render their beats", () => {
 
   it("never uses a phrase from the never-say list", async () => {
     for (const [route, title] of [
-      ["/", /Evaluate a robot policy/i],
+      ["/", /Compare robot AI models/i],
       ["/console", /^Watch robot futures$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
@@ -426,7 +426,7 @@ describe("Kosmos pages render their beats", () => {
 
   it("has no axe violations on any page", { timeout: 120_000 }, async () => {
     for (const [route, title] of [
-      ["/", /Evaluate a robot policy/i],
+      ["/", /Compare robot AI models/i],
       ["/console", /^Watch robot futures$/i],
       ["/live", /^Developer tools$/i],
       ["/results", /^Saved runs$/i],
