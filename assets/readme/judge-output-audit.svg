@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="530" viewBox="0 0 1100 530" role="img" aria-labelledby="title desc">
+  <title id="title">Paired base and LoRA output audit</title>
+  <desc id="desc">The LoRA adapter improves bare JSON output and reduces generated tokens and greedy decode latency, while semantic agreement with the base model is zero of nine.</desc>
+  <style>
+    .bg{fill:#101116}.panel{fill:#171820;stroke:#343642}.title{fill:#f2f0ff;font:600 25px Arial,sans-serif}.sub{fill:#b6b4c5;font:15px Arial,sans-serif}.label{fill:#d5d2e3;font:600 14px Arial,sans-serif}.value{fill:#f2f0ff;font:600 18px Arial,sans-serif}.note{fill:#a6a4b2;font:13px Arial,sans-serif}.base{fill:#74707f}.adapter{fill:#d6d0ff}.warn{fill:#f19c8d}
+  </style>
+  <rect class="bg" width="1100" height="530" rx="16"/>
+  <text class="title" x="52" y="58">Paired base vs. LoRA output audit</text>
+  <text class="sub" x="52" y="84">9 clips excluded before pilot training · deterministic greedy decoding · same frames, prompt, and model revision</text>
+  <rect class="panel" x="52" y="118" width="476" height="330" rx="12"/>
+  <rect class="panel" x="572" y="118" width="476" height="330" rx="12"/>
+  <text class="label" x="80" y="154">OUTPUT CONTRACT</text>
+  <text class="note" x="80" y="181">Bare JSON responses</text>
+  <rect class="base" x="80" y="196" width="0" height="28" rx="4"/>
+  <rect class="adapter" x="80" y="236" width="350" height="28" rx="4"/>
+  <text class="value" x="440" y="218">0 / 9</text><text class="value" x="440" y="258">9 / 9</text>
+  <text class="note" x="80" y="306">Schema-valid responses</text>
+  <rect class="base" x="80" y="321" width="311" height="28" rx="4"/>
+  <rect class="adapter" x="80" y="361" width="311" height="28" rx="4"/>
+  <text class="value" x="402" y="343">8 / 9</text><text class="value" x="402" y="383">8 / 9</text>
+  <text class="note" x="80" y="422">Base</text><circle class="base" cx="123" cy="417" r="6"/>
+  <text class="note" x="166" y="422">LoRA</text><circle class="adapter" cx="207" cy="417" r="6"/>
+  <text class="label" x="600" y="154">GREEDY DECODE</text>
+  <text class="note" x="600" y="181">Mean generated tokens</text>
+  <rect class="base" x="600" y="196" width="350" height="28" rx="4"/>
+  <rect class="adapter" x="600" y="236" width="259" height="28" rx="4"/>
+  <text class="value" x="961" y="218">86.8</text><text class="value" x="870" y="258">64.2</text>
+  <text class="note" x="600" y="306">Mean decode time</text>
+  <rect class="base" x="600" y="321" width="350" height="28" rx="4"/>
+  <rect class="adapter" x="600" y="361" width="301" height="28" rx="4"/>
+  <text class="value" x="961" y="343">1.851 s</text><text class="value" x="912" y="383">1.589 s</text>
+  <text class="note" x="600" y="422">26% fewer tokens · 14% lower mean decode time</text>
+  <rect x="52" y="470" width="996" height="1" fill="#343642"/>
+  <circle class="warn" cx="65" cy="498" r="6"/><text class="note" x="80" y="503">Semantic agreement with the paired base output: 0 / 9. This is an output-format and latency result, not a semantic-quality gain.</text>
+</svg>

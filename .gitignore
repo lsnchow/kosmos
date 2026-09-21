@@ -6,6 +6,7 @@ __pycache__/
 .plumb-ui-smoke/
 *.egg-info/
 .DS_Store
+.kosmos-local/
 .env
 .env.*
 !.env.example
