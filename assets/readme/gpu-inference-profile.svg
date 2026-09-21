@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" role="img" aria-labelledby="title desc">
+  <title id="title">GPU-backed inference profile</title>
+  <desc id="desc">Slurm allocation hours by GPU class and observed per-call inference latency with peak GPU memory for OpenVLA, IRASim, Cosmos, and a Qwen VLM judge.</desc>
+  <style>
+    .bg{fill:#101116}.panel{fill:#171820;stroke:#343642}.title{fill:#f2f0ff;font:600 25px Arial,sans-serif}.sub{fill:#b6b4c5;font:15px Arial,sans-serif}.label{fill:#d5d2e3;font:600 14px Arial,sans-serif}.value{fill:#f2f0ff;font:600 17px Arial,sans-serif}.note{fill:#a6a4b2;font:13px Arial,sans-serif}.h100{fill:#8f88b7}.h200{fill:#d6d0ff}.latency{fill:#77b7c8}.line{stroke:#343642;stroke-width:1}
+  </style>
+  <rect class="bg" width="1100" height="560" rx="16"/>
+  <text class="title" x="52" y="58">GPU-backed inference profile</text>
+  <text class="sub" x="52" y="84">Measured Sep. 18–21 · allocation accounting plus selected single-request inference profiles</text>
+  <rect class="panel" x="52" y="118" width="360" height="370" rx="12"/>
+  <rect class="panel" x="444" y="118" width="604" height="370" rx="12"/>
+  <text class="label" x="80" y="154">ALLOCATED GPU-HOURS</text>
+  <text class="note" x="80" y="181">46.17 total across 44 primary allocations</text>
+  <rect class="h100" x="80" y="210" width="270" height="48" rx="5"/>
+  <rect class="h200" x="80" y="276" width="26" height="48" rx="5"/>
+  <text class="value" x="80" y="248">H100 · 42.17 h</text>
+  <text class="value" x="120" y="314">H200 · 4.01 h</text>
+  <text class="note" x="80" y="365">20 completed diagnostic jobs</text>
+  <text class="note" x="80" y="388">Remaining allocations include bounded</text>
+  <text class="note" x="80" y="408">demo workers, cancelled replacements,</text>
+  <text class="note" x="80" y="428">and deliberately failed probes.</text>
+  <text class="label" x="472" y="154">SELECTED INFERENCE LATENCY</text>
+  <text class="note" x="472" y="181">Bar scale: 0–30 seconds · peak memory shown at right</text>
+  <line class="line" x1="472" y1="210" x2="970" y2="210"/>
+  <text class="note" x="472" y="202">0 s</text><text class="note" x="940" y="202">30 s</text>
+  <text class="label" x="472" y="245">OpenVLA</text><rect class="latency" x="575" y="228" width="14" height="28" rx="4"/><text class="value" x="602" y="249">0.836 s</text><text class="note" x="850" y="249">15.5 GiB · 7-D action</text>
+  <text class="label" x="472" y="305">IRASim</text><rect class="latency" x="575" y="288" width="42" height="28" rx="4"/><text class="value" x="630" y="309">2.55 s</text><text class="note" x="850" y="309">3.52 GiB · 2 frames</text>
+  <text class="label" x="472" y="365">Cosmos</text><rect class="latency" x="575" y="348" width="75" height="28" rx="4"/><text class="value" x="663" y="369">4.52 s</text><text class="note" x="850" y="369">36.5 GiB · 17 frames</text>
+  <text class="label" x="472" y="425">Qwen judge</text><rect class="latency" x="575" y="408" width="486" height="28" rx="4"/><text class="value" x="850" y="429">29.3 s · 16.9 GiB · 5 samples</text>
+  <rect x="52" y="510" width="996" height="1" fill="#343642"/>
+  <text class="note" x="52" y="538">These are GPU-backed diagnostics, not RL training results or policy-quality comparisons.</text>
+</svg>

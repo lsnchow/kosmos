@@ -28,7 +28,6 @@ engineering gain from an evaluation-quality claim.
 Read [the evaluation record](docs/EVALUATION.md) for the audit design, raw
 limitations, and the next valid experiment.
 
-
 ![Kosmos console](assets/readme/kosmos-console.jpg)
 
 ## Core Architecture
@@ -42,7 +41,6 @@ flowchart LR
   J --> L[SQLite ledger + artifacts]
 ```
 
-
 ## Tech Stack
 
 | Area | Implementation |
@@ -53,6 +51,23 @@ flowchart LR
 | Evaluation | Structured VLM judgments, multi-sample quorum logic, artifact preservation, and calibration tooling. |
 | Frontend | React/Vite console for generated rollouts, persisted results, and debugging provenance. |
 | Deployment design | A Baseten Chains topology with isolated policy, world-model, validation, and judge stages. It is deployment code, not a claim of a production deployment. |
+
+## Measured Compute Profile
+
+Sep. 18–21 Slurm accounting recorded **46.17 allocated GPU-hours** across 44
+primary GPU allocations: 42.17 H100 GPU-hours and 4.01 H200 GPU-hours. The
+allocation total includes exploratory probes, time-bounded live workers, and
+cancelled replacements; it is an engineering-accounting figure, not benchmark
+throughput.
+
+![GPU-backed inference profile](assets/readme/gpu-inference-profile.svg)
+
+| GPU-backed path | Observed work | Inference time | Peak memory |
+| --- | --- | ---: | ---: |
+| OpenVLA | One native 7-D action | 0.836 s | 15.5 GiB |
+| IRASim | One image-conditioned action → two frames | 2.55 s | 3.52 GiB |
+| Cosmos | 16 actions → 17 generated frames | 4.52 s | 36.5 GiB |
+| Qwen VLM judge | Five sampled judgments | 29.3 s | 16.9 GiB |
 
 ## Run locally
 

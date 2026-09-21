@@ -3,6 +3,28 @@
 Kosmos records model outputs and evaluation evidence separately. The distinction
 matters: a model can become easier to serve without becoming a better evaluator.
 
+## GPU-backed inference profile
+
+Slurm accounting from Sep. 18–21 recorded 46.17 allocated GPU-hours: 42.17 on
+H100s and 4.01 on H200s. This spans 44 primary allocations across diagnostics,
+conversion, replay, live workers, and pilot work. Twenty diagnostic jobs
+completed; the remainder includes deliberate failed probes, cancelled
+replacements, and time-bounded presentation workers. Allocation-hours measure
+engineering work, not policy-quality or evaluation throughput.
+
+| Path | Measured unit | Inference time | Peak GPU memory |
+| --- | --- | ---: | ---: |
+| OpenVLA | One native 7-D action | 0.836 s | 15.5 GiB |
+| IRASim | One image-conditioned action → two frames | 2.55 s | 3.52 GiB |
+| Cosmos | 16 actions → 17 generated frames | 4.52 s | 36.5 GiB |
+| Qwen VLM judge | Five-sample structured judgment | 29.3 s | 16.9 GiB |
+
+The judge data-collection pass covered 16 real Bridge clips, requested 80 judge
+sample slots, and retained 141 raw attempts. The LoRA pilot used rank-64 Q/V
+adapters for two epochs and eight optimizer steps, with 20.6 GiB peak CUDA
+allocation. These are inference/training engineering measurements, not RL
+results or evidence of policy improvement.
+
 ## Completed paired audit
 
 The base Qwen2.5-VL-7B judge and its saved LoRA adapter were run with identical
