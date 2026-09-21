@@ -10,7 +10,7 @@ state instead of turning a generated video into an untraceable score.
 
 ![Kosmos console](assets/readme/kosmos-console.jpg)
 
-## What is here
+## Core Architecture
 
 ```mermaid
 flowchart LR
@@ -21,16 +21,7 @@ flowchart LR
   J --> L[SQLite ledger + artifacts]
 ```
 
-| Area | Implementation |
-| --- | --- |
-| Control plane | FastAPI, SQLite, idempotent runs, leases, cancellation, immutable attempt artifacts, and event streaming. |
-| Policy boundary | Adapters and contract checks for OpenVLA, Octo, MiniVLA, OpenPiZero, SuSIE, and SuSIE_LL. |
-| World-model boundary | Cosmos and IRASim adapters with explicit frame/action contracts and hash-bound media. |
-| Evaluation | Structured VLM judgments, multi-sample quorum logic, artifact preservation, and calibration tooling. |
-| Frontend | React/Vite console for generated rollouts, persisted results, and debugging provenance. |
-| Deployment design | A Baseten Chains topology with isolated policy, world-model, validation, and judge stages. It is deployment code, not a claim of a production deployment. |
-
-## Measured post-training audit
+## Post-Training the VLM
 
 The checked-in LoRA pilot improved output formatting and greedy decode cost on
 nine clips that were excluded before pilot training. It did **not** establish a
@@ -49,6 +40,17 @@ engineering gain from an evaluation-quality claim.
 
 Read [the evaluation record](docs/EVALUATION.md) for the audit design, raw
 limitations, and the next valid experiment.
+
+## Tech Stack
+
+| Area | Implementation |
+| --- | --- |
+| Control plane | FastAPI, SQLite, idempotent runs, leases, cancellation, immutable attempt artifacts, and event streaming. |
+| Policy boundary | Adapters and contract checks for OpenVLA, Octo, MiniVLA, OpenPiZero, SuSIE, and SuSIE_LL. |
+| World-model boundary | Cosmos and IRASim adapters with explicit frame/action contracts and hash-bound media. |
+| Evaluation | Structured VLM judgments, multi-sample quorum logic, artifact preservation, and calibration tooling. |
+| Frontend | React/Vite console for generated rollouts, persisted results, and debugging provenance. |
+| Deployment design | A Baseten Chains topology with isolated policy, world-model, validation, and judge stages. It is deployment code, not a claim of a production deployment. |
 
 ## Run locally
 
