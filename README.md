@@ -8,6 +8,8 @@ checks that validate artifacts, and the VLM that judges the saved result. Every
 run is persisted in a SQLite ledger with inputs, artifacts, timing, and failure
 state instead of turning a generated video into an untraceable score.
 
+**46.17 GPU-hours** spent on H100/H200s
+
 ## Post-Training the VLM
 
 The checked-in LoRA pilot improved output formatting and greedy decode cost on
@@ -52,10 +54,9 @@ flowchart LR
 | Frontend | React/Vite console for generated rollouts, persisted results, and debugging provenance. |
 | Deployment design | A Baseten Chains topology with isolated policy, world-model, validation, and judge stages. It is deployment code, not a claim of a production deployment. |
 
-## Measured Compute Profile
+## Compute Use
 
-Sep. 18–21 Slurm accounting recorded **46.17 allocated GPU-hours** across 44
-primary GPU allocations: 42.17 H100 GPU-hours and 4.01 H200 GPU-hours. The
+**46.17 allocated GPU-hours** across 44 primary GPU allocations: 42.17 H100 GPU-hours and 4.01 H200 GPU-hours. The
 allocation total includes exploratory probes, time-bounded live workers, and
 cancelled replacements; it is an engineering-accounting figure, not benchmark
 throughput.
