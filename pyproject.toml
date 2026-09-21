@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "plumb-worldeval"
+name = "kosmos-worldeval"
 version = "0.1.0"
-description = "Auditable world-model policy evaluation and measurement console"
+description = "Kosmos: auditable world-model robot-policy evaluation"
 requires-python = ">=3.9"
 dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "numpy>=1.24,<3"]
 
@@ -16,7 +16,7 @@ media = ["pillow>=10,<13", "imageio>=2.34,<3", "imageio-ffmpeg>=0.5,<1"]
 result-store = ["boto3==1.43.98"]
 
 [project.scripts]
-plumb = "plumb.cli:main"
+kosmos = "plumb.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["plumb*"]

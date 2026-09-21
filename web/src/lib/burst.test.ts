@@ -48,6 +48,6 @@ describe("burst idempotency key", () => {
   });
 
   it("keeps the shape the panel prints and the server accepts", () => {
-    expect(burstIdempotencyKey(identity, 7)).toMatch(/^plumb-burst-[0-9a-f]{8}$/);
+    expect(burstIdempotencyKey(identity, 7)).toMatch(/^kosmos-burst-[0-9a-f]{8}$/);
   });
 });

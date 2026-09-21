@@ -8,7 +8,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test,analytics]'
 npm --prefix web install
 npm --prefix web run build
-.venv/bin/plumb serve --port 8787
+.venv/bin/kosmos serve --port 8787
 ```
 
 The default app binds to localhost and stores mutable state under `data/`, which

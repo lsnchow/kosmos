@@ -1,4 +1,4 @@
-"""Small command interface for serving, exercising, and analyzing PLUMB."""
+"""Small command interface for serving, exercising, and analyzing Kosmos."""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,7 @@ def main(argv: Optional[Sequence[str]] = None) -> Optional[int]:
     if arguments and arguments[0] in workflows:
         module = importlib.import_module(workflows[arguments[0]][0])
         return module.main(arguments[1:])
-    parser = argparse.ArgumentParser(prog="plumb")
+    parser = argparse.ArgumentParser(prog="kosmos")
     commands = parser.add_subparsers(dest="command", required=True)
     for name, (_, description) in workflows.items():
         commands.add_parser(name, help=description, add_help=False)
@@ -143,7 +143,7 @@ def main(argv: Optional[Sequence[str]] = None) -> Optional[int]:
             "  git add %s && git commit -m 'Freeze %s'\n"
             "  git tag -s %s -m 'protocol_sha256 %s'\n"
             "  git push origin %s\n\n"
-            "Then check it with: plumb prereg-status"
+            "Then check it with: kosmos prereg-status"
             % (args.output, args.protocol_id, document.preregistration_tag, bare, document.preregistration_tag)
         )
     elif args.command == "prereg-status":

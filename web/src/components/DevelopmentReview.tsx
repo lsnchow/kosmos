@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, Note, Panel, SourceChip, StatusPill } from "./Primitives";
 
 const REVIEW_ROOT = "/api/development-review";
-const REVIEW_SESSION_STORAGE_KEY = "plumb:development-review:session-v1";
+const REVIEW_SESSION_STORAGE_KEY = "kosmos:development-review:session-v1";
 
 const INTEGRITY_VALUES = ["intact", "artifact", "uncertain"] as const;
 const COLLISION_VALUES = ["none_visible", "visible", "uncertain"] as const;

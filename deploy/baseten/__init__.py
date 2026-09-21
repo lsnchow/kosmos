@@ -1,1 +1,1 @@
-"""Baseten-specific PLUMB deployment templates."""
+"""Baseten-specific Kosmos deployment templates."""

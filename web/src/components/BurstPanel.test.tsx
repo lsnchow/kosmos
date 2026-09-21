@@ -62,7 +62,7 @@ describe("burst idempotency", () => {
   it("puts the derived key in the request body and never a random value", () => {
     const body = burstRequestBody(identity);
     expect(body.idempotency_key).toBe(burstIdempotencyKey(identity));
-    expect(body.idempotency_key).toMatch(/^plumb-burst-[0-9a-f]{8}$/);
+    expect(body.idempotency_key).toMatch(/^kosmos-burst-[0-9a-f]{8}$/);
     expect(burstRequestBody(identity)).toEqual(body);
   });
 });

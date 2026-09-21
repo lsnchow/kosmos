@@ -1373,7 +1373,7 @@ def _chainlet_metadata(chainlet_name: str, extra: Optional[Mapping[str, Any]] = 
         None,
     )
     metadata: Dict[str, Any] = {
-        "project": "PLUMB",
+        "project": "Kosmos",
         "chainlet": chainlet_name,
         "qualification": "unqualified",
         "evidence_note": (

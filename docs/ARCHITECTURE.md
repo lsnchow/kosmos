@@ -15,7 +15,7 @@ console reads persisted state; opening a page does not create an inference job.
 
 ## Execution paths
 
-- **Local engineering path:** the `plumb` CLI and FastAPI service exercise the
+- **Local engineering path:** the `kosmos` CLI and FastAPI service exercise the
   durable ledger with synthetic fixtures and saved artifacts.
 - **Cluster diagnostics:** pinned GPU scripts execute individual policy,
   world-model, and judge probes. Their reports bind source releases, model
@@ -27,7 +27,7 @@ console reads persisted state; opening a page does not create an inference job.
 ## Repository layout
 
 ```text
-plumb/             control plane, adapters, evaluation, and statistics
+core runtime        control plane, adapters, evaluation, and statistics
 web/               React/Vite console
 cluster/           immutable-release GPU diagnostics and batch scripts
 deploy/baseten/    typed Baseten Chains deployment topology

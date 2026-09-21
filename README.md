@@ -62,7 +62,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[test,analytics]'
 npm --prefix web install
 npm --prefix web run build
-.venv/bin/plumb serve --port 8787
+.venv/bin/kosmos serve --port 8787
 ```
 
 Open <http://127.0.0.1:8787>. The API reference is at

@@ -59,7 +59,7 @@ export function burstIdempotencyKey(identity: BurstIdentity, attempt = 0): strin
   // submits an identical run configuration under a different key. That matters:
   // the ledger refuses a key it has already seen against a *different* config,
   // and accepts a new key for the same one.
-  return `plumb-burst-${stableHashHex(canonicalJson({ ...identity, attempt }))}`;
+  return `kosmos-burst-${stableHashHex(canonicalJson({ ...identity, attempt }))}`;
 }
 
 export function burstRequestBody(identity: BurstIdentity, attempt = 0): CreateRunBody {

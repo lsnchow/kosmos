@@ -132,7 +132,7 @@ describe("<DevelopmentReview />", () => {
 
   it("resumes an authorized local review after a browser refresh and restores only its own saved draft", async () => {
     const first = await openReview();
-    expect(JSON.parse(window.sessionStorage.getItem("plumb:development-review:session-v1") ?? "{}")).toEqual({
+    expect(JSON.parse(window.sessionStorage.getItem("kosmos:development-review:session-v1") ?? "{}")).toEqual({
       session_id: "session-a",
       set_id: "development-a",
       reviewer_id: "reviewer-a",
@@ -153,7 +153,7 @@ describe("<DevelopmentReview />", () => {
   });
 
   it("does not cancel a deferred resume request when the sets-loaded state changes in StrictMode", async () => {
-    window.sessionStorage.setItem("plumb:development-review:session-v1", JSON.stringify({
+    window.sessionStorage.setItem("kosmos:development-review:session-v1", JSON.stringify({
       session_id: "session-a",
       set_id: "development-a",
       reviewer_id: "reviewer-a",
@@ -170,7 +170,7 @@ describe("<DevelopmentReview />", () => {
   });
 
   it("clears expired session metadata and returns to the setup form with a useful error", async () => {
-    window.sessionStorage.setItem("plumb:development-review:session-v1", JSON.stringify({
+    window.sessionStorage.setItem("kosmos:development-review:session-v1", JSON.stringify({
       session_id: "expired-session",
       set_id: "development-a",
       reviewer_id: "reviewer-a",
@@ -179,7 +179,7 @@ describe("<DevelopmentReview />", () => {
     installRoutes(undefined, http(403, { detail: "review_session_expired" }));
     render(<DevelopmentReview />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/saved development review session has expired/i);
-    expect(window.sessionStorage.getItem("plumb:development-review:session-v1")).toBeNull();
+    expect(window.sessionStorage.getItem("kosmos:development-review:session-v1")).toBeNull();
     expect(screen.getByRole("heading", { name: "Start a review session" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Clip 1 of/i })).not.toBeInTheDocument();
   });
