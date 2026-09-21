@@ -8,19 +8,6 @@ checks that validate artifacts, and the VLM that judges the saved result. Every
 run is persisted in a SQLite ledger with inputs, artifacts, timing, and failure
 state instead of turning a generated video into an untraceable score.
 
-![Kosmos console](assets/readme/kosmos-console.jpg)
-
-## Core Architecture
-
-```mermaid
-flowchart LR
-  P[Policy adapter] --> A[Action contract]
-  A --> W[World-model rollout]
-  W --> V[Deterministic validation]
-  V --> J[VLM judge]
-  J --> L[SQLite ledger + artifacts]
-```
-
 ## Post-Training the VLM
 
 The checked-in LoRA pilot improved output formatting and greedy decode cost on
@@ -40,6 +27,20 @@ engineering gain from an evaluation-quality claim.
 
 Read [the evaluation record](docs/EVALUATION.md) for the audit design, raw
 limitations, and the next valid experiment.
+
+![Kosmos console](assets/readme/kosmos-console.jpg)
+
+## Core Architecture
+
+```mermaid
+flowchart LR
+  P[Policy adapter] --> A[Action contract]
+  A --> W[World-model rollout]
+  W --> V[Deterministic validation]
+  V --> J[VLM judge]
+  J --> L[SQLite ledger + artifacts]
+```
+
 
 ## Tech Stack
 
