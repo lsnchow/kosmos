@@ -1,4 +1,4 @@
-# Kosmos
+# Kosmos - Hack the North 2026
 
 **Auditable infrastructure for evaluating robot policies through learned world models.**
 
@@ -27,6 +27,7 @@ engineering gain from an evaluation-quality claim.
 
 Read [the evaluation record](docs/EVALUATION.md) for the audit design, raw
 limitations, and the next valid experiment.
+
 
 ![Kosmos console](assets/readme/kosmos-console.jpg)
 
